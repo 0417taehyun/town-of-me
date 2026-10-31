@@ -25,6 +25,7 @@ Nothing personal is in the repository. A fork changes its owner, pet, residents,
 | Data                                                                                                                           | Stored in                                                  | Changed by                      |
 | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- | ------------------------------- |
 | Town: objects, residents, owner (name, introduction, contact email, own resident, questions), pet (name, walk), movement style | database (`towns`, `town_objects`, `town_residents`)       | admins at `/admin`              |
+| Venue settings: the ballpark's colors, pitch count, and difficulty, and next month's rules                                     | database (`towns.venues`)                                  | admins at `/admin`              |
 | Admin emails                                                                                                                   | database (`admin_emails`), filled from `ADMIN_EMAILS` once | admins at `/admin`              |
 | Guestbook notes                                                                                                                | database (`guestbook_entries`)                             | visitors write, admins approve  |
 | A visitor's character, camera settings, guide progress                                                                         | the browser tab (`sessionStorage`)                         | the visitor                     |
@@ -32,9 +33,9 @@ Nothing personal is in the repository. A fork changes its owner, pet, residents,
 | The sample town a fresh database starts from                                                                                   | `backend/seed/town.json` (fictional), or `TOWN_SEED_PATH`  | contributors, or a private file |
 
 The backend validates the shape of everything it stores and the few structural rules it relies on (exactly one fountain
-and guestbook board, residents' benches exist, road points, bench seats, house links). The frontend owns the catalog of
-what can be drawn and drops what it does not know at its boundary, so new kinds, variants, walks, and skids need no
-backend change.
+and guestbook board, residents' benches exist, road points, bench seats, house links, the ballpark rules). The frontend
+owns the catalog of what can be drawn and drops what it does not know at its boundary, so new kinds, variants, walks,
+skids, ballpark themes, and color roles need no backend change.
 
 ## Frontend (`frontend/src`)
 
@@ -117,7 +118,7 @@ server.mjs (Node runtime: .env, store, seeding, HTTP)
 
 | File                           | Owns                                                                               |
 | ------------------------------ | ---------------------------------------------------------------------------------- |
-| `town.ts`                      | Town layout validation: shapes, bounds, structural rules.                          |
+| `town.ts`                      | Town layout validation: shapes, bounds, structural rules, monthly ballpark rules.  |
 | `guestbook.ts`, `character.ts` | Guestbook entries and character appearances.                                       |
 | `admins.ts`, `auth.ts`         | Admin emails, sessions, and setting the role from the admin list at every sign-in. |
 | `linkedin.ts`                  | LinkedIn OIDC adapter (ID tokens verified with `jose`).                            |

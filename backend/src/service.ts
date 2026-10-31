@@ -7,6 +7,8 @@ import type { Store } from './store.js'
 import {
   parseResidentDialogueSource,
   parseTownLayout,
+  rankingMonth,
+  settleBallparkSettings,
   type ResidentDialogue,
   type ResidentDialogueSource,
   type TownLayout,
@@ -30,14 +32,27 @@ export class BackendService {
     return town
   }
 
-  /** Replaces the whole town; the editor sends the revision it loaded so a stale tab cannot overwrite newer work. */
-  async saveTown(actor: Actor, townId: string, input: Record<string, unknown>): Promise<TownLayout> {
+  /**
+   * Replaces the whole town; the editor sends the revision it loaded so a stale tab cannot overwrite newer work. The
+   * ballpark rules in effect are settled against the stored town for the KST month of `now`. `now` is taken when the
+   * request arrives, so a save that commits in the first moment of a month may still settle against the month before;
+   * that window is accepted.
+   */
+  async saveTown(actor: Actor, townId: string, input: Record<string, unknown>, now = Date.now()): Promise<TownLayout> {
     assertAdmin(actor)
     const baseRevision = input.baseRevision
     if (typeof baseRevision !== 'number' || !Number.isInteger(baseRevision) || baseRevision < 0) {
       throw new DomainError('INVALID_INPUT', 'baseRevision must be a non-negative integer')
     }
-    return this.store.saveTown(townId, parseTownLayout(input), baseRevision)
+    const layout = parseTownLayout(input)
+    const stored = await this.store.getTown(townId)
+    // A stale tab hears CONFLICT before its schedule is compared with newer work. A save that lands after this read
+    // still moves the revision, so the store refuses this one rather than overwrite it.
+    if ((stored?.revision ?? 0) !== baseRevision) {
+      throw new DomainError('CONFLICT', 'The town changed since it was loaded')
+    }
+    const ballpark = settleBallparkSettings(layout.venues.ballpark, stored?.venues.ballpark ?? null, rankingMonth(now))
+    return this.store.saveTown(townId, { ...layout, venues: { ...layout.venues, ballpark } }, baseRevision)
   }
 
   /** Drafts a resident's lines for the admin to review; nothing is stored until the admin saves the town. */

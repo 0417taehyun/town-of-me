@@ -56,6 +56,12 @@ export function boundedNumber(value: unknown, field: string, minimum: number, ma
   return value
 }
 
+/** A count such as a number of pitches, where `boundedNumber` would let 4.5 through. */
+export function boundedInteger(value: unknown, field: string, minimum: number, maximum: number): number {
+  if (!Number.isInteger(value)) throw invalidInput(`${field} must be a whole number from ${minimum} to ${maximum}`)
+  return boundedNumber(value, field, minimum, maximum)
+}
+
 /** A `#rrggbb` color, kept in lowercase. */
 export function hexColor(value: unknown, field: string): string {
   if (typeof value !== 'string' || !hexColorPattern.test(value)) throw invalidInput(`${field} must be a #rrggbb color`)

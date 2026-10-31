@@ -13,7 +13,8 @@ Implementation-ready TypeScript foundation for the portfolio town. It uses Web-s
 ## Town layout
 
 A town is one layout: an `owner` and a `pet` (each named `{ ko, en }`, one line of 1–24 characters per language), a
-`movement` setting, objects, and residents. All of it is public, and saves replace the whole layout in one transaction.
+`movement` setting, `venues`, objects, and residents. All of it is public, and saves replace the whole layout in one
+transaction.
 
 - **Owner and pet:** besides `name`, each has optional fields, and an omitted one reads as `null` (`[]` for
   `owner.questions`):
@@ -45,6 +46,23 @@ A town is one layout: an `owner` and a `pet` (each named `{ ko, en }`, one line 
   drafted from the reference ahead of time and reviewed before saving, so a conversation never waits for an LLM.
 - **Movement:** `movement.gait` and `movement.skid` match the same identifier pattern as types; an omitted setting or
   field defaults to `{ gait: 'plantedFeet', skid: 'long' }`.
+- **Venues:** the large venues at the town's edge, keyed by id. Only `ballpark` exists; unknown ids are dropped. An
+  omitted venue or field takes its default, so a town saved before venues existed plays
+  `{ theme: 'garden', colors: {}, rules: { pitchCount: 5, difficulty: 'normal' } }`.
+  - The look applies as soon as it is saved. The frontend owns the themes and color roles, so only the shape is checked:
+    `theme` matches the type pattern, and `colors` maps up to 12 role names (the same pattern) to `#rrggbb` colors,
+    stored in lowercase. A role left out keeps the theme's color.
+  - `rules` are exact, because ranked runs will snapshot them: `pitchCount` is a whole number from 3 to 10 and
+    `difficulty` is `easy`, `normal`, or `hard`. They change only between ranking months, the KST (UTC+9) calendar
+    months written `YYYY-MM`. The server owns the rules in effect: a save checks the `rules` it sends but keeps the
+    stored ones, and a town's first save starts with the defaults, so a stale editor tab never changes them mid-month.
+  - `scheduledRules: { fromMonth, rules }` (omitted or `null` for none) takes over at the start of `fromMonth`. A save
+    with a new or changed schedule whose `fromMonth` is not after the current KST month returns `400`. Once `fromMonth`
+    has come, the next save moves the stored schedule into `rules`, whether or not it sends the schedule again (sending
+    it unchanged is accepted). A save without `scheduledRules` cancels a schedule whose month has not come yet. Reads
+    never check the clock, so a stored schedule whose month has come still reads; its `rules` apply from `fromMonth` on.
+  - Stored towns are read with these same checks, so a published range or difficulty is never narrowed or removed
+    without a data migration.
 - **Revisions:** a save names the revision it started from; a stale revision returns `409 CONFLICT` and changes nothing.
 
 `src/town.ts` enforces all of this, so a stored layout always renders.
@@ -67,7 +85,7 @@ Create a handler with `createApi({ service, authStore, linkedInOidc, allowedOrig
 - `POST /v1/guestbook` and `PUT /v1/guestbook/:id` take `{ message, locale, profile }` from anyone and return `{ entry }`; see the guestbook rules below
 - `GET /v1/admin/guestbook` lists the newest 200 entries of every status with `updatedAt`; `POST /v1/admin/guestbook/:id/approval` with `{ updatedAt }` publishes the entry only if it was not revised since that version (`409` otherwise); `DELETE /v1/admin/guestbook/:id` removes it
 - `GET /v1/towns/:id` returns `{ town }` with `revision`, or `404` when no such town exists
-- `PUT /v1/admin/towns/:id` with `{ baseRevision, name, owner, pet, spawn, movement, objects, residents }` replaces the town for an admin session (`401` signed out, `403` otherwise) and returns the saved `{ town }`; `baseRevision` is `0` for the first save
+- `PUT /v1/admin/towns/:id` with `{ baseRevision, name, owner, pet, spawn, movement, venues, objects, residents }` replaces the town for an admin session (`401` signed out, `403` otherwise) and returns the saved `{ town }`; `baseRevision` is `0` for the first save
 - `POST /v1/admin/resident-dialogues` with `{ name, role, relationship, reference, owner }` (`owner` is the owner's `{ ko, en }` name) returns a drafted `{ dialogue }` for an admin session without storing it; the admin saves it with the town
 - `GET /v1/admin/admins` returns `{ admins: [{ email, createdAt }], currentEmail }` sorted by email, where `currentEmail` is the signed-in admin's own address; `POST /v1/admin/admins` with `{ email }` returns `201 { admin }` (`409` if listed, `400` if invalid), and the account becomes admin at its next sign-in; `DELETE /v1/admin/admins/:email` returns `204` and demotes and signs out that email's users at once, or `409` for the admin's own email or the last listed one and `404` when it is not listed. All three need an admin session. Emails are stored trimmed and lowercase, at most 254 characters, shaped like `name@example.com`
 

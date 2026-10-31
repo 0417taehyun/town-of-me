@@ -6,6 +6,7 @@ import {
   DomainError,
   parseGuestbookInput,
   parseTownLayout,
+  parseTownVenues,
   PostgresStore,
   seedTown,
   type Store,
@@ -29,9 +30,18 @@ async function rejection(action: () => Promise<unknown>): Promise<unknown> {
 async function checkTownStore(store: Store, assert: Assert): Promise<void> {
   assert((await store.getTown('contract-town')) === null, 'an unsaved town does not exist')
   const lantern = { id: 'lantern-0', type: 'paperLantern', variant: 'tall-red', position: { x: 4, y: 3, z: 4 } }
+  const venues = {
+    ballpark: {
+      theme: 'garden',
+      colors: { roof: '#e8735a' },
+      // A month that has passed: a save could no longer schedule it, but a stored schedule always reads.
+      scheduledRules: { fromMonth: '2025-11', rules: { pitchCount: 7, difficulty: 'hard' } },
+    },
+  }
   const layout = parseTownLayout({
     ...sampleTownLayout,
     movement: { gait: 'hopScotch', skid: 'off' },
+    venues,
     objects: [...sampleTownLayout.objects, lantern],
   })
   const first = await store.saveTown('contract-town', layout, 0)
@@ -42,6 +52,10 @@ async function checkTownStore(store: Store, assert: Assert): Promise<void> {
       isDeepStrictEqual(firstLoaded?.owner, layout.owner) &&
       isDeepStrictEqual(firstLoaded?.pet, layout.pet),
     'the first save stores the movement setting, even an unknown style, and the owner and pet names',
+  )
+  assert(
+    isDeepStrictEqual(firstLoaded?.venues, layout.venues) && firstLoaded?.venues.ballpark.scheduledRules,
+    'the first save stores the venues, with a color override and a schedule whose month has passed',
   )
   assert(
     firstLoaded?.owner.introduction === null &&
@@ -85,6 +99,7 @@ async function checkTownStore(store: Store, assert: Assert): Promise<void> {
       ] as const,
     },
     movement: { gait: 'plantedFeet', skid: 'short' },
+    venues: parseTownVenues({ ballpark: { rules: { pitchCount: 7, difficulty: 'hard' } } }),
     objects: [
       { ...house, position: { x: 12, y: 0, z: 30 }, color: '#123abc' },
       ...layout.objects.filter((object) => object !== house),
@@ -100,6 +115,7 @@ async function checkTownStore(store: Store, assert: Assert): Promise<void> {
       isDeepStrictEqual(loaded.pet, edited.pet),
     "a later save replaces the movement setting, the owner's introduction, contact email, resident, and questions, and the pet's route",
   )
+  assert(isDeepStrictEqual(loaded.venues, edited.venues), 'a later save replaces the venues and may drop the schedule')
   const loadedHouse = loaded.objects[0]
   assert(
     loadedHouse?.id === house.id &&
@@ -371,7 +387,8 @@ export async function checkPostgresStoreContract(connectionString: string | unde
     assert((await applyMigrations(pool, migrationsDirectory)).length === 0, 'migrations must apply only once')
     await checkStoreContract(new PostgresStore(pool), assert)
     await pool.query(
-      `UPDATE towns SET owner = owner - 'introduction' - 'contactEmail' - 'residentId' - 'questions', pet = pet - 'route'`,
+      `UPDATE towns SET owner = owner - 'introduction' - 'contactEmail' - 'residentId' - 'questions', pet = pet - 'route',
+         venues = '{}'`,
     )
     const earlier = await new PostgresStore(pool).getTown('mossbell')
     assert(
@@ -381,6 +398,12 @@ export async function checkPostgresStoreContract(connectionString: string | unde
         isDeepStrictEqual(earlier.owner.questions, []) &&
         earlier.pet.route === null,
       "a town saved before the introduction, contact email, owner's resident and questions, and pet route existed reads them as null or empty",
+    )
+    assert(
+      isDeepStrictEqual(earlier.venues, {
+        ballpark: { theme: 'garden', colors: {}, rules: { pitchCount: 5, difficulty: 'normal' } },
+      }),
+      'a town saved before venues existed plays the default ballpark',
     )
   } finally {
     await pool.end()

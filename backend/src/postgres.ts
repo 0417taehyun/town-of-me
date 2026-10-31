@@ -6,16 +6,17 @@ import type { CharacterAppearance } from './character.js'
 import { DomainError, type Actor, type LinkedUser, type Locale, type LocalizedText } from './domain.js'
 import type { GuestbookAppearance, GuestbookEntry, GuestbookStatus } from './guestbook.js'
 import type { GuestbookEntryChanges, Store } from './store.js'
-import type {
-  ResidentDialogue,
-  TownLayout,
-  TownLayoutInput,
-  TownObject,
-  TownMovement,
-  TownOwner,
-  TownPet,
-  TownPoint,
-  TownVector,
+import {
+  parseTownVenues,
+  type ResidentDialogue,
+  type TownLayout,
+  type TownLayoutInput,
+  type TownObject,
+  type TownMovement,
+  type TownOwner,
+  type TownPet,
+  type TownPoint,
+  type TownVector,
 } from './town.js'
 
 const migrationLockKey = 7_301_202_610
@@ -90,6 +91,8 @@ type TownRow = {
   pet: Pick<TownPet, 'name'> & Partial<TownPet>
   spawn: TownVector
   movement: TownMovement
+  // Rows saved before venues existed hold `{}`, so the venues are parsed on read like a save.
+  venues: unknown
   revision: number
   updated_at: Date
   objects: TownObjectRow[]
@@ -444,18 +447,20 @@ export async function claimTownRevision(
     JSON.stringify(layout.movement),
     JSON.stringify(layout.owner),
     JSON.stringify(layout.pet),
+    JSON.stringify(layout.venues),
   ]
   const { rows } =
     baseRevision === 0
       ? await client.query<{ revision: number; updated_at: Date }>(
-          `INSERT INTO towns (id, name, spawn, movement, owner, pet, revision) VALUES ($1, $2, $3, $4, $5, $6, 1)
+          `INSERT INTO towns (id, name, spawn, movement, owner, pet, venues, revision)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 1)
            ON CONFLICT (id) DO NOTHING RETURNING revision, updated_at`,
           townFields,
         )
       : await client.query<{ revision: number; updated_at: Date }>(
-          `UPDATE towns SET name = $2, spawn = $3, movement = $4, owner = $5, pet = $6, revision = revision + 1,
-             updated_at = now()
-           WHERE id = $1 AND revision = $7 RETURNING revision, updated_at`,
+          `UPDATE towns SET name = $2, spawn = $3, movement = $4, owner = $5, pet = $6, venues = $7,
+             revision = revision + 1, updated_at = now()
+           WHERE id = $1 AND revision = $8 RETURNING revision, updated_at`,
           [...townFields, baseRevision],
         )
   const saved = rows[0]
@@ -505,6 +510,7 @@ export function toTown(row: TownRow): TownLayout {
     pet: { route: null, ...row.pet },
     spawn: row.spawn,
     movement: row.movement,
+    venues: parseTownVenues(row.venues),
     revision: row.revision,
     updatedAt: row.updated_at.toISOString(),
     objects: row.objects.map(

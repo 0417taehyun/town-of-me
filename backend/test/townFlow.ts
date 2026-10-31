@@ -1,9 +1,10 @@
 import { isDeepStrictEqual } from 'node:util'
-import { BackendService, createApi, hashToken, MemoryStore } from '../src/index.js'
+import { BackendService, createApi, DomainError, hashToken, MemoryStore } from '../src/index.js'
 
 type Assert = (condition: unknown, message: string) => asserts condition
 
 const origin = 'https://town.example'
+const defaultRules = { pitchCount: 5, difficulty: 'normal' }
 const appearance = {
   hat: 'none',
   eyes: 'happy',
@@ -153,6 +154,11 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
     ...firstSave,
     residents: [{ ...resident, ...changes }],
   })
+  const withBallpark = (ballpark: Record<string, unknown>) => ({ ...firstSave, venues: { ballpark } })
+  // A month far ahead, so only the schedule's shape can refuse it.
+  const withSchedule = (changes: Record<string, unknown>) =>
+    withBallpark({ scheduledRules: { fromMonth: '2099-01', rules: { pitchCount: 7, difficulty: 'hard' }, ...changes } })
+  const thirteenColors = Object.fromEntries(Array.from({ length: 13 }, (_color, index) => [`role${index}`, '#e8735a']))
   const invalidCases: Array<[string, unknown]> = [
     ['a missing baseRevision', sampleTownLayout],
     ['a negative baseRevision', { ...firstSave, baseRevision: -1 }],
@@ -238,6 +244,19 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
         },
       },
     ],
+    ['a pitch count under three', withBallpark({ rules: { pitchCount: 2 } })],
+    ['a pitch count over ten', withBallpark({ rules: { pitchCount: 11 } })],
+    ['a fractional pitch count', withBallpark({ rules: { pitchCount: 4.5 } })],
+    ['a pitch count sent as text', withBallpark({ rules: { pitchCount: '5' } })],
+    ['an unknown difficulty', withBallpark({ rules: { difficulty: 'expert' } })],
+    ['a ballpark theme that is not a style name', withBallpark({ theme: 'Garden Park' })],
+    ['a ballpark color that is not #rrggbb', withBallpark({ colors: { roof: 'coral' } })],
+    ['more than twelve ballpark colors', withBallpark({ colors: thirteenColors })],
+    ['a ballpark color role that is not a style name', withBallpark({ colors: { 'Bad Role': '#e8735a' } })],
+    ['venues sent as a list', { ...firstSave, venues: [] }],
+    ['a scheduled month past December', withSchedule({ fromMonth: '2099-13' })],
+    ['a scheduled month without two digits', withSchedule({ fromMonth: '2099-1' })],
+    ['a scheduled pitch count over ten', withSchedule({ rules: { pitchCount: 11, difficulty: 'hard' } })],
   ]
   for (const [label, body] of invalidCases) {
     assert((await save(body, admin.cookie)).status === 400, `${label} must be rejected`)
@@ -254,6 +273,7 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
     owner: Record<string, unknown>
     pet: Record<string, unknown>
     movement: unknown
+    venues: unknown
     objects: Array<Record<string, unknown>>
     residents: Array<Record<string, unknown>>
   }
@@ -261,6 +281,10 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
   assert(
     isDeepStrictEqual(town.movement, { gait: 'plantedFeet', skid: 'long' }),
     'a town saved without a movement setting walks the original way',
+  )
+  assert(
+    isDeepStrictEqual(town.venues, { ballpark: { theme: 'garden', colors: {}, rules: defaultRules } }),
+    'a town saved without venues plays the default ballpark',
   )
   assert(
     town.owner.introduction === null &&
@@ -310,6 +334,7 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
       },
       pet: { ...firstSave.pet, route: petRoute },
       movement: { skid: 'off' },
+      venues: { ballpark: { theme: 'garden', colors: { roof: '#E8735A' } }, harbor: { theme: 'pier' } },
       baseRevision: 1,
     },
     admin.cookie,
@@ -319,6 +344,12 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
   assert(
     isDeepStrictEqual(secondTown.movement, { gait: 'plantedFeet', skid: 'off' }),
     'a movement setting may leave out the gait',
+  )
+  assert(
+    isDeepStrictEqual(secondTown.venues, {
+      ballpark: { theme: 'garden', colors: { roof: '#e8735a' }, rules: defaultRules },
+    }),
+    'a ballpark may leave out its rules, its colors apply in lowercase in the same save, and unknown venues are dropped',
   )
   assert(
     isDeepStrictEqual(secondTown.owner, {
@@ -377,6 +408,76 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
     JSON.stringify(((await drafted.json()) as { dialogue: unknown }).dialogue) === JSON.stringify(dialogue) &&
       JSON.stringify(sourcesSeen[0]) === JSON.stringify(source),
     "the draft is generated from only the name, role, relationship, reference, and owner's name",
+  )
+  await checkBallparkRuleSchedule(store, assert)
+}
+
+/** The ballpark rules change only between KST months, and the server decides which rules are in effect. */
+async function checkBallparkRuleSchedule(store: MemoryStore, assert: Assert): Promise<void> {
+  const service = new BackendService(store)
+  const admin = { kind: 'linked', userId: 'schedule-admin', role: 'admin' } as const
+  // 23:59:59 on December 31 in Seoul, which keeps no daylight saving time.
+  const lastSecondOfDecember = Date.parse('2025-12-31T14:59:59Z')
+  // Midnight on January 1 in Seoul, while UTC and the Americas are still in December.
+  const firstSecondOfJanuary = Date.parse('2025-12-31T15:00:00Z')
+  const january = { fromMonth: '2026-01', rules: { pitchCount: 7, difficulty: 'hard' } }
+  const save = (ballpark: Record<string, unknown>, baseRevision: number, now: number) =>
+    service.saveTown(admin, 'rulebook', { ...sampleTownLayout, venues: { ballpark }, baseRevision }, now)
+  const refusalCode = (ballpark: Record<string, unknown>, baseRevision: number, now: number) =>
+    save(ballpark, baseRevision, now).then(
+      () => null,
+      (error: unknown) => (error instanceof DomainError ? error.code : error),
+    )
+
+  const first = await save(
+    { rules: { pitchCount: 9, difficulty: 'easy' }, scheduledRules: january },
+    0,
+    lastSecondOfDecember,
+  )
+  assert(
+    isDeepStrictEqual(first.venues.ballpark.rules, defaultRules),
+    'a town saved for the first time starts with the default rules, whatever rules it sends',
+  )
+  assert(
+    isDeepStrictEqual(first.venues.ballpark.scheduledRules, january),
+    'the last second of a KST month may still schedule the next month',
+  )
+  const stale = await save(
+    { rules: { pitchCount: 3, difficulty: 'easy' }, scheduledRules: january },
+    1,
+    lastSecondOfDecember,
+  )
+  assert(
+    isDeepStrictEqual(stale.venues.ballpark.rules, defaultRules),
+    'the rules a save sends, as a stale editor tab would, never change the rules in effect',
+  )
+  // Reads never check the clock; storeContract reads back a stored schedule whose month has passed.
+
+  for (const scheduledRules of [
+    { ...january, rules: { pitchCount: 4, difficulty: 'easy' } },
+    { ...january, fromMonth: '2025-12' },
+  ]) {
+    assert(
+      (await refusalCode({ scheduledRules }, 2, firstSecondOfJanuary)) === 'INVALID_INPUT',
+      `from the first second of the KST month 2026-01, a changed schedule from ${scheduledRules.fromMonth} is refused`,
+    )
+  }
+  const promoted = await save({ rules: defaultRules, scheduledRules: january }, 2, firstSecondOfJanuary)
+  assert(
+    isDeepStrictEqual(promoted.venues.ballpark.rules, january.rules) && !('scheduledRules' in promoted.venues.ballpark),
+    'from the first second of its KST month, resending the stored schedule is accepted and promotes it into the rules',
+  )
+  assert(
+    (await refusalCode({ scheduledRules: january }, 2, firstSecondOfJanuary)) === 'CONFLICT',
+    'a tab that loaded the schedule before another tab promoted it is told the town changed, not that the month is wrong',
+  )
+  assert(
+    (await refusalCode(
+      { scheduledRules: { ...january, rules: { pitchCount: 4, difficulty: 'easy' } } },
+      3,
+      firstSecondOfJanuary,
+    )) === 'INVALID_INPUT',
+    'a town with no schedule cannot schedule the KST month already under way',
   )
 }
 

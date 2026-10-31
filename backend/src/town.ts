@@ -1,7 +1,9 @@
+import { isDeepStrictEqual } from 'node:util'
 import { adminEmail } from './admins.js'
 import { linkedInProfileUrl, parseCharacterAppearance, type CharacterAppearance } from './character.js'
 import { locales, type LocalizedText } from './domain.js'
 import {
+  boundedInteger,
   boundedNumber,
   hexColor,
   inputList,
@@ -9,6 +11,7 @@ import {
   invalidInput,
   matchingText,
   multilineText,
+  oneOf,
   optionalInput,
   parseFields,
   singleLineText,
@@ -107,6 +110,38 @@ export interface TownPet {
   route: readonly TownPoint[] | null
 }
 
+/** A venue's look. The frontend owns the themes and their color roles, so only the shape is checked here. */
+export interface VenueLook {
+  /** A theme id such as `garden`. */
+  theme: string
+  /** Only the roles the admin overrides, such as `roof`; every other role keeps the theme's color. */
+  colors: Record<string, string>
+}
+
+/** What a ballpark game is played by; ranked runs will snapshot them, so they are checked exactly. */
+export interface BallparkRules {
+  pitchCount: number
+  difficulty: BallparkDifficulty
+}
+
+/** Rules that take over at the start of `fromMonth`, a KST calendar month written `YYYY-MM`. */
+export interface ScheduledBallparkRules {
+  fromMonth: string
+  rules: BallparkRules
+}
+
+export interface BallparkSettings extends VenueLook {
+  /** The rules in effect. Only the server changes them, by promoting a schedule whose month has come. */
+  rules: BallparkRules
+  /** Present only while a change is scheduled. */
+  scheduledRules?: ScheduledBallparkRules
+}
+
+/** The large venues at the town's edge, keyed by venue id; a new venue adds its key here and to `parseTownVenues`. */
+export interface TownVenues {
+  ballpark: BallparkSettings
+}
+
 export interface TownLayout {
   id: string
   name: string
@@ -114,6 +149,7 @@ export interface TownLayout {
   pet: TownPet
   spawn: TownVector
   movement: TownMovement
+  venues: TownVenues
   objects: readonly TownObject[]
   residents: readonly TownResident[]
   /** Increases on every save; a save names the revision it started from so a stale editor cannot overwrite. */
@@ -123,7 +159,7 @@ export interface TownLayout {
 
 export type TownLayoutInput = Pick<
   TownLayout,
-  'name' | 'owner' | 'pet' | 'spawn' | 'movement' | 'objects' | 'residents'
+  'name' | 'owner' | 'pet' | 'spawn' | 'movement' | 'venues' | 'objects' | 'residents'
 >
 
 export const townIdPattern = '[a-z0-9][a-z0-9-]{0,63}'
@@ -147,8 +183,20 @@ const shortLineLimit = 80
 const characterNameLimit = 24
 export const followUpLimit = 3
 const ownerQuestionLimit = 5
+// Mirrors frontend/src/data/models.ts BASEBALL_DIFFICULTIES, PITCH_COUNT_RANGE, DEFAULT_TOWN_VENUES, and
+// RANKING_MONTH_PATTERN. Stored towns are read with these same checks, so a published range or id is never narrowed
+// without a data migration.
+const ballparkDifficulties = ['easy', 'normal', 'hard'] as const
+// At least three pitches, so each of the three pitch types comes up at least once.
+const ballparkPitchCountRange = { minimum: 3, maximum: 10 }
+const defaultBallparkRules: BallparkRules = { pitchCount: 5, difficulty: 'normal' }
+const rankingMonthPattern = /^\d{4}-(0[1-9]|1[0-2])$/u
+const venueColorLimit = 12
+// Korea keeps no daylight saving time, so a fixed offset gives the KST calendar month.
+const kstOffsetMs = 9 * 60 * 60 * 1000
 
 type Bounds = typeof groundBounds
+export type BallparkDifficulty = (typeof ballparkDifficulties)[number]
 
 /** Validates a whole layout, including references between residents and benches, before it may be stored. */
 export function parseTownLayout(value: unknown): TownLayoutInput {
@@ -171,6 +219,7 @@ export function parseTownLayout(value: unknown): TownLayoutInput {
     pet: parseTownPet(input.pet),
     spawn: townVector(input.spawn, 'spawn', groundBounds),
     movement: parseTownMovement(input.movement),
+    venues: parseTownVenues(input.venues),
     objects,
     residents,
   }
@@ -213,6 +262,106 @@ export function parseTownMovement(value: unknown): TownMovement {
     gait: kindName(input.gait ?? 'plantedFeet', 'movement.gait'),
     skid: kindName(input.skid ?? 'long', 'movement.skid'),
   }
+}
+
+// Towns saved before venues existed play the default ballpark, and unknown venue ids are dropped like unlisted fields.
+export function parseTownVenues(value: unknown): TownVenues {
+  const input = inputRecord(value ?? {}, 'venues')
+  return { ballpark: parseBallparkSettings(input.ballpark) }
+}
+
+export function parseBallparkSettings(value: unknown): BallparkSettings {
+  const field = 'venues.ballpark'
+  const input = inputRecord(value ?? {}, field)
+  const scheduledRules = optionalInput(input.scheduledRules, parseScheduledBallparkRules)
+  return {
+    ...parseVenueLook(input, field, 'garden'),
+    rules: parseBallparkRules(input.rules, `${field}.rules`),
+    ...(scheduledRules ? { scheduledRules } : {}),
+  }
+}
+
+export function parseVenueLook(input: Record<string, unknown>, field: string, defaultTheme: string): VenueLook {
+  return {
+    theme: kindName(input.theme ?? defaultTheme, `${field}.theme`),
+    colors: venueColors(input.colors ?? {}, `${field}.colors`),
+  }
+}
+
+/** Color overrides by role: role names have the shape of kinds, and colors are stored in lowercase. */
+export function venueColors(value: unknown, field: string): Record<string, string> {
+  const entries = Object.entries(inputRecord(value, field))
+  if (entries.length > venueColorLimit) throw invalidInput(`${field} may name at most ${venueColorLimit} colors`)
+  return Object.fromEntries(
+    entries.map(([role, color]) => [kindName(role, `${field} role`), hexColor(color, `${field}.${role}`)]),
+  )
+}
+
+/** An omitted field takes the default rule. */
+export function parseBallparkRules(value: unknown, field: string): BallparkRules {
+  const input = inputRecord(value ?? {}, field)
+  const { minimum, maximum } = ballparkPitchCountRange
+  return {
+    pitchCount: boundedInteger(
+      input.pitchCount ?? defaultBallparkRules.pitchCount,
+      `${field}.pitchCount`,
+      minimum,
+      maximum,
+    ),
+    difficulty: oneOf(input.difficulty ?? defaultBallparkRules.difficulty, ballparkDifficulties, `${field}.difficulty`),
+  }
+}
+
+// Only the shape is checked here, so a stored schedule whose month has come still reads; saves check the month.
+export function parseScheduledBallparkRules(value: unknown): ScheduledBallparkRules {
+  const field = 'venues.ballpark.scheduledRules'
+  const input = inputRecord(value, field)
+  return {
+    fromMonth: matchingText(input.fromMonth, rankingMonthPattern, `${field}.fromMonth`, 'a YYYY-MM month'),
+    rules: parseBallparkRules(input.rules, `${field}.rules`),
+  }
+}
+
+// Mirrors frontend/src/data/ballparkRules.ts rankingMonth and effectiveBallparkRules.
+
+/** The KST calendar month, `YYYY-MM`, that `now` falls in, whatever the time zone of the machine. */
+export function rankingMonth(now: number): string {
+  return new Date(now + kstOffsetMs).toISOString().slice(0, 7)
+}
+
+/** The rules played in `month`; `YYYY-MM` months sort as text. */
+export function effectiveBallparkRules(ballpark: BallparkSettings, month: string): BallparkRules {
+  const scheduled = ballpark.scheduledRules
+  return scheduled && scheduled.fromMonth <= month ? scheduled.rules : ballpark.rules
+}
+
+/**
+ * The server owns the rules in effect, so within one KST month they never change: a save keeps the stored rules for
+ * `month`, promoting a schedule whose month has come, and ignores the submitted ones, so a stale editor tab neither
+ * fails nor changes them. A town saved for the first time starts with the default rules. The look applies at once.
+ */
+export function settleBallparkSettings(
+  submitted: BallparkSettings,
+  stored: BallparkSettings | null,
+  month: string,
+): BallparkSettings {
+  const rules = stored ? effectiveBallparkRules(stored, month) : defaultBallparkRules
+  const scheduledRules = settleScheduledRules(submitted.scheduledRules, stored?.scheduledRules, month)
+  return { theme: submitted.theme, colors: submitted.colors, rules, ...(scheduledRules ? { scheduledRules } : {}) }
+}
+
+/**
+ * A new or changed schedule must start after `month`. Resending the stored schedule once its month has come is a
+ * stale tab rather than a mistake; `settleBallparkSettings` has already promoted it, so it is dropped.
+ */
+export function settleScheduledRules(
+  submitted: ScheduledBallparkRules | undefined,
+  stored: ScheduledBallparkRules | undefined,
+  month: string,
+): ScheduledBallparkRules | undefined {
+  if (!submitted || submitted.fromMonth > month) return submitted
+  if (isDeepStrictEqual(submitted, stored)) return undefined
+  throw invalidInput(`venues.ballpark.scheduledRules.fromMonth must be after ${month}`)
 }
 
 export function parseTownObject(value: unknown, index: number): TownObject {
