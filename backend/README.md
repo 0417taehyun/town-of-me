@@ -56,11 +56,13 @@ transaction.
     `difficulty` is `easy`, `normal`, or `hard`. They change only between ranking months, the KST (UTC+9) calendar
     months written `YYYY-MM`. The server owns the rules in effect: a save checks the `rules` it sends but keeps the
     stored ones, and a town's first save starts with the defaults, so a stale editor tab never changes them mid-month.
-  - `scheduledRules: { fromMonth, rules }` (omitted or `null` for none) takes over at the start of `fromMonth`. A save
-    with a new or changed schedule whose `fromMonth` is not after the current KST month returns `400`. Once `fromMonth`
-    has come, the next save moves the stored schedule into `rules`, whether or not it sends the schedule again (sending
-    it unchanged is accepted). A save without `scheduledRules` cancels a schedule whose month has not come yet. Reads
-    never check the clock, so a stored schedule whose month has come still reads; its `rules` apply from `fromMonth` on.
+  - `scheduledRules: { fromMonth, rules }` (omitted or `null` for none) takes over at the start of `fromMonth`. A new or
+    changed schedule must start in the server's next KST month, the one after the month the save arrives in; any other
+    `fromMonth` returns `400`, so an admin device whose clock is off near a month boundary is told instead of having
+    its schedule land in another month. The stored schedule sent back unchanged is accepted. Once `fromMonth` has
+    come, the next save moves the stored schedule into `rules`, whether or not it sends the schedule again. A save
+    without `scheduledRules` cancels a schedule whose month has not come yet. Reads never check the clock, so a stored
+    schedule whose month has come still reads; its `rules` apply from `fromMonth` on.
   - Stored towns are read with these same checks, so a published range or difficulty is never narrowed or removed
     without a data migration.
 - **Revisions:** a save names the revision it started from; a stale revision returns `409 CONFLICT` and changes nothing.

@@ -1,5 +1,13 @@
 import { isDeepStrictEqual } from 'node:util'
-import { BackendService, createApi, DomainError, hashToken, MemoryStore } from '../src/index.js'
+import {
+  BackendService,
+  createApi,
+  DomainError,
+  hashToken,
+  MemoryStore,
+  parseTownLayout,
+  parseTownVenues,
+} from '../src/index.js'
 
 type Assert = (condition: unknown, message: string) => asserts condition
 
@@ -155,9 +163,6 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
     residents: [{ ...resident, ...changes }],
   })
   const withBallpark = (ballpark: Record<string, unknown>) => ({ ...firstSave, venues: { ballpark } })
-  // A month far ahead, so only the schedule's shape can refuse it.
-  const withSchedule = (changes: Record<string, unknown>) =>
-    withBallpark({ scheduledRules: { fromMonth: '2099-01', rules: { pitchCount: 7, difficulty: 'hard' }, ...changes } })
   const thirteenColors = Object.fromEntries(Array.from({ length: 13 }, (_color, index) => [`role${index}`, '#e8735a']))
   const invalidCases: Array<[string, unknown]> = [
     ['a missing baseRevision', sampleTownLayout],
@@ -254,9 +259,6 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
     ['more than twelve ballpark colors', withBallpark({ colors: thirteenColors })],
     ['a ballpark color role that is not a style name', withBallpark({ colors: { 'Bad Role': '#e8735a' } })],
     ['venues sent as a list', { ...firstSave, venues: [] }],
-    ['a scheduled month past December', withSchedule({ fromMonth: '2099-13' })],
-    ['a scheduled month without two digits', withSchedule({ fromMonth: '2099-1' })],
-    ['a scheduled pitch count over ten', withSchedule({ rules: { pitchCount: 11, difficulty: 'hard' } })],
   ]
   for (const [label, body] of invalidCases) {
     assert((await save(body, admin.cookie)).status === 400, `${label} must be rejected`)
@@ -431,6 +433,14 @@ async function checkBallparkRuleSchedule(store: MemoryStore, assert: Assert): Pr
       (error: unknown) => (error instanceof DomainError ? error.code : error),
     )
 
+  assert(
+    (await refusalCode(
+      { scheduledRules: { ...january, rules: { pitchCount: 11, difficulty: 'hard' } } },
+      0,
+      lastSecondOfDecember,
+    )) === 'INVALID_INPUT',
+    'a schedule for the next KST month is still refused for a pitch count over ten',
+  )
   const first = await save(
     { rules: { pitchCount: 9, difficulty: 'easy' }, scheduledRules: january },
     0,
@@ -443,6 +453,11 @@ async function checkBallparkRuleSchedule(store: MemoryStore, assert: Assert): Pr
   assert(
     isDeepStrictEqual(first.venues.ballpark.scheduledRules, january),
     'the last second of a KST month may still schedule the next month',
+  )
+  assert(
+    (await refusalCode({ scheduledRules: { ...january, fromMonth: '2026-02' } }, 1, lastSecondOfDecember)) ===
+      'INVALID_INPUT',
+    'at the last second of a KST month, a device whose clock already reads the next month cannot move the schedule a month on',
   )
   const stale = await save(
     { rules: { pitchCount: 3, difficulty: 'easy' }, scheduledRules: january },
@@ -464,6 +479,21 @@ async function checkBallparkRuleSchedule(store: MemoryStore, assert: Assert): Pr
     }),
     'reads never check the clock: a stored schedule for 2026-01, a month the real clock has passed, still reads as saved',
   )
+  // A save accepts only the next month, so the YYYY-MM shape now guards stored towns and seeds, read by this parse.
+  const readRefusalCode = (fromMonth: string) => {
+    try {
+      parseTownVenues({ ballpark: { scheduledRules: { fromMonth, rules: defaultRules } } })
+      return null
+    } catch (error) {
+      return error instanceof DomainError ? error.code : error
+    }
+  }
+  for (const fromMonth of ['2026-1', '2026-13']) {
+    assert(
+      readRefusalCode(fromMonth) === 'INVALID_INPUT',
+      `a stored schedule from ${fromMonth} is refused on read, since months compare as YYYY-MM text`,
+    )
+  }
 
   for (const scheduledRules of [
     { ...january, rules: { pitchCount: 4, difficulty: 'easy' } },
@@ -495,6 +525,25 @@ async function checkBallparkRuleSchedule(store: MemoryStore, assert: Assert): Pr
   assert(
     isDeepStrictEqual(afterPromotion.venues.ballpark.rules, january.rules),
     'once promoted, the rules stay in effect for the month, whatever rules a later save sends',
+  )
+  const february = { fromMonth: '2026-02', rules: { pitchCount: 4, difficulty: 'easy' } }
+  const scheduledInJanuary = await save({ scheduledRules: february }, 4, firstSecondOfJanuary)
+  assert(
+    isDeepStrictEqual(scheduledInJanuary.venues.ballpark.scheduledRules, february),
+    'from the first second of a KST month, the month after it may be scheduled',
+  )
+
+  // Two months ahead, as a server that let any later month be scheduled could have stored.
+  const march = { fromMonth: '2026-03', rules: { pitchCount: 8, difficulty: 'hard' } }
+  await store.saveTown(
+    'earlier-schedule',
+    parseTownLayout({ ...sampleTownLayout, venues: { ballpark: { scheduledRules: march } } }),
+    0,
+  )
+  const resent = await saveIn('earlier-schedule', { scheduledRules: march }, 1, lastSecondOfDecember)
+  assert(
+    isDeepStrictEqual(resent.venues.ballpark.scheduledRules, march),
+    'a stored schedule sent back unchanged is kept, even for a month a new schedule could not start in',
   )
 
   await saveIn('unsent-schedule', { scheduledRules: january }, 0, lastSecondOfDecember)

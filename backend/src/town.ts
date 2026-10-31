@@ -322,11 +322,17 @@ export function parseScheduledBallparkRules(value: unknown): ScheduledBallparkRu
   }
 }
 
-// Mirrors frontend/src/data/ballparkRules.ts rankingMonth and effectiveBallparkRules.
+// Mirrors frontend/src/data/ballparkRules.ts rankingMonth, nextRankingMonth, and effectiveBallparkRules.
 
 /** The KST calendar month, `YYYY-MM`, that `now` falls in, whatever the time zone of the machine. */
 export function rankingMonth(now: number): string {
   return new Date(now + kstOffsetMs).toISOString().slice(0, 7)
+}
+
+/** The ranking month after a `YYYY-MM` month: the only month a new or changed schedule may start in. */
+export function nextRankingMonth(month: string): string {
+  // Date.UTC counts months from 0, so the 1-based month number is already the month after.
+  return new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 1)).toISOString().slice(0, 7)
 }
 
 /** The rules played in `month`; `YYYY-MM` months sort as text. */
@@ -351,17 +357,21 @@ export function settleBallparkSettings(
 }
 
 /**
- * A new or changed schedule must start after `month`. Resending the stored schedule once its month has come is a
- * stale tab rather than a mistake; `settleBallparkSettings` has already promoted it, so it is dropped.
+ * A new or changed schedule must start in the month after `month`, the server's KST month, so an admin device whose
+ * clock is off near a month boundary gets an error instead of a schedule shifted to another month. The stored schedule
+ * sent back unchanged is kept until its month comes; from then on it is a stale tab rather than a mistake, and
+ * `settleBallparkSettings` has already promoted it, so it is dropped.
  */
 export function settleScheduledRules(
   submitted: ScheduledBallparkRules | undefined,
   stored: ScheduledBallparkRules | undefined,
   month: string,
 ): ScheduledBallparkRules | undefined {
-  if (!submitted || submitted.fromMonth > month) return submitted
-  if (isDeepStrictEqual(submitted, stored)) return undefined
-  throw invalidInput(`venues.ballpark.scheduledRules.fromMonth must be after ${month}`)
+  if (!submitted) return undefined
+  if (isDeepStrictEqual(submitted, stored)) return submitted.fromMonth > month ? submitted : undefined
+  const nextMonth = nextRankingMonth(month)
+  if (submitted.fromMonth === nextMonth) return submitted
+  throw invalidInput(`venues.ballpark.scheduledRules.fromMonth must be ${nextMonth}, the KST month after ${month}`)
 }
 
 export function parseTownObject(value: unknown, index: number): TownObject {

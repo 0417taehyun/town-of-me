@@ -13,6 +13,9 @@ what changed.
 - Lay out the `/baseball` HUD for 4:3 and 16:10 screens: its centred English caption covers the home-run count once
   the summed distance reaches four digits (by about 60 px at 1024×768 and 10 px at 1440×900), and by 9-36 px on 4:3
   even with three.
+- Near a KST month boundary, an admin device whose clock runs fast treats the stored ballpark schedule as already in
+  effect, so a rules edit can still save without the schedule, which the backend takes as a cancel. A schedule moved to
+  any month but the server's next one is already refused.
 
 ## Backend and security
 
@@ -26,9 +29,6 @@ what changed.
   quality against real references.
 - Decide what happens after an account is deleted (`deleted_at`): erasure or anonymization, retention periods, and
   database backup and restore.
-- Refuse a changed ballpark schedule whose `fromMonth` is not the server's next KST month. Near the month boundary an
-  admin device whose clock runs fast promotes the stored schedule early in the editor, and a rules edit then drops or
-  moves it on save without an error.
 
 ## Deployment
 
