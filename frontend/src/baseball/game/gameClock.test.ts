@@ -23,6 +23,15 @@ describe('game clock', () => {
     expect(gameTime(held, 2320)).toBe(1600)
   })
 
+  it('holds a moment just past for a hit-stop that comes late, never one still to come', () => {
+    const clock = createGameClock(0)
+    const late = holdClock(clock, 1000, 90, 885)
+    expect(gameTime(late, 1000)).toBe(885)
+    expect(gameTime(late, 1090)).toBe(885)
+    expect(gameTime(late, 1190)).toBe(985)
+    expect(gameTime(holdClock(clock, 1000, 90, 1200), 1050)).toBe(1000)
+  })
+
   it('keeps the whole hit-stop when slow motion starts at the same contact, then runs at the new rate', () => {
     const slowed = setClockRate(holdClock(createGameClock(0), 1000, 120), 1000, 0.25)
     expect(gameTime(slowed, 1060)).toBe(1000)

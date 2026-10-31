@@ -138,12 +138,17 @@ export function phaseEndMs(derby: Derby) {
   return derby.phaseStartedMs + DERBY_PHASE_MS[derby.phase]
 }
 
-/**
- * How long after the release the current pitch takes a swing (ms): to the latest contact that still touches the ball,
- * plus the margin for a camera swing reported after it happened.
- */
+/** How long after the release the current pitch takes a swing (ms): see swingDeadlineForPitch. */
 export function swingDeadlineMs(derby: Derby) {
-  return latestContactMs(derby, planRunPitch(derby.plan, derby.pitchIndex)) + LATE_SWING_MARGIN_MS
+  return swingDeadlineForPitch(derby, planRunPitch(derby.plan, derby.pitchIndex))
+}
+
+/**
+ * How long after its release `pitch` takes a swing (ms): to the latest contact that still touches the ball, plus the
+ * margin for a camera swing reported after it happened.
+ */
+export function swingDeadlineForPitch(derby: Derby, pitch: PitchPlan) {
+  return latestContactMs(derby, pitch) + LATE_SWING_MARGIN_MS
 }
 
 /** How long after its release (ms) a swing can still touch `pitch`, under this run's rules and calibration. */

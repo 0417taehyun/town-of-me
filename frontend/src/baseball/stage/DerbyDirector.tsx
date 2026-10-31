@@ -1,10 +1,13 @@
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useMemo, useRef, type MutableRefObject } from 'react'
 import type { PerspectiveCamera } from 'three'
+import type { PlayerProfile } from '../../data/playerProfile'
 import type { BattingSide } from '../game/field'
 import { gameTime } from '../game/gameClock'
 import { Ball } from './Ball'
 import { type BallParts, drawBall } from './ballMeshes'
+import { type BallplayerCast, posePitcherAt, posePlayers } from './ballplayerCast'
+import { Ballplayers } from './Ballplayers'
 import { aimCamera, createCameraRig } from './cameraShots'
 import {
   createStageRun,
@@ -19,25 +22,29 @@ import {
 } from './stageRun'
 
 /**
- * Plays a run in one frame loop: the derby on its game clock, the ball, and the camera, all in refs. React hears only
- * the events. A new `run` starts over. Swings pushed onto `swings` are taken every frame and played at the moment they
- * report; one from before the run's first pitch is ignored like any swing with no pitch on its way. The run's clock
- * stops while the page is hidden, when frames stop too, so no pitch goes by unseen.
+ * Plays a run in one frame loop: the derby on its game clock, the players, the ball, and the camera, all in refs. React
+ * hears only the events. The pitcher is posed first, since the ball is in his hand until it is released. A new `run`
+ * starts over. Swings pushed onto `swings` are taken every frame and played at the moment they report; one from before
+ * the run's first pitch is ignored like any swing with no pitch on its way. The run's clock stops while the page is
+ * hidden, when frames stop too, so no pitch goes by unseen.
  */
 export function DerbyDirector({
   run,
+  profile,
   side,
   swings,
   onEvent,
   reducedMotion,
 }: {
   run: StageRunSetup | null
+  profile: PlayerProfile
   side: BattingSide
   swings: MutableRefObject<RealTimeSwing[]>
   onEvent: (event: StageEvent) => void
   reducedMotion: boolean
 }) {
   const ball = useRef<BallParts>(null)
+  const players = useRef<BallplayerCast>(null)
   const stage = useRef<StageRun | null>(null)
   const lastGameMs = useRef(0)
   const listener = useRef(onEvent)
@@ -67,11 +74,18 @@ export function DerbyDirector({
     const gameDelta = Math.max(0, nowMs - lastGameMs.current) / 1000
     lastGameMs.current = nowMs
     const camera = state.camera as PerspectiveCamera
-    const view = stageBallView(current, nowMs)
+    const cast = players.current
+    const view = stageBallView(current, nowMs, cast && posePitcherAt(cast, current, nowMs))
     const aspect = state.size.width / Math.max(1, state.size.height)
     aimCamera(camera, rig, directedShot(current, nowMs, aspect, side, view.position), delta)
     if (ball.current) drawBall(ball.current, view, camera, state.size.height, gameDelta)
+    if (cast) posePlayers(cast, current, nowMs, view, delta)
   })
 
-  return <Ball ref={ball} />
+  return (
+    <>
+      <Ballplayers ref={players} profile={profile} side={side} />
+      <Ball ref={ball} />
+    </>
+  )
 }

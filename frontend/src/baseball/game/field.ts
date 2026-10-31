@@ -25,7 +25,7 @@ export const STRIKE_ZONE = { bottom: 0.35, top: 0.85, center: 0.6, halfWidth: 0.
  * Where the bat squares up, in meters in front of the plate center (field z = -CONTACT_DEPTH): the pose lab's contact
  * meets the ball half a rig unit (0.5 × 0.8333 m) in front of the batter's feet, which stand level with the plate
  * center. PERFECT is judged when the ball gets here rather than at the plate, so an on-time swing meets it with the bat
- * square. The swing keyframes must square the bat at this depth; PR 7 adds the test that ties them to it.
+ * square. The swing keyframes square the bat at this depth and height (stage/actors/swingMotion.test.ts).
  */
 export const CONTACT_DEPTH = 0.4167
 

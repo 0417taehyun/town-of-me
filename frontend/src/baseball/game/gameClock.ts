@@ -1,7 +1,8 @@
-// Game time, in ms, read off the real clock (performance.now() and input timestamps). Hit-stop, slow motion, and
-// pausing change how fast it runs but never make it jump, so a pitch's timeline stays continuous through every change.
-// The clock keeps no history: a real moment before its latest change reads as the moment of that change, so convert an
-// input's timestamp to game time before changing the clock when the input matters.
+// Game time, in ms, read off the real clock (performance.now() and input timestamps). Slow motion and pausing change
+// how fast it runs but never make it jump, so a pitch's timeline stays continuous through every change; only a hit-stop
+// may step it back, to hold the contact a swing reported late already made. The clock keeps no history: a real moment
+// before its latest change reads as the moment of that change, so convert an input's timestamp to game time before
+// changing the clock when the input matters.
 
 /** From real moment `realMs` on, game time runs on from `gameMs` at `rate` times real time; before it, it holds. */
 export type GameClock = { realMs: number; gameMs: number; rate: number }
@@ -23,7 +24,10 @@ export function setClockRate(clock: GameClock, realMs: number, rate: number): Ga
   return { realMs: fromMs, gameMs: gameTime(clock, fromMs), rate }
 }
 
-/** Hit-stop: game time stands still for `durationMs` of real time from `realMs`, then runs on at the rate it had. */
-export function holdClock(clock: GameClock, realMs: number, durationMs: number): GameClock {
-  return { realMs: realMs + durationMs, gameMs: gameTime(clock, realMs), rate: clock.rate }
+/**
+ * Hit-stop: game time stands still at `atGameMs` for `durationMs` of real time from `realMs`, then runs on from there at
+ * the rate it had. It holds the moment `realMs` reads unless `atGameMs` is earlier, never a moment still to come.
+ */
+export function holdClock(clock: GameClock, realMs: number, durationMs: number, atGameMs = Infinity): GameClock {
+  return { realMs: realMs + durationMs, gameMs: Math.min(atGameMs, gameTime(clock, realMs)), rate: clock.rate }
 }

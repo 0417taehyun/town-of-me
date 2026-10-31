@@ -1,15 +1,15 @@
 import type { Vec3 } from '../../data/models'
-import { clamp01, lerp, smoothstep } from '../../motionMath'
+import { lerp } from '../../motionMath'
 import {
   advanceDerby,
   createDerby,
-  DERBY_PHASE_MS,
   latestContactMs,
   RESULT_HOLD_MS,
   type Derby,
   type DerbyEvent,
   type DerbySwing,
   type DerbyUpdate,
+  swingDeadlineForPitch,
   swingDerby,
 } from '../game/derby'
 import type { DerbyInputLog } from '../game/derbyScore'
@@ -17,24 +17,19 @@ import { BATTER_REACH, type BattingSide } from '../game/field'
 import { type BallFlight, createFlight, launchForLanding, predictLanding, sprayPoint, stepFlight } from '../game/flight'
 import { createGameClock, gameTime, type GameClock, holdClock, setClockRate } from '../game/gameClock'
 import type { Landing } from '../game/landing'
-import {
-  meetSeconds,
-  type PitchPlan,
-  type PitchTypeId,
-  pitchPosition,
-  RELEASE_POINT,
-  secondsAtDepth,
-} from '../game/pitch'
+import { meetSeconds, type PitchPlan, type PitchTypeId, pitchPosition, secondsAtDepth } from '../game/pitch'
 import type { RunPlan } from '../game/runPlan'
 import { type BallSpin, type BallView, TRAIL_LENGTH } from './ballMeshes'
 import { battingShot, type CameraShot, chaseShot, isShowcaseHomeRun, wideShot } from './cameraShots'
-import { MITT_DEPTH, WINDUP_POINTS } from './stageLayout'
+import { MITT_DEPTH } from './stageLayout'
 
 // A run as the stage plays it: the derby (game/derby.ts) on its game clock, plus what only the stage shows. The ball is
-// held, wound up, and pitched on the derby's own times. A pitch waits at the back of the batter's reach while a swing
-// could still touch it, so the mitt never catches a ball the bat then hits; a ball in play leaves the bat where and
-// when the bat met it and flies to the landing the judge already decided. The stage changes the clock's pace (hit-stop
-// at contact, slow motion at a showcase home run's peak, a pause while the page is hidden) but never an outcome. Every
+// in the pitcher's hand until the derby releases it, then pitched on the derby's own times. A pitch waits at the back
+// of the batter's reach while a swing that touches it could still be reported (a keyboard swing comes with the next
+// frame, a camera swing up to the derby's late margin after it), so the mitt never catches a ball the bat then hits;
+// a ball in play leaves the bat where and when the bat met it and flies to the landing the judge already decided. The
+// stage changes the clock's pace (hit-stop at contact, holding the moment the bat met the ball even when the swing came
+// late; slow motion at a showcase home run's peak; a pause while the page is hidden) but never an outcome. Every
 // function here mutates the run it is given; the director keeps it in a ref and reads it each frame.
 
 /** A run for the stage to play: its plan, and how the visitor plays it (input, batting side, practice). */
@@ -68,8 +63,6 @@ export const STAGE_TIMING = {
   pitchTrailSeconds: 0.022,
   /** Seconds of flight between a batted ball's trail points, so the trail is as long at any frame rate. */
   flightTrailSeconds: 0.05,
-  /** The share of the windup spent lifting the ball behind the shoulder; the rest throws it to the release point. */
-  windupLift: 0.62,
 }
 
 /** How each pitch type spins on its way, so the visitor can tell them apart before the result names them. */
@@ -83,7 +76,7 @@ export const BATTED_SPIN_RADIANS_PER_SECOND = 30
 
 /**
  * A pitch on its way. It waits at the back of the batter's reach until `holdSeconds` after its release, while a swing
- * could still touch it, then goes on into the mitt.
+ * that touches it could still be reported, then goes on into the mitt.
  */
 export type PitchOnStage = { index: number; plan: PitchPlan; releasedMs: number; holdSeconds: number; caught: boolean }
 
@@ -133,15 +126,18 @@ export function toDerbySwing(clock: GameClock, swing: RealTimeSwing): DerbySwing
   return { ...measured, contactAtMs: gameTime(clock, contactAtRealMs), startedAtMs: gameTime(clock, startedAtRealMs) }
 }
 
-export function swingStageRun(run: StageRun, swing: RealTimeSwing): StageEvent[] {
-  return takeDerbyUpdate(run, swingDerby(run.derby, toDerbySwing(run.clock, swing)))
+/** A swing input handed in at real moment `realMs`. */
+export function swingStageRun(run: StageRun, swing: RealTimeSwing, realMs: number): StageEvent[] {
+  const update = swingDerby(run.derby, toDerbySwing(run.clock, swing))
+  return takeDerbyUpdate(run, update, gameTime(run.clock, realMs))
 }
 
 /** Everything due by `realMs`: the derby's phase changes, then the catch, the contact, and the batted ball's flight. */
 export function advanceStageRun(run: StageRun, realMs: number, reducedMotion: boolean): StageEvent[] {
   endSlowMotion(run, realMs)
-  const derbyEvents = takeDerbyUpdate(run, advanceDerby(run.derby, gameTime(run.clock, realMs)))
   const nowMs = gameTime(run.clock, realMs)
+  const derbyEvents = takeDerbyUpdate(run, advanceDerby(run.derby, nowMs), nowMs)
+  endKeyboardHold(run, nowMs)
   const cues = [...catchCue(run, nowMs), ...contactCue(run, nowMs, realMs)]
   return [...derbyEvents, ...cues, ...flyBall(run, realMs, reducedMotion)]
 }
@@ -152,30 +148,52 @@ export function setStageRunPaused(run: StageRun, realMs: number, paused: boolean
   run.slowMotionEndsRealMs = null
 }
 
-export function takeDerbyUpdate(run: StageRun, update: DerbyUpdate): StageEvent[] {
+/** Takes the derby's update, which the stage got at game time `nowMs`. */
+export function takeDerbyUpdate(run: StageRun, update: DerbyUpdate, nowMs: number): StageEvent[] {
   run.derby = update.derby
-  update.events.forEach((event) => stageDerbyEvent(run, event))
+  update.events.forEach((event) => stageDerbyEvent(run, event, nowMs))
   return update.events
 }
 
-/** A release puts the next pitch on its way; a result sets up its batted ball, if any, and may end the pitch's wait. */
-export function stageDerbyEvent(run: StageRun, event: DerbyEvent) {
+/**
+ * A release puts the next pitch on its way, waiting until the derby's deadline for a swing at it; a result, taken at
+ * game time `nowMs`, sets up its batted ball, if any, and may end the pitch's wait.
+ */
+export function stageDerbyEvent(run: StageRun, event: DerbyEvent, nowMs: number) {
   if (event.type === 'release') {
-    const holdSeconds = latestContactMs(run.derby, event.pitch) / 1000
+    const holdSeconds = swingDeadlineForPitch(run.derby, event.pitch) / 1000
     run.pitch = { index: event.pitchIndex, plan: event.pitch, releasedMs: event.releasedMs, holdSeconds, caught: false }
     run.batted = null
     return
   }
   if (event.type !== 'result') return
   run.batted = battedBallFor(run, event)
-  endHold(run.pitch, event)
+  endHold(run.pitch, event, nowMs)
 }
 
-/** A judged swing ends the pitch's wait at the back of the reach: no later swing can touch the ball. */
-export function endHold(pitch: PitchOnStage | null, event: ResultEvent) {
+/**
+ * A judged swing ends the pitch's wait at the back of the reach: no later swing can touch the ball. The wait ends no
+ * sooner than `nowMs` (game ms), when the stage takes the result, so a pitch that a swing reported late missed goes on
+ * from where it is drawn.
+ */
+export function endHold(pitch: PitchOnStage | null, event: ResultEvent, nowMs: number) {
   if (!pitch || !event.swing) return
   const reachBack = secondsAtDepth(pitch.plan, BATTER_REACH.back)
-  pitch.holdSeconds = Math.min(pitch.holdSeconds, Math.max(reachBack, event.swing.contactMs / 1000))
+  const takenSeconds = (nowMs - pitch.releasedMs) / 1000
+  pitch.holdSeconds = Math.min(pitch.holdSeconds, Math.max(reachBack, event.swing.contactMs / 1000, takenSeconds))
+}
+
+/**
+ * A keyboard swing is handed in with the first frame after its key press, so once a frame at game time `nowMs` comes
+ * past the latest contact that still touches a keyboard run's pitch, and none has, no swing can: the pitch goes on from
+ * there. A camera swing can be reported later, so a camera run's pitch waits until the derby's deadline.
+ */
+export function endKeyboardHold(run: StageRun, nowMs: number) {
+  const { pitch, derby } = run
+  if (!pitch || derby.log.input !== 'keyboard' || derby.results.length > pitch.index) return
+  const elapsedMs = nowMs - pitch.releasedMs
+  if (elapsedMs < latestContactMs(derby, pitch.plan)) return
+  pitch.holdSeconds = Math.min(pitch.holdSeconds, elapsedMs / 1000)
 }
 
 /**
@@ -244,14 +262,18 @@ export function catchCue(run: StageRun, nowMs: number): StageEvent[] {
   return [{ type: 'caught', pitchIndex: pitch.index }]
 }
 
-/** The bat meets the ball: its flight starts, and the game clock stands still a moment (hit-stop). */
+/**
+ * The bat meets the ball: its flight starts, and the game clock stands still a moment at the meeting (hit-stop). A
+ * swing handled a frame or more after it was made steps the clock back to the meeting, so the hit-stop shows the bat
+ * on the ball.
+ */
 export function contactCue(run: StageRun, nowMs: number, realMs: number): StageEvent[] {
   const { batted } = run
   if (!batted || batted.flight || nowMs < batted.meetMs) return []
   batted.flight = createFlight(batted.start, batted.velocity)
   batted.steppedToMs = batted.meetMs
   batted.trail = [{ seconds: 0, position: { ...batted.start } }]
-  run.clock = holdClock(run.clock, realMs, STAGE_TIMING.hitStopMs)
+  run.clock = holdClock(run.clock, realMs, STAGE_TIMING.hitStopMs, batted.meetMs)
   return [{ type: 'contact', pitchIndex: batted.pitchIndex }]
 }
 
@@ -302,35 +324,30 @@ export function endSlowMotion(run: StageRun, realMs: number) {
   run.slowMotionEndsRealMs = null
 }
 
-const heldInGlove: BallView = {
-  visible: true,
-  position: WINDUP_POINTS.glove,
+const hidden: BallView = {
+  visible: false,
+  position: { x: 0, y: 0, z: 0 },
   spin: null,
   flying: false,
   trail: [],
   landing: null,
 }
-const hidden: BallView = { ...heldInGlove, visible: false }
 
-/** The ball at game time `nowMs`; with no run it waits in the pitcher's glove. */
-export function stageBallView(run: StageRun | null, nowMs: number): BallView {
-  if (!run || run.derby.phase === 'ready') return heldInGlove
-  if (run.derby.phase === 'finished') return hidden
-  if (run.derby.phase === 'windup') {
-    return { ...heldInGlove, position: windupPosition((nowMs - run.derby.phaseStartedMs) / DERBY_PHASE_MS.windup) }
-  }
+/**
+ * The ball at game time `nowMs`. Until the derby releases it, it is the pitcher's, at `inHand` as he is posed (hidden
+ * when he is not there to hold it).
+ */
+export function stageBallView(run: StageRun | null, nowMs: number, inHand: Vec3 | null): BallView {
+  if (ballIsThePitchers(run)) return inHand ? { ...hidden, visible: true, position: inHand } : hidden
+  if (!run || run.derby.phase === 'finished') return hidden
   if (run.batted?.flight) return flyingBallView(run.batted, run.batted.flight)
   if (!run.pitch) return hidden
   return pitchedBallView(run.pitch, run.derby.plan.schedule[run.pitch.index].type, nowMs)
 }
 
-/** The ball lifted from the glove behind the shoulder, then thrown faster and faster to the release point. */
-export function windupPosition(progress: number): Vec3 {
-  const { glove, cocked } = WINDUP_POINTS
-  const lift = STAGE_TIMING.windupLift
-  if (progress < lift) return mix(glove, cocked, smoothstep(clamp01(progress / lift)))
-  const throwing = clamp01((progress - lift) / (1 - lift))
-  return mix(cocked, RELEASE_POINT, throwing * throwing)
+/** Whether the ball is still the pitcher's: before a run, and before each release. */
+export function ballIsThePitchers(run: StageRun | null) {
+  return !run || run.derby.phase === 'ready' || run.derby.phase === 'windup'
 }
 
 export function mix(from: Vec3, to: Vec3, amount: number): Vec3 {
@@ -421,6 +438,6 @@ export function playStageFrame(
   reducedMotion: boolean,
 ): StageEvent[] {
   endSlowMotion(run, realMs)
-  const swingEvents = swings.flatMap((swing) => swingStageRun(run, swing))
+  const swingEvents = swings.flatMap((swing) => swingStageRun(run, swing, realMs))
   return [...swingEvents, ...advanceStageRun(run, realMs, reducedMotion)]
 }

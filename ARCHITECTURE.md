@@ -127,13 +127,27 @@ same functions, so the numbers shown live are the replayed ones.
 
 The stage draws a run on its own flat canvas: `BaseballStage.tsx` never installs the world curve. `DerbyDirector.tsx`
 plays the run in one `useFrame`: `stageRun.ts` keeps the derby, its game clock, the ball, and the camera's choice in a
-ref and reports only events to React. A pitch waits at the back of the batter's reach while a swing could still touch
-it, so the mitt never catches a ball the bat then hits. A ball in play leaves the bat where the bat met it and flies to
-the landing the judge already decided, fast enough to come down before its result ends; the stage changes the clock's
-pace (hit-stop, slow motion at a showcase home run's peak, a pause while the page is hidden) but never an outcome. `cameraShots.ts` frames the batting shot between the HUD's bands at any aspect. The stadium's lawn and
+ref and reports only events to React. The ball is the pitcher's until the derby releases it; a pitch then waits at the
+back of the batter's reach while a swing that touches it could still be reported (a keyboard swing comes with the next
+frame, a camera swing up to the derby's late margin after it), so the mitt never catches a ball the bat then hits. A
+ball in play leaves the bat where the bat met it and flies to the landing the judge already decided, fast enough to
+come down before its result ends; the stage changes the clock's pace (a hit-stop that holds the moment the bat met the
+ball, even for a swing reported late; slow motion at a showcase home run's peak; a pause while the page is hidden) but
+never an outcome. `cameraShots.ts` frames the batting shot between the HUD's bands at any aspect. The stadium's lawn and
 hedge take the visitor's season like the town's (`scene/environment`), the sky and light the time of day, and its
-dugouts and foul poles the ballpark palette; none of this reaches the score. The players are town characters standing
-in place until the ballplayer rigs replace them.
+dugouts and foul poles the ballpark palette; none of this reaches the score.
+
+`stage/actors/` builds the players in plain Three.js. `ballplayerRig.ts` is the town character's body, look, and
+proportions posed by joints (two-bone IK legs on planted feet, a chest turning about a tilted spine, elbow arms); the
+batter (`batter.ts`) is the visitor's character with a bat and mitten hands, playing the pose lab's swing as monotone
+keyframe tracks (`keyframes.ts`, `swingMotion.ts`). It reads the contact point from `game/field.ts` and aims at it, so a
+PERFECT swing squares the bat there, and each swing meets its ball `CONTACT_DELAY_MS` after it starts; a left-handed
+batter is the mirror image. The other team's pitcher (`pitcher.ts`) and catcher (`catcher.ts`) wear its brick red and
+charcoal (`teamUniforms.ts`); the pitcher's throw is keyed on the same tracks with its release key at `game/pitch.ts`'s
+`RELEASE_POINT`, and the catcher's mitt reaches for where each pitch ends up. `ballplayerCast.ts` drives all three from
+the stage run: the pitcher throws on the derby's windup and release, the batter loads with them and swings each judged
+swing so its bat meets the ball where and when the stage sends it off, and every head follows the ball (`headLook.ts`),
+the batter's only as far as its bat lets a hat brim or hair turn. Nothing in `game/` reads the rigs.
 
 ### The `/baseball` page
 

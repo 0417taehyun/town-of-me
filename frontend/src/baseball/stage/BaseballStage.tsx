@@ -14,7 +14,6 @@ import { useVenueMaterials } from '../../scene/venues/venueMaterials'
 import type { BattingSide } from '../game/field'
 import { Dugouts } from '../stadium/Dugouts'
 import { StadiumField } from '../stadium/StadiumField'
-import { Ballplayers } from './Ballplayers'
 import { DerbyDirector } from './DerbyDirector'
 import type { RealTimeSwing, StageEvent, StageRunSetup } from './stageRun'
 
@@ -83,8 +82,14 @@ export function BaseballStage({
       <SunLight dayChange={dayChange} playerPosition={shadowFocus} editing={false} />
       <StadiumField materials={materials} seasonChange={seasonChange} />
       <Dugouts materials={materials} />
-      <Ballplayers profile={profile} side={side} />
-      <DerbyDirector run={run} side={side} swings={swings} onEvent={onEvent} reducedMotion={reducedMotion} />
+      <DerbyDirector
+        run={run}
+        profile={profile}
+        side={side}
+        swings={swings}
+        onEvent={onEvent}
+        reducedMotion={reducedMotion}
+      />
     </GraphicsCanvas>
   )
 }

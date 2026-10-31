@@ -7,7 +7,7 @@ import { type BattingSide, FENCE_HEIGHT, fenceDistance, STRIKE_ZONE } from '../g
 import { sprayPoint } from '../game/flight'
 import { RELEASE_POINT } from '../game/pitch'
 import { MOUND } from '../stadium/fieldLayout'
-import { batterSpot, CATCHER_SPOT, PITCHER_SPOT, PLAYER_HEIGHT, WINDUP_POINTS } from './stageLayout'
+import { batterSpot, CATCHER_SPOT, PITCHER_SPOT, PLAYER_HEIGHT } from './stageLayout'
 
 // The derby's camera. The batting shot looks straight down the pitch line from above the catcher, so the ball comes at
 // the visitor the way it comes at the webcam they face. A batted ball is chased from behind; a run's showcase home runs
@@ -28,7 +28,7 @@ export const FRAME_MARGIN = 0.02
 /** The landing camera stands beyond where the ball comes down, off to the side of its path toward center field. */
 export const LANDING_CAMERA = { beyond: 24, aside: 16, height: 10, fov: 50 }
 
-/** What the batting shot must show: the pitcher and the ball's windup, the strike zone, the batter, the catcher's back. */
+/** What the batting shot must show: the pitcher and his windup, the strike zone, the batter, the catcher's cap. */
 export function battingFramePoints(side: BattingSide): Vec3[] {
   const batter = batterSpot(side)
   const { bottom, top, halfWidth } = STRIKE_ZONE
@@ -36,14 +36,13 @@ export function battingFramePoints(side: BattingSide): Vec3[] {
     { x: 0, y: MOUND.height - 0.05, z: PITCHER_SPOT.z },
     { x: 0, y: PITCHER_SPOT.y + PLAYER_HEIGHT + 0.15, z: PITCHER_SPOT.z },
     RELEASE_POINT,
-    WINDUP_POINTS.cocked,
     { x: -halfWidth, y: bottom - 0.08, z: 0 },
     { x: halfWidth, y: top + 0.12, z: 0 },
     { x: 0, y: 0, z: 0.215 },
     { x: batter.x, y: 0, z: 0 },
     { x: batter.x, y: PLAYER_HEIGHT + 0.1, z: 0 },
     { x: batter.x * 1.9, y: 1.5, z: 0.3 },
-    { x: 0, y: 1.2, z: CATCHER_SPOT.z + 0.1 },
+    { x: 0, y: 1.45, z: CATCHER_SPOT.z + 0.1 },
   ]
 }
 

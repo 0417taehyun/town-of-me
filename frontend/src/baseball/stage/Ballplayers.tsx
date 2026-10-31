@@ -1,61 +1,33 @@
-import { useRef } from 'react'
-import { DEFAULT_PLAYER_PROFILE, type PlayerProfile } from '../../data/playerProfile'
-import type { CharacterAnimation } from '../../scene/characters/Characters'
-import { ProceduralCharacter } from '../../scene/characters/ProceduralCharacter'
-import { CHARACTER_ORIGIN_OFFSET } from '../../scene/motion/characterPose'
+import { useEffect, useImperativeHandle, useMemo, type Ref } from 'react'
+import type { PlayerProfile } from '../../data/playerProfile'
 import type { BattingSide } from '../game/field'
-import { batterSpot, CATCHER_SPOT, PITCHER_SPOT, PLAYER_SCALE } from './stageLayout'
+import { createBatter, disposeBatter } from './actors/batter'
+import { type BallplayerCast, createCast, createFielders, disposeFielders } from './ballplayerCast'
 
-// Stand-ins until the ballplayer rigs (PR 7): town characters standing where the players play, the batter as the
-// visitor's own character. Each is lifted by the character's origin offset so its feet rest on the ground, as in the
-// town. The catcher sits on the ground so the strike zone stays in sight over his head.
-
-const PITCHER: PlayerProfile = {
-  ...DEFAULT_PLAYER_PROFILE,
-  name: 'Pitcher',
-  hat: 'cap',
-  colors: { ...DEFAULT_PLAYER_PROFILE.colors, hat: '#374b65', top: '#ece3cc', bottom: '#374b65' },
-}
-const CATCHER: PlayerProfile = {
-  ...PITCHER,
-  name: 'Catcher',
-  hair: 'curls',
-  colors: { ...PITCHER.colors, skin: '#e9ba99', hair: '#a75838' },
-}
-
-export function StandingPlayer({
+/**
+ * The visitor's character at bat on `side`, and the other team's pitcher and catcher; the derby director poses them
+ * every frame. A new character or batting side makes a new batter.
+ */
+export function Ballplayers({
+  ref,
   profile,
-  position,
-  yaw,
-  animation,
+  side,
 }: {
+  ref: Ref<BallplayerCast>
   profile: PlayerProfile
-  position: { x: number; y: number; z: number }
-  yaw: number
-  animation: CharacterAnimation
+  side: BattingSide
 }) {
-  const animationRef = useRef(animation)
-  return (
-    <group position={[position.x, position.y, position.z]} rotation-y={yaw} scale={PLAYER_SCALE}>
-      <group position-y={-CHARACTER_ORIGIN_OFFSET}>
-        <ProceduralCharacter profile={profile} animationRef={animationRef} />
-      </group>
-    </group>
-  )
-}
-
-export function Ballplayers({ profile, side }: { profile: PlayerProfile; side: BattingSide }) {
-  const batter = batterSpot(side)
+  const fielders = useMemo(() => createFielders(), [])
+  const batter = useMemo(() => createBatter(profile, side), [profile, side])
+  const cast = useMemo(() => createCast(batter, fielders), [batter, fielders])
+  useImperativeHandle(ref, () => cast, [cast])
+  useEffect(() => () => disposeBatter(batter), [batter])
+  useEffect(() => () => disposeFielders(fielders), [fielders])
   return (
     <>
-      <StandingPlayer profile={PITCHER} position={PITCHER_SPOT} yaw={0} animation="idle" />
-      <StandingPlayer profile={CATCHER} position={CATCHER_SPOT} yaw={Math.PI} animation="sit" />
-      <StandingPlayer
-        profile={profile}
-        position={batter}
-        yaw={side === 'left' ? -Math.PI / 2 : Math.PI / 2}
-        animation="idle"
-      />
+      <primitive object={batter.rig.root} />
+      <primitive object={fielders.pitcher.rig.root} />
+      <primitive object={fielders.catcher.rig.root} />
     </>
   )
 }

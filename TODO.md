@@ -13,6 +13,9 @@ what changed.
 - Lay out the `/baseball` HUD for 4:3 and 16:10 screens: its centred English caption covers the home-run count once
   the summed distance reaches four digits (by about 60 px at 1024×768 and 10 px at 1440×900), and by 9-36 px on 4:3
   even with three.
+- Export the town character's measurements (torso, head, hips, legs, shoes, collar) from `scene/characters`, so
+  `ProceduralCharacter.tsx` and the `/baseball` ballplayer rig (`stage/actors/ballplayerRig.ts`), which repeats them
+  today, share one source.
 - Near a KST month boundary, an admin device whose clock runs fast treats the stored ballpark schedule as already in
   effect, so a rules edit can still save without the schedule, which the backend takes as a cancel. A schedule moved to
   any month but the server's next one is already refused.
