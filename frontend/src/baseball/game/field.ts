@@ -18,8 +18,15 @@ export const BASES = {
   third: { x: -baseOffset, z: -baseOffset },
 }
 
-/** Heights above the plate (m) and half its width: waist height for the town character, whose hips sit about 0.6 m up. */
-export const STRIKE_ZONE = { bottom: 0.35, top: 0.85, center: 0.6, halfWidth: 0.25 }
+/**
+ * The strike zone over the plate: heights above it (m), waist height for the town character, whose hips sit about 0.6 m
+ * up, and half the plate's 43 cm width. The plate's sides run straight back from its front edge to its center, so the
+ * front edge is `halfWidth` in front of the center too. Every pitch passes through it whole (pitchSchedule.test.ts).
+ */
+export const STRIKE_ZONE = { bottom: 0.35, top: 0.85, center: 0.6, halfWidth: 0.2159 }
+
+/** A regulation ball's radius (m), 23 cm around. */
+export const BALL_RADIUS = 0.0369
 
 /**
  * Where the bat squares up, in meters in front of the plate center (field z = -CONTACT_DEPTH): the pose lab's contact

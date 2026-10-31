@@ -133,8 +133,13 @@ frame, a camera swing up to the derby's late margin after it), so the mitt never
 ball in play leaves the bat where the bat met it and flies to the landing the judge already decided, fast enough to
 come down before its result ends; the stage changes the clock's pace (a hit-stop that holds the moment the bat met the
 ball, even for a swing reported late; slow motion at a showcase home run's peak; a pause while the page is hidden) but
-never an outcome. `cameraShots.ts` frames the batting shot between the HUD's bands at any aspect. The stadium's lawn and
-hedge take the visitor's season like the town's (`scene/environment`), the sky and light the time of day, and its
+never an outcome. `cameraShots.ts` frames the batting shot between the HUD's bands at any aspect. The pitcher throws
+only strikes: every pitch passes through the zone whole (`game/pitchSchedule.test.ts`), and `strikeZoneOutline.ts` draws
+the zone as a faint box from the windup until the pitch is judged. The batting shot looks down, so a ball farther off
+is drawn higher and one flat frame would show strikes nearer the pitcher above it; the box runs from where the bat meets
+the ball, over the plate, to where a pitch let go by waits, so a strike is drawn inside it as the visitor swings, as it
+crosses the plate, and while it waits. Its opening is the zone grown by the drawn ball's extra size. The stadium's lawn
+and hedge take the visitor's season like the town's (`scene/environment`), the sky and light the time of day, and its
 dugouts and foul poles the ballpark palette; none of this reaches the score.
 
 `stage/actors/` builds the players in plain Three.js. `ballplayerRig.ts` is the town character's body, look, and

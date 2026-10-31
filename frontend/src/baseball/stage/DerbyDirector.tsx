@@ -20,14 +20,15 @@ import {
   type StageRunSetup,
   stageBallView,
 } from './stageRun'
+import { createStrikeZoneOutline, disposeStrikeZoneOutline, drawStrikeZoneOutline } from './strikeZoneOutline'
 
 /**
- * Plays a run in one frame loop: the derby on its game clock, the players, the ball, and the camera, all in refs. React
- * hears only the events. The pitcher is posed first, since the ball is in his hand until it is released. A new `run`
- * starts over. Swings pushed onto `swings` are taken every frame and played at the moment they report; one from before
- * the run's first pitch is ignored like any swing with no pitch on its way. The run's clock stops while the page is
- * hidden, when frames stop too, so no pitch goes by unseen. The picture is centred in `band` (px), the part of the
- * screen the camera panel leaves free.
+ * Plays a run in one frame loop: the derby on its game clock, the players, the ball, the strike zone's box, and the
+ * camera, all in refs. React hears only the events. The pitcher is posed first, since the ball is in his hand until it
+ * is released. A new `run` starts over. Swings pushed onto `swings` are taken every frame and played at the moment they
+ * report; one from before the run's first pitch is ignored like any swing with no pitch on its way. The run's clock
+ * stops while the page is hidden, when frames stop too, so no pitch goes by unseen. The picture is centred in `band`
+ * (px), the part of the screen the camera panel leaves free.
  */
 export function DerbyDirector({
   run,
@@ -52,6 +53,8 @@ export function DerbyDirector({
   const lastGameMs = useRef(0)
   const listener = useRef(onEvent)
   const rig = useMemo(() => createCameraRig(), [])
+  const outline = useMemo(() => createStrikeZoneOutline(), [])
+  useEffect(() => () => disposeStrikeZoneOutline(outline), [outline])
   useLayoutEffect(() => {
     listener.current = onEvent
   }, [onEvent])
@@ -84,6 +87,7 @@ export function DerbyDirector({
     const aspect = band.width / Math.max(1, height)
     aimCamera(camera, rig, directedShot(current, nowMs, aspect, side, view.position), delta)
     if (ball.current) drawBall(ball.current, view, camera, state.size.height, gameDelta)
+    drawStrikeZoneOutline(outline, current?.derby.phase ?? null, delta, reducedMotion)
     if (cast) posePlayers(cast, current, nowMs, view, delta)
   })
 
@@ -91,6 +95,7 @@ export function DerbyDirector({
     <>
       <Ballplayers ref={players} profile={profile} side={side} />
       <Ball ref={ball} />
+      <primitive object={outline} />
     </>
   )
 }

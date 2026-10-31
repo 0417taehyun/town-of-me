@@ -51,7 +51,8 @@ npm run build
   plays the pitch count (3–10) and difficulty the admin set for the current month in Korean time; a change takes effect
   from the next month, and a run started after midnight on the first plays the rules scheduled for it. A ball in play
   is a home run, a hit, or a foul; a pitch you let go is a strike and one you swing through a miss, and there are no
-  outs. The result banner names the pitch type only after the pitch. The result shows the home runs, their total
+  outs. The pitcher throws only strikes, and a faint box shows the strike zone while each pitch comes. The result
+  banner names the pitch type only after the pitch. The result shows the home runs, their total
   distance, and the longest. Its sky, light, lawn, and snow follow local time
   and season like the town's, without changing the score. Phones, tablets, and browsers without WebGL 2 see why they
   cannot play, with an address to copy. The camera picture is processed in the browser only and never leaves the

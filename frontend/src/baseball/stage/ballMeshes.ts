@@ -15,15 +15,17 @@ import {
 } from 'three'
 import type { Vec3 } from '../../data/models'
 import { clamp, damp } from '../../motionMath'
+import { BALL_RADIUS } from '../game/field'
 import { FIELD_LAYERS } from '../stadium/fieldLayout'
 
 // The ball as drawn: a regulation ball 1.8 times larger with red seams, a dark rim so it reads against sky and grass,
 // a trail behind it, a blob on the ground under it, and a ring where a ball in play will come down.
 
-export const BALL_RADIUS = 0.0369
 /** A regulation ball 18 m away is a few pixels wide; drawn this much larger it still reads. */
 export const BALL_DISPLAY_SCALE = 1.8
 export const DRAWN_BALL_RADIUS = BALL_RADIUS * BALL_DISPLAY_SCALE
+/** The dark rim around the drawn ball, the edge the visitor sees against the dirt. */
+export const DRAWN_RIM_RADIUS = DRAWN_BALL_RADIUS * 1.3
 export const TRAIL_LENGTH = 8
 /** The fewest pixels across the ball may shrink to: a pitch stays near, a batted ball is chased far out. */
 export const MINIMUM_BALL_PIXELS = { pitched: 6, flying: 12 }
@@ -92,7 +94,7 @@ export function createBallParts(): BallParts {
   )
   ball.castShadow = true
   const rim = new Mesh(
-    new SphereGeometry(DRAWN_BALL_RADIUS * 1.3, 20, 14),
+    new SphereGeometry(DRAWN_RIM_RADIUS, 20, 14),
     new MeshBasicMaterial({ color: '#2a2420', side: BackSide, transparent: true, opacity: 0.6 }),
   )
   ball.add(rim)
