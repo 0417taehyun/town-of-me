@@ -1,6 +1,7 @@
 import { linkedInProfileUrlError } from '../data/linkedInProfile'
 import {
   genderDescriptionError,
+  isDefaultProfile,
   pickRandom,
   playerNameError,
   randomizePlayerAppearance,
@@ -13,14 +14,17 @@ const suggestedNames = {
   ko: ['민준', '서준', '도윤', '지호', '하준', '서연', '지우', '하윤', '수아', '유진', '민서', '지민'],
 } satisfies Record<AppLanguage, readonly string[]>
 
-/** A first-time visitor starts from a random look and a suggested name; a returning one keeps their character. */
+/**
+ * A first-time visitor starts from a random look and a suggested name; a returning one keeps their character, and so
+ * does one entering for the first time with a character made on another page, such as the ballpark.
+ */
 export function initialCreatorDraft(
   profile: PlayerProfile,
   firstEntry: boolean,
   language: AppLanguage,
   random: () => number = Math.random,
 ) {
-  if (!firstEntry) return profile
+  if (!firstEntry || !isDefaultProfile(profile)) return profile
   const name = pickRandom(suggestedNames[language], random)
   return randomizePlayerAppearance({ ...profile, name }, random)
 }

@@ -1,0 +1,91 @@
+/* The home run derby page, loaded with its lazy chunk. The shared buttons, loader, and language select are in styles.css. */
+
+.baseball-app {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: auto;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255, 250, 239, 0.72), transparent 42%),
+    linear-gradient(180deg, #b9ddd8 0%, #dce5bd 58%, #abc77f 100%);
+  /* Korean breaks between words, never inside one; numbers keep their width as they change. */
+  word-break: keep-all;
+  font-variant-numeric: tabular-nums;
+}
+html[lang='ko'] .baseball-app {
+  font-family:
+    'Pretendard Variable',
+    Pretendard,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Apple SD Gothic Neo',
+    sans-serif;
+}
+html[lang='ko'] .baseball-app :is(h1, h2) {
+  font-family: inherit;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.baseball-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 24px;
+}
+.baseball-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 999px;
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-weight: 700;
+  text-decoration: none;
+}
+.baseball-back:focus-visible {
+  outline: 3px solid rgba(51, 101, 86, 0.42);
+  outline-offset: 3px;
+}
+.baseball-language-select {
+  width: 194px;
+  height: 38px;
+}
+
+.baseball-card {
+  align-self: center;
+  justify-self: center;
+  width: min(520px, calc(100% - 32px));
+  margin-bottom: 8vh;
+  padding: 40px 44px 32px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(145deg, rgba(255, 251, 240, 0.97), rgba(248, 239, 218, 0.94));
+  box-shadow: var(--shadow);
+}
+.baseball-card h1 {
+  font-size: clamp(2.1rem, 4vw, 3.15rem);
+}
+.baseball-card h2 {
+  margin: 28px 0 10px;
+  font-size: 1.15rem;
+}
+.baseball-rules {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-weight: 700;
+}
+.baseball-note {
+  margin: 22px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { effectiveBallparkRules, rankingMonth } from './ballparkRules'
+import { effectiveBallparkRules, rankingMonth, upcomingBallparkRules } from './ballparkRules'
 import { DEFAULT_TOWN_VENUES, type BallparkSettings } from './models'
 
 afterEach(() => {
@@ -18,7 +18,7 @@ describe('ballpark ranking months', () => {
     expect(timeZones.map(monthsOnDeviceIn)).toEqual(timeZones.map(() => ['2026-10', '2026-11', '2026-12', '2027-01']))
   })
 
-  it('plays the rules in effect until the scheduled month, then the scheduled rules, across a year boundary', () => {
+  it('plays the rules in effect and announces the schedule until its month, then plays it, across a year boundary', () => {
     const ballpark: BallparkSettings = {
       ...DEFAULT_TOWN_VENUES.ballpark,
       rules: { pitchCount: 5, difficulty: 'normal' },
@@ -31,5 +31,6 @@ describe('ballpark ranking months', () => {
       ballpark.scheduledRules!.rules,
     ])
     expect(effectiveBallparkRules({ ...ballpark, scheduledRules: undefined }, '2027-01')).toEqual(ballpark.rules)
+    expect(months.map((month) => upcomingBallparkRules(ballpark, month))).toEqual([ballpark.scheduledRules, null, null])
   })
 })

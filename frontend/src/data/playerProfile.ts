@@ -117,6 +117,15 @@ export function genderDescriptionError(identity: GenderIdentity, description: st
   return null
 }
 
+/** Whether `profile` is still the placeholder every session starts with, so the visitor has not made a character. */
+export function isDefaultProfile(profile: PlayerProfile) {
+  const { colors, ...details } = profile
+  const { colors: defaultColors, ...defaultDetails } = DEFAULT_PLAYER_PROFILE
+  const matches = (values: Record<string, unknown>, expected: Record<string, unknown>) =>
+    Object.keys(expected).every((field) => values[field] === expected[field])
+  return matches(details, defaultDetails) && matches(colors, defaultColors)
+}
+
 export function isPlayerColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
 }

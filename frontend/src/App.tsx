@@ -12,10 +12,11 @@ import type { EditorView } from './editor/townEditing'
 import { isAdminPath, useAdminAccess } from './editor/useAdminAccess'
 import { useTownEditor } from './editor/useTownEditor'
 import { createVisitorSession, useDemoSession } from './hooks/useDemoSession'
+import { usePageLanguage } from './hooks/usePageLanguage'
 import { useReducedMotion } from './hooks/useReducedMotion'
 import { DEFAULT_PLAYER_PROFILE, normalizePlayerProfile, type PlayerProfile } from './data/playerProfile'
 import { answerOwnerQuestion, answerResidentQuestion, type ResidentQuestionId } from './data/residentDialogue'
-import { getPreferredLanguage, languageCopy } from './i18n/language'
+import { languageCopy } from './i18n/language'
 import type { DialogueMessage, Interaction, InteractionRequest } from './scene/playerInteraction'
 import { getDayPeriod, type DayPeriod } from './scene/environment/dayCycle'
 import { getSeason, type Season } from './scene/environment/season'
@@ -30,6 +31,7 @@ import { EnvironmentTuner, HelpPanel, Hud } from './ui/TownHud'
 import { VirtualStick } from './ui/TouchControls'
 import { TownLoadingScreen } from './ui/TownLoadingScreen'
 import { TownMapPanel } from './ui/TownMapPanel'
+import { isBaseballPath } from './baseball/baseballRoute'
 
 const TownScene = lazy(() => import('./scene/TownScene').then((module) => ({ default: module.TownScene })))
 const CharacterCreator = lazy(() =>
@@ -43,12 +45,25 @@ const TownEditorPanel = lazy(() =>
 const TownEditorScene = lazy(() =>
   import('./editor/TownEditorScene').then((module) => ({ default: module.TownEditorScene })),
 )
+const BaseballApp = lazy(() => import('./baseball/BaseballApp').then((module) => ({ default: module.BaseballApp })))
 
 const TOWN_ID = 'mossbell'
 
 type HudPanel = 'environment' | 'help' | 'map' | null
 
+/** Picks the page before the town's hooks run. Pages change by full page load, so nginx sends each its own headers. */
 export function App() {
+  if (isBaseballPath(window.location.pathname))
+    return (
+      <Suspense fallback={null}>
+        <BaseballApp townId={TOWN_ID} />
+      </Suspense>
+    )
+  return <TownApp />
+}
+
+/** The town at `/` and its editor at `/admin`. */
+export function TownApp() {
   const [repository] = useState(() => new InMemoryDemoRepository((townId) => fetchTownLayout(townId)))
   const { town, session, error, save, retry } = useDemoSession(repository, TOWN_ID)
   const [adminMode] = useState(() => isAdminPath(window.location.pathname))
@@ -60,7 +75,7 @@ export function App() {
   const [editorCategory, setEditorCategory] = useState<EditorCategory>('buildings')
   const [editorSelecting, setEditorSelecting] = useState(false)
   const editorFocusRef = useRef<Vec3 | null>(null)
-  const [language, setLanguage] = useState(getPreferredLanguage)
+  const [language, setLanguage] = usePageLanguage()
   const [sceneReady, setSceneReady] = useState(false)
   const [sceneProgress, setSceneProgress] = useState(0)
   const [loadingVisible, setLoadingVisible] = useState(true)
@@ -110,10 +125,6 @@ export function App() {
   }, [])
   const updateSceneProgress = useCallback((progress: number) => setSceneProgress(progress), [])
   const finishLoading = useCallback(() => setLoadingVisible(false), [])
-
-  useEffect(() => {
-    document.documentElement.lang = language
-  }, [language])
 
   useEffect(() => {
     if (dialogue?.voice !== 'resident') {

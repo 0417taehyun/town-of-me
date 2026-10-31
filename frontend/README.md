@@ -28,7 +28,8 @@ npm run build
   is optional and never limits a choice. The character and session stay in the browser tab (`sessionStorage`) and end
   when the tab closes.
 - **Contact:** when the owner has set a contact email, a button at the top of the town opens the visitor's mail app.
-- **Language:** Korean or English, following the browser and switchable at any time.
+- **Language:** Korean or English, following the browser and switchable at any time. The tab remembers the choice, so
+  the ballpark at `/baseball` and the town open in the same language.
 - **The town:** loaded from `GET /v1/towns/:id`. If the request fails, visitors see `Try again`; there is no built-in
   town. A short guide walks first-time visitors through moving, looking around, sitting, the pet, residents, and the
   guestbook.

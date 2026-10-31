@@ -37,6 +37,10 @@ import { SkyLight, SunLight } from './environment/SunLight'
 import { TownGuideMarker } from './TownGuideMarker'
 import { groupTownObjects } from './townObjectGroups'
 import type { TownLayerProps } from './objects/townObjectKind'
+import { installWorldCurve } from './worldCurve'
+
+// Before any town material compiles; the editor's scene renders inside this one, so `/admin` bends too.
+installWorldCurve()
 
 /** The sharpest pixel ratio the town renders at; slower devices drop to 1. */
 const SHARP_PIXEL_RATIO = 1.35

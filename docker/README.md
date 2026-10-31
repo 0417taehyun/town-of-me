@@ -16,6 +16,17 @@ responses are not cached. Configure the CDN to honor these origin headers, enabl
 fallback) for text assets, and pass `/v1/` through without caching. No CDN provider is required for
 local development.
 
+The home run derby at `/baseball` (and `/baseball/`) is the only document allowed to use the camera
+(`Permissions-Policy: camera=(self)`), so it alone gets a strict Content Security Policy: scripts (with
+WebAssembly) and connections from this origin only; images, media, and workers also from `blob:` URLs
+(images from `data:` too); styles from this origin and Pretendard's path on `cdn.jsdelivr.net`, fonts
+only from that path; no plugins or `<base>`; forms post only to this origin; and no page may frame it
+(`frame-ancestors 'none'`). It is also sent with `Cross-Origin-Opener-Policy: same-origin`, so a page
+that opens it gets no handle to it, and `Referrer-Policy: no-referrer`. Every other document, `/` and
+`/admin` included, is sent with `camera=()`. Browsers apply these headers only on a full page load, so
+the town and the ballpark link to each other with plain links. A CDN in front must pass them through
+unchanged.
+
 ```sh
 FRONTEND_PORT=8081 BACKEND_PORT=3001 docker compose up --build
 docker compose down

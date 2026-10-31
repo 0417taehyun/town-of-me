@@ -1,4 +1,4 @@
-import type { BallparkRules, BallparkSettings } from './models'
+import type { BallparkRules, BallparkSettings, ScheduledBallparkRules } from './models'
 
 // Mirrors rankingMonth and effectiveBallparkRules in backend/src/town.ts, which decides the rules in effect.
 
@@ -14,4 +14,10 @@ export function rankingMonth(date: Date) {
 export function effectiveBallparkRules(ballpark: BallparkSettings, month: string): BallparkRules {
   const scheduled = ballpark.scheduledRules
   return scheduled && scheduled.fromMonth <= month ? scheduled.rules : ballpark.rules
+}
+
+/** The scheduled change still ahead of `month`, if any; from its own month on, it is the rules in effect instead. */
+export function upcomingBallparkRules(ballpark: BallparkSettings, month: string): ScheduledBallparkRules | null {
+  const scheduled = ballpark.scheduledRules
+  return scheduled && scheduled.fromMonth > month ? scheduled : null
 }

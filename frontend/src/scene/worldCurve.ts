@@ -28,7 +28,14 @@ const curveVertex = /* glsl */ `
 #endif
 `
 
-ShaderChunk.logdepthbuf_vertex = curveVertex + ShaderChunk.logdepthbuf_vertex
+/**
+ * Bends everything drawn after this call. Only the town scene installs it: importing this module (for the helper
+ * below) leaves the shaders flat, so the ballpark's long outfield does not sink. Calling it again changes nothing.
+ */
+export function installWorldCurve() {
+  if (ShaderChunk.logdepthbuf_vertex.includes(curveVertex)) return
+  ShaderChunk.logdepthbuf_vertex = curveVertex + ShaderChunk.logdepthbuf_vertex
+}
 
 /** How far the curve above lowers a point at this squared horizontal distance from a perspective camera. */
 export function getWorldCurveDrop(horizontalDistanceSquared: number, cameraHeight: number) {

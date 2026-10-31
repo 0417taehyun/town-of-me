@@ -24,6 +24,8 @@ export interface CharacterCreatorProps {
   onApply: (profile: PlayerProfile) => Promise<void>
   onCancel: () => void
   onActivateAudio: () => void
+  /** Replaces "Enter town" or "Save character" where saving leads somewhere else, such as into a game. */
+  submitLabel?: string
 }
 
 export function CharacterCreator({
@@ -33,6 +35,7 @@ export function CharacterCreator({
   onApply,
   onCancel,
   onActivateAudio,
+  submitLabel,
 }: CharacterCreatorProps) {
   const dialog = useRef<HTMLDialogElement>(null)
   const nameInput = useRef<HTMLInputElement>(null)
@@ -124,7 +127,7 @@ export function CharacterCreator({
                 disabled={saving}
                 onPointerDown={(event) => event.button === 0 && onActivateAudio()}
               >
-                {saving ? copy.saving : firstEntry ? copy.enterTown : copy.save}
+                {saving ? copy.saving : (submitLabel ?? (firstEntry ? copy.enterTown : copy.save))}
               </button>
             </div>
           </section>

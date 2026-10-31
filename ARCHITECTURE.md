@@ -28,7 +28,7 @@ Nothing personal is in the repository. A fork changes its owner, pet, residents,
 | Venue settings: the ballpark's colors, pitch count, and difficulty, and next month's rules                                     | database (`towns.venues`)                                  | admins at `/admin`              |
 | Admin emails                                                                                                                   | database (`admin_emails`), filled from `ADMIN_EMAILS` once | admins at `/admin`              |
 | Guestbook notes                                                                                                                | database (`guestbook_entries`)                             | visitors write, admins approve  |
-| A visitor's character, camera settings, guide progress                                                                         | the browser tab (`sessionStorage`)                         | the visitor                     |
+| A visitor's character, camera settings, guide progress, language                                                               | the browser tab (`sessionStorage`)                         | the visitor                     |
 | Object kinds, variants, walks, skids, copy, procedural geometry                                                                | frontend code                                              | contributors                    |
 | The sample town a fresh database starts from                                                                                   | `backend/seed/town.json` (fictional), or `TOWN_SEED_PATH`  | contributors, or a private file |
 
@@ -41,20 +41,23 @@ skids, ballpark themes, and color roles need no backend change.
 
 | Path               | Owns                                                                                                |
 | ------------------ | --------------------------------------------------------------------------------------------------- |
-| `App.tsx`          | Composition root: creates adapters, routes `/` and `/admin`, connects UI and scene.                 |
-| `data/`            | Models, the untrusted API boundary (`townApi.ts`), API clients, the tab-session repository.         |
+| `App.tsx`          | Routes `/baseball` lazily; `TownApp` (`/`, `/admin`) creates adapters and connects UI and scene.    |
+| `data/`            | Models, the untrusted API boundary (`townApi.ts`), API clients, the tab's session and language.     |
 | `scene/`           | Everything drawn with Three.js (see below). Loaded as a lazy chunk.                                 |
 | `editor/`          | The admin editor: panels, gestures, history, admin list, guestbook review. Loaded only on `/admin`. |
 | `ui/`              | DOM overlays: entry, HUD, dialogue, guestbook, map, character creator.                              |
+| `baseball/`        | The home run derby at `/baseball`, a lazy chunk; only `baseballRoute.ts` is in the main chunk.      |
 | `camera/`          | Camera defaults and pure camera math.                                                               |
 | `audio/`           | Procedural music, voices, footsteps, skid squeal, and the bark sample.                              |
 | `i18n/language.ts` | All copy, in Korean and English.                                                                    |
-| `hooks/`           | Session, reduced motion, and retryable loading hooks.                                               |
+| `hooks/`           | Session, page language, reduced motion, and retryable loading hooks.                                |
 | `motionMath.ts`    | Shared damping and interpolation helpers; reuse them instead of redefining them.                    |
 | `testing/`         | The sample town as a test fixture. It never reaches the production bundle.                          |
 
-Dependencies point down: `App` → `ui`/`scene`/`editor`/`hooks` → `data`/`camera`/`audio`/`i18n`. Lower modules never
-import the app, and `camera`, `audio`, `data`, and `i18n` do not depend on React components.
+Dependencies point down: `App` → `ui`/`scene`/`editor`/`hooks`/`baseball` → `data`/`camera`/`audio`/`i18n`. Lower
+modules never import the app, and `camera`, `audio`, `data`, and `i18n` do not depend on React components. `baseball/`
+never imports `editor/`, `TownScene.tsx`, or a `scene/` module that reaches the kinds registry, so the ballpark loads
+none of the town.
 
 - `townApi.ts` is the untrusted boundary: payloads are parsed into a `TownSnapshot`, and renderers never see transport
   shapes. `DemoRepository` is the data port for the visitor's session; `InMemoryDemoRepository` keeps it in
@@ -101,8 +104,9 @@ copies of the variant lists, so adding a variant never changes how existing obje
   per object when the town can hold dozens of them.
 - The main chunk (`index-*.js`) must not import the kinds registry, layers, or editor code: `data/` reads only
   `scene/objects/variants.ts`, and the editor loads lazily. Compare `npm run build` chunk sizes before and after a change.
-- `scene/worldCurve.ts` bends every material's vertices in a shared shader chunk. Back-side materials (sky, sun, stars)
-  skip it, and a large flat mesh needs enough subdivisions to bend smoothly.
+- `scene/worldCurve.ts` bends every material's vertices in a shared shader chunk once `TownScene.tsx` calls
+  `installWorldCurve()`; importing the module alone does not, so the ballpark stays flat. Back-side materials (sky, sun,
+  stars) skip it, and a large flat mesh needs enough subdivisions to bend smoothly.
 - The pixel ratio adapts to the frame rate (`PerformanceMonitor` in `TownScene.tsx`).
 
 ## Backend (`backend/src`)

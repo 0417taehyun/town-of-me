@@ -574,6 +574,26 @@ export const languageCopy = {
       evening: 'Evening',
     },
     seasons: { spring: 'Spring', summer: 'Summer', autumn: 'Autumn', winter: 'Winter' },
+    baseball: {
+      documentTitle: 'Home Run Derby · Town of Me',
+      title: 'Home Run Derby',
+      loading: 'Opening the ballpark…',
+      loadError: 'We could not open the ballpark.',
+      backToTown: 'Back to town',
+      play: 'Play',
+      rulesTitle: 'Rules',
+      comingSoon: 'The pitcher is still warming up. The game opens here soon.',
+    },
+    // A venue's own labels, shared by its page and the admin editor.
+    venues: {
+      ballpark: {
+        themes: { garden: 'Garden ballpark' },
+        difficulties: { easy: 'Easy', normal: 'Normal', hard: 'Hard' },
+        rulesThisMonth: (pitchCount: number, difficulty: string) => `This month: ${pitchCount} pitches · ${difficulty}`,
+        rulesFrom: (month: string, pitchCount: number, difficulty: string) =>
+          `From ${month}: ${pitchCount} pitches · ${difficulty}`,
+      },
+    },
   },
   ko: {
     languageLabel: '선호 언어',
@@ -1142,6 +1162,25 @@ export const languageCopy = {
       evening: '저녁',
     },
     seasons: { spring: '봄', summer: '여름', autumn: '가을', winter: '겨울' },
+    baseball: {
+      documentTitle: '홈런 더비 · Town of Me',
+      title: '홈런 더비',
+      loading: '야구장을 여는 중…',
+      loadError: '야구장을 열지 못했습니다.',
+      backToTown: '마을로 돌아가기',
+      play: '플레이',
+      rulesTitle: '경기 규칙',
+      comingSoon: '투수가 아직 몸을 푸는 중이에요. 곧 여기서 경기를 할 수 있어요.',
+    },
+    venues: {
+      ballpark: {
+        themes: { garden: '정원 야구장' },
+        difficulties: { easy: '쉬움', normal: '보통', hard: '어려움' },
+        rulesThisMonth: (pitchCount: number, difficulty: string) => `이번 달: ${pitchCount}구 · ${difficulty}`,
+        rulesFrom: (month: string, pitchCount: number, difficulty: string) =>
+          `${month}부터: ${pitchCount}구 · ${difficulty}`,
+      },
+    },
   },
 } as const
 
@@ -1153,6 +1192,14 @@ export function withKoreanParticle(word: string, afterConsonant: string, afterVo
   const syllable = word.charCodeAt(word.length - 1) - 0xac00
   if (!(syllable >= 0 && syllable < 11172)) return `${word}${afterConsonant}(${afterVowel})`
   return `${word}${syllable % 28 ? afterConsonant : afterVowel}`
+}
+
+/** A `YYYY-MM` month's name, with its year only when that is not `currentMonth`'s: "December", "2027년 1월". */
+export function monthName(month: string, currentMonth: string, language: AppLanguage) {
+  const year = month.slice(0, 4) === currentMonth.slice(0, 4) ? undefined : 'numeric'
+  // Read as UTC, so the device's time zone never shifts the first of the month into the month before.
+  const firstDay = new Date(`${month}-01T00:00:00Z`)
+  return new Intl.DateTimeFormat(language, { year, month: 'long', timeZone: 'UTC' }).format(firstDay)
 }
 
 export function getPreferredLanguage(languages: readonly string[] = navigator.languages): AppLanguage {
