@@ -109,6 +109,17 @@ copies of the variant lists, so adding a variant never changes how existing obje
   stars) skip it, and a large flat mesh needs enough subdivisions to bend smoothly.
 - The pixel ratio adapts to the frame rate (`PerformanceMonitor` in `TownScene.tsx`).
 
+### `baseball/game/`
+
+The derby's core is plain TypeScript, without React, Three.js, or the DOM. A swing's landing is decided first,
+without randomness, from its timing, power, and bat height; `flight.ts` only draws a path that ends there. The seeded generator (mulberry32) plans the pitches and nothing else. The scoring files use arithmetic,
+comparisons, and `Math.sqrt` only, and import nothing at runtime from outside `baseball/game/` and
+`baseball/statistics.ts`, so a server can mirror them and score a run the same way. `flight.ts` is display only and
+not one of them. `derbyScore.ts` is that seam: `replayDerby` scores a run from its `RunPlan` (seed and the month's
+rules) and its raw `DerbyInputLog`, recalibrating from the practice swings in it; each swing records whether a camera
+or a key made it, and a key swing is judged at a fixed power. `derby.ts` plays a run on `gameClock.ts` time with the
+same functions, so the numbers shown live are the replayed ones.
+
 ## Backend (`backend/src`)
 
 ```text
