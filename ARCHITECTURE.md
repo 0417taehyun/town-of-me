@@ -48,9 +48,9 @@ skids, ballpark themes, and color roles need no backend change.
 | `ui/`              | DOM overlays: entry, HUD, dialogue, guestbook, map, character creator.                              |
 | `baseball/`        | The home run derby at `/baseball`, a lazy chunk; only `baseballRoute.ts` is in the main chunk.      |
 | `camera/`          | Camera defaults and pure camera math.                                                               |
-| `audio/`           | Procedural music, voices, footsteps, skid squeal, and the bark sample.                              |
+| `audio/`           | Procedural music, voices, footsteps, skid squeal, derby sounds, and the bark sample.                |
 | `i18n/language.ts` | All copy, in Korean and English.                                                                    |
-| `hooks/`           | Session, page language, reduced motion, and retryable loading hooks.                                |
+| `hooks/`           | Session, page language, local time and season, reduced motion, and retryable loading hooks.         |
 | `motionMath.ts`    | Shared damping and interpolation helpers; reuse them instead of redefining them.                    |
 | `testing/`         | The sample town as a test fixture. It never reaches the production bundle.                          |
 
@@ -77,6 +77,7 @@ none of the town.
 | `characters/`  | The procedural character (player and residents) and its merged head geometry.                                                                                                                                                                            |
 | `animals/`     | The pet corgi: model, trot, and petting responses.                                                                                                                                                                                                       |
 | `environment/` | Time of day, seasons and their transitions, sun, sky, night lights, weather particles, ground, distant land.                                                                                                                                             |
+| `venues/`      | The large venues' colors: theme palettes as data with the admin's building colors over them (`ballpark/ballparkThemes.ts`), one shared material per color role, recolored in place (`venueMaterials.ts`).                                                |
 
 ### Object kinds
 
@@ -107,7 +108,8 @@ copies of the variant lists, so adding a variant never changes how existing obje
 - `scene/worldCurve.ts` bends every material's vertices in a shared shader chunk once `TownScene.tsx` calls
   `installWorldCurve()`; importing the module alone does not, so the ballpark stays flat. Back-side materials (sky, sun,
   stars) skip it, and a large flat mesh needs enough subdivisions to bend smoothly.
-- The pixel ratio adapts to the frame rate (`PerformanceMonitor` in `TownScene.tsx`).
+- The pixel ratio adapts to the frame rate in every `GraphicsCanvas` given no fixed `dpr` (the town and the derby).
+  A canvas whose WebGL 2 is missing, lost, or fails while drawing shows the fallback and calls `onUnavailable`.
 
 ### `baseball/game/`
 
@@ -119,6 +121,28 @@ not one of them. `derbyScore.ts` is that seam: `replayDerby` scores a run from i
 rules) and its raw `DerbyInputLog`, recalibrating from the practice swings in it; each swing records whether a camera
 or a key made it, and a key swing is judged at a fixed power. `derby.ts` plays a run on `gameClock.ts` time with the
 same functions, so the numbers shown live are the replayed ones.
+
+### `baseball/stage/` and `baseball/stadium/`
+
+The stage draws a run on its own flat canvas: `BaseballStage.tsx` never installs the world curve. `DerbyDirector.tsx`
+plays the run in one `useFrame`: `stageRun.ts` keeps the derby, its game clock, the ball, and the camera's choice in a
+ref and reports only events to React. A pitch waits at the back of the batter's reach while a swing could still touch
+it, so the mitt never catches a ball the bat then hits. A ball in play leaves the bat where the bat met it and flies to
+the landing the judge already decided, fast enough to come down before its result ends; the stage changes the clock's
+pace (hit-stop, slow motion at a showcase home run's peak, a pause while the page is hidden) but never an outcome. `cameraShots.ts` frames the batting shot between the HUD's bands at any aspect. The stadium's lawn and
+hedge take the visitor's season like the town's (`scene/environment`), the sky and light the time of day, and its
+dugouts and foul poles the ballpark palette; none of this reaches the score. The players are town characters standing
+in place until the ballplayer rigs replace them.
+
+### The `/baseball` page
+
+`BaseballApp.tsx` checks the device first (`deviceGate.ts`: a phone or tablet, then WebGL 2) and shows why one cannot
+play in the visitor's language (also when the stadium's graphics fail later), then the character, then the derby. Each
+run reads the KST month it starts in and gets a `crypto` seed (`keyboardRun.ts`), so a page left open into a new month
+plays the rules scheduled for it, as loaded with the page, from its next run. The HUD (`ui/`) keeps only what the
+stage's events tell it (`derbyCues.ts`): a release carries nothing it shows, so the pitch type reaches the screen only
+in a result, and the result banner waits until the ball is down so it never covers the play. The result screen draws the `DerbyResult` that
+`replayDerby` returns with the `finished` event.
 
 ## Backend (`backend/src`)
 

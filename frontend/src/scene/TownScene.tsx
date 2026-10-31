@@ -1,4 +1,4 @@
-import { KeyboardControls, PerformanceMonitor, useProgress } from '@react-three/drei'
+import { KeyboardControls, useProgress } from '@react-three/drei'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { NeutralToneMapping, Vector3 } from 'three'
 import type { MutableRefObject, ReactNode } from 'react'
@@ -41,9 +41,6 @@ import { installWorldCurve } from './worldCurve'
 
 // Before any town material compiles; the editor's scene renders inside this one, so `/admin` bends too.
 installWorldCurve()
-
-/** The sharpest pixel ratio the town renders at; slower devices drop to 1. */
-const SHARP_PIXEL_RATIO = 1.35
 
 type Props = {
   profile: PlayerProfile
@@ -149,7 +146,6 @@ export function TownScene({
   const dayChange = useDayChange(period, reducedMotion)
   const lampsOn = useLampsOn(dayPeriods[period].lamps, reducedMotion)
   const seasonChange = useSeasonChange(season, reducedMotion)
-  const [maxPixelRatio, setMaxPixelRatio] = useState(SHARP_PIXEL_RATIO)
   const dialogueFocus = useRef<Vector3 | null>(null)
   const roads = useMemo(() => getTownRoads(groups.roads), [groups.roads])
   const plaza = useMemo(() => getTownPlaza(town.objects), [town.objects])
@@ -195,19 +191,11 @@ export function TownScene({
     <KeyboardControls map={controlsEnabled ? keyboardMap : []}>
       <GraphicsCanvas
         shadows="percentage"
-        dpr={[1, maxPixelRatio]}
         camera={{ fov: settings.fov, near: 0.1, far: 300 }}
         gl={{ antialias: true, alpha: false, powerPreference: 'high-performance', toneMapping: NeutralToneMapping }}
         aria-label={`Interactive 3D view of ${town.name}`}
         onUnavailable={onReady}
       >
-        {/* Renders at a lower pixel ratio on devices that cannot hold the frame rate, and back up when they can. */}
-        <PerformanceMonitor
-          flipflops={3}
-          onDecline={() => setMaxPixelRatio(1)}
-          onIncline={() => setMaxPixelRatio(SHARP_PIXEL_RATIO)}
-          onFallback={() => setMaxPixelRatio(1)}
-        />
         <SceneProgress onProgress={onLoadProgress} />
         <color attach="background" args={[openingLight.sky]} />
         <fog attach="fog" args={[openingLight.fog, 68, 145]} />

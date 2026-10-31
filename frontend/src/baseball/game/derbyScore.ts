@@ -107,13 +107,15 @@ export function toJudgedSwing(
 }
 
 export function summarizeDerby(plan: RunPlan, input: DerbyInput, pitches: PitchResult[]): DerbyResult {
+  return { plan, input, pitches, ...homeRunTotals(pitches) }
+}
+
+/** The home runs among `pitches`, their summed distance, and the longest: what ranks a run, and what the HUD shows. */
+export function homeRunTotals(pitches: readonly PitchResult[]) {
   const homeRunDistances = pitches
     .filter((pitch) => pitch.outcome === 'homeRun')
     .map((pitch) => pitch.distanceDecimetres)
   return {
-    plan,
-    input,
-    pitches,
     homeRuns: homeRunDistances.length,
     homeRunDistanceDecimetres: homeRunDistances.reduce((total, distance) => total + distance, 0),
     longestHomeRunDecimetres: Math.max(0, ...homeRunDistances),

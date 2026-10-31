@@ -1,20 +1,27 @@
 /* The home run derby page, loaded with its lazy chunk. The shared buttons, loader, and language select are in styles.css. */
 
-.baseball-app {
+.baseball-app,
+.derby-screen {
   position: fixed;
   inset: 0;
-  display: grid;
-  grid-template-rows: auto 1fr;
-  overflow: auto;
   color: var(--ink);
-  background:
-    radial-gradient(circle at 50% 30%, rgba(255, 250, 239, 0.72), transparent 42%),
-    linear-gradient(180deg, #b9ddd8 0%, #dce5bd 58%, #abc77f 100%);
   /* Korean breaks between words, never inside one; numbers keep their width as they change. */
   word-break: keep-all;
   font-variant-numeric: tabular-nums;
 }
-html[lang='ko'] .baseball-app {
+.baseball-app {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: auto;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255, 250, 239, 0.72), transparent 42%),
+    linear-gradient(180deg, #b9ddd8 0%, #dce5bd 58%, #abc77f 100%);
+}
+.derby-screen {
+  overflow: hidden;
+  background: #b9ddd8;
+}
+html[lang='ko'] :is(.baseball-app, .derby-screen) {
   font-family:
     'Pretendard Variable',
     Pretendard,
@@ -23,7 +30,7 @@ html[lang='ko'] .baseball-app {
     'Apple SD Gothic Neo',
     sans-serif;
 }
-html[lang='ko'] .baseball-app :is(h1, h2) {
+html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   font-family: inherit;
   font-weight: 800;
   letter-spacing: -0.025em;
@@ -88,4 +95,205 @@ html[lang='ko'] .baseball-app :is(h1, h2) {
   margin: 22px 0 0;
   color: var(--muted);
   line-height: 1.55;
+}
+
+/* Why a device cannot play: a stack of the reason, the copy button, the address, and what the copy did. */
+.derby-blocked {
+  display: grid;
+  gap: 14px;
+}
+.derby-blocked h1 {
+  margin: 0;
+}
+.derby-blocked p {
+  margin: 0 0 8px;
+  line-height: 1.55;
+}
+.derby-blocked .graphics-settings-address {
+  width: 100%;
+}
+.derby-blocked small {
+  min-height: 1.3em;
+  color: var(--muted);
+}
+.derby-blocked .text-button {
+  justify-self: start;
+  padding: 0 12px;
+  font-size: 0.85rem;
+}
+
+/* The derby's screens over the stadium: the rules before a run, the result after it, and the links in the corner. */
+.derby-screen .baseball-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  margin: 0;
+  transform: translate(-50%, -50%);
+}
+.derby-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 26px;
+}
+.derby-actions .primary-button {
+  min-width: 168px;
+}
+.derby-links {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  justify-content: flex-start;
+  padding: 0 3vw 2vh;
+}
+.derby-links .language-select {
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.derby-result-stats {
+  display: grid;
+  /* Each column as wide as its figure, so a total to the decimeter never runs into the next. */
+  grid-template-columns: repeat(3, auto);
+  justify-content: start;
+  gap: 20px 28px;
+  margin: 24px 0 0;
+}
+.derby-result-stats div {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+}
+.derby-result-stats dt {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.derby-result-stats dd {
+  margin: 0;
+  font-size: clamp(1.4rem, 4vh, 2.2rem);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/*
+ * The HUD during a run, read from a step back: sizes follow the screen's height, so a laptop at 2 m sees the same
+ * angle whatever its size (labels 3vh, figures 7vh, captions up to 8vh, a result's distance 16vh). The top 15% and
+ * bottom 8% are HUD_RESERVE in stage/cameraShots.ts, the bands the batting shot leaves free. These sizes are below the
+ * design's 2 m targets (text 6vh, cues 9vh, key numbers 14-18vh), which those bands cannot hold without shrinking the
+ * play; the UI/UX pass revisits the layout. The result banner sits over the play, so it shows only once the ball is
+ * down (derbyCues.ts bannerResult).
+ */
+.derby-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.derby-scoreboard {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 15vh;
+  padding: 0 3vw;
+}
+.derby-stat-group {
+  display: flex;
+  gap: 1.5vw;
+}
+.derby-stat,
+.derby-caption,
+.derby-banner {
+  margin: 0;
+  border-radius: 2.4vh;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.derby-stat {
+  display: grid;
+  justify-items: center;
+  min-width: 14vh;
+  padding: 1vh 2vh;
+  line-height: 1;
+}
+.derby-stat span {
+  color: var(--muted);
+  font-size: clamp(14px, 3vh, 40px);
+  font-weight: 700;
+}
+.derby-stat strong {
+  font-size: clamp(28px, 7vh, 96px);
+  font-weight: 800;
+  white-space: nowrap;
+}
+.derby-caption {
+  position: absolute;
+  top: 2vh;
+  left: 50%;
+  padding: 1.2vh 3vh;
+  transform: translateX(-50%);
+  /* Narrower screens (4:3) shrink it to stay between the scoreboard's ends. */
+  font-size: clamp(28px, min(8vh, 4.2vw), 120px);
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+.derby-banner {
+  position: absolute;
+  bottom: 12vh;
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 1vh;
+  padding: 2vh 4vh;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.derby-banner strong {
+  font-size: clamp(64px, 16vh, 240px);
+  font-weight: 800;
+  line-height: 1;
+}
+.derby-banner.homeRun strong {
+  color: var(--coral);
+}
+.derby-banner span {
+  font-size: clamp(28px, 6vh, 96px);
+  font-weight: 700;
+  line-height: 1.1;
+}
+.derby-swing {
+  position: absolute;
+  right: 3vw;
+  bottom: 1vh;
+  display: inline-flex;
+  align-items: center;
+  gap: 1.2vh;
+  height: 6vh;
+  min-height: 44px;
+  padding: 0 3vh;
+  border: 0;
+  border-radius: 999px;
+  color: #fffef9;
+  background: var(--leaf);
+  box-shadow: var(--shadow);
+  font-size: clamp(16px, 2.8vh, 40px);
+  font-weight: 800;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+.derby-swing:active {
+  background: var(--leaf-dark);
+}
+.derby-swing kbd {
+  padding: 0.15em 0.5em;
+  border-radius: 0.4em;
+  background: rgba(255, 255, 255, 0.2);
+  font: inherit;
+  font-size: 0.7em;
 }

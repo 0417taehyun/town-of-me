@@ -143,9 +143,13 @@ export function phaseEndMs(derby: Derby) {
  * plus the margin for a camera swing reported after it happened.
  */
 export function swingDeadlineMs(derby: Derby) {
-  const pitch = planRunPitch(derby.plan, derby.pitchIndex)
+  return latestContactMs(derby, planRunPitch(derby.plan, derby.pitchIndex)) + LATE_SWING_MARGIN_MS
+}
+
+/** How long after its release (ms) a swing can still touch `pitch`, under this run's rules and calibration. */
+export function latestContactMs(derby: Derby, pitch: PitchPlan) {
   const contactWindowMs = DIFFICULTY_RULES[derby.plan.rules.difficulty].timingWindows.contact
-  return contactSeconds(pitch) * 1000 + Math.max(0, derby.calibration.offsetMs) + contactWindowMs + LATE_SWING_MARGIN_MS
+  return contactSeconds(pitch) * 1000 + Math.max(0, derby.calibration.offsetMs) + contactWindowMs
 }
 
 export function startWindup(derby: Derby, atMs: number): DerbyUpdate {

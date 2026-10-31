@@ -1,0 +1,53 @@
+import { CanvasTexture, RepeatWrapping, SRGBColorSpace } from 'three'
+import { seededFraction } from '../../motionMath'
+
+// The field's textures are drawn in light greys, so the season's color on the material tints them like the town's
+// grass and hedges (scene/environment/season.ts). Seeded, so the park looks the same on every visit.
+
+export function createCanvasTexture(size: number, draw: (context: CanvasRenderingContext2D, size: number) => void) {
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const context = canvas.getContext('2d')
+  if (context) draw(context, size)
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  texture.wrapS = RepeatWrapping
+  texture.wrapT = RepeatWrapping
+  texture.anisotropy = 4
+  return texture
+}
+
+/** Two mowing stripes, light and dark, flecked with light and shadow. */
+export function drawLawn(context: CanvasRenderingContext2D, size: number) {
+  context.fillStyle = '#ffffff'
+  context.fillRect(0, 0, size, size)
+  context.fillStyle = '#e4e8de'
+  context.fillRect(0, 0, size / 2, size)
+  Array.from({ length: 900 }, (_, index) => index).forEach((index) => {
+    context.fillStyle = seededFraction(index, 1) > 0.5 ? 'rgba(255, 255, 250, 0.35)' : 'rgba(40, 60, 40, 0.07)'
+    context.fillRect(seededFraction(index, 2) * size, seededFraction(index, 3) * size, 2, 3)
+  })
+}
+
+/** A trimmed hedge's leaves: overlapping ellipses in a few greys. */
+export function drawLeaves(context: CanvasRenderingContext2D, size: number) {
+  context.fillStyle = '#e2e5de'
+  context.fillRect(0, 0, size, size)
+  const shades = ['#c4c8c0', '#d4d7cf', '#e2e5de', '#eff1ec', '#ffffff']
+  Array.from({ length: 1500 }, (_, index) => index).forEach((index) => {
+    const length = seededFraction(index, 7)
+    context.fillStyle = shades[Math.floor(seededFraction(index, 4) * shades.length)]
+    context.beginPath()
+    context.ellipse(
+      seededFraction(index, 5) * size,
+      seededFraction(index, 6) * size,
+      5 + length * 4,
+      2.6 + length * 2,
+      seededFraction(index, 8) * Math.PI,
+      0,
+      Math.PI * 2,
+    )
+    context.fill()
+  })
+}

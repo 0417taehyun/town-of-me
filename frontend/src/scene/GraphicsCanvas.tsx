@@ -1,6 +1,10 @@
+import { PerformanceMonitor } from '@react-three/drei'
 import { Canvas, type CanvasProps } from '@react-three/fiber'
 import { Component, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { CHROME_GRAPHICS_SETTINGS, copyGraphicsSettingsAddress, supportsWebGL } from './webglSupport'
+
+/** The sharpest pixel ratio a scene renders at; devices that cannot hold the frame rate drop to 1. */
+const SHARP_PIXEL_RATIO = 1.35
 
 export function GraphicsFallback({ preview = false }: { preview?: boolean }) {
   const [settingsStatus, setSettingsStatus] = useState('')
@@ -32,10 +36,16 @@ export function GraphicsFallback({ preview = false }: { preview?: boolean }) {
   )
 }
 
-class GraphicsBoundary extends Component<{ children: ReactNode; preview: boolean }, { failed: boolean }> {
+class GraphicsBoundary extends Component<
+  { children: ReactNode; preview: boolean; onFailed: () => void },
+  { failed: boolean }
+> {
   state = { failed: false }
   static getDerivedStateFromError() {
     return { failed: true }
+  }
+  componentDidCatch() {
+    this.props.onFailed()
   }
   render() {
     if (this.state.failed) return <GraphicsFallback preview={this.props.preview} />
@@ -43,15 +53,23 @@ class GraphicsBoundary extends Component<{ children: ReactNode; preview: boolean
   }
 }
 
+/**
+ * A 3D canvas that shows the graphics fallback when WebGL 2 is missing, lost, or fails while drawing, and then calls
+ * `onUnavailable`. Without a fixed `dpr`, it renders up to SHARP_PIXEL_RATIO and drops to 1 while the device cannot
+ * hold the frame rate.
+ */
 export function GraphicsCanvas({
   preview = false,
   onCreated,
   onUnavailable,
+  dpr,
+  children,
   ...props
 }: CanvasProps & { preview?: boolean; onUnavailable?: () => void }) {
   const [supported, setSupported] = useState(() =>
     supportsWebGL(() => document.createElement('canvas').getContext('webgl2')),
   )
+  const [sharpest, setSharpest] = useState(SHARP_PIXEL_RATIO)
   const canvas = useRef<HTMLCanvasElement | null>(null)
   const contextLost = useCallback((event: Event) => {
     event.preventDefault()
@@ -64,16 +82,27 @@ export function GraphicsCanvas({
   }, [onUnavailable, supported])
   if (!supported) return <GraphicsFallback preview={preview} />
   return (
-    <GraphicsBoundary preview={preview}>
+    <GraphicsBoundary preview={preview} onFailed={() => setSupported(false)}>
       <Canvas
         {...props}
+        dpr={dpr ?? [1, sharpest]}
         fallback={<GraphicsFallback preview={preview} />}
         onCreated={(state) => {
           canvas.current = state.gl.domElement
           canvas.current.addEventListener('webglcontextlost', contextLost)
           onCreated?.(state)
         }}
-      />
+      >
+        {!dpr && (
+          <PerformanceMonitor
+            flipflops={3}
+            onDecline={() => setSharpest(1)}
+            onIncline={() => setSharpest(SHARP_PIXEL_RATIO)}
+            onFallback={() => setSharpest(1)}
+          />
+        )}
+        {children}
+      </Canvas>
     </GraphicsBoundary>
   )
 }

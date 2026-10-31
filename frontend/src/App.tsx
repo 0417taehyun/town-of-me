@@ -13,13 +13,14 @@ import { isAdminPath, useAdminAccess } from './editor/useAdminAccess'
 import { useTownEditor } from './editor/useTownEditor'
 import { createVisitorSession, useDemoSession } from './hooks/useDemoSession'
 import { usePageLanguage } from './hooks/usePageLanguage'
+import { useLocalEnvironment } from './hooks/useLocalEnvironment'
 import { useReducedMotion } from './hooks/useReducedMotion'
 import { DEFAULT_PLAYER_PROFILE, normalizePlayerProfile, type PlayerProfile } from './data/playerProfile'
 import { answerOwnerQuestion, answerResidentQuestion, type ResidentQuestionId } from './data/residentDialogue'
 import { languageCopy } from './i18n/language'
 import type { DialogueMessage, Interaction, InteractionRequest } from './scene/playerInteraction'
-import { getDayPeriod, type DayPeriod } from './scene/environment/dayCycle'
-import { getSeason, type Season } from './scene/environment/season'
+import type { DayPeriod } from './scene/environment/dayCycle'
+import type { Season } from './scene/environment/season'
 import { nextTownGuideStep, type TownGuideEvent } from './data/townGuide'
 import { getGroundSurface, getTownPlaza } from './scene/environment/groundSurface'
 import { getTownRoads } from './scene/objects/roads/roadLayout'
@@ -105,12 +106,11 @@ export function TownApp() {
   const toastTimer = useRef<number | undefined>(undefined)
   const ownerReferenceReady = useRef(false)
   const reducedMotion = useReducedMotion()
-  const [localPeriod, setLocalPeriod] = useState(() => getDayPeriod(new Date()))
-  const [localSeason, setLocalSeason] = useState(() => getSeason(new Date()))
+  const local = useLocalEnvironment()
   const [periodPreview, setPeriodPreview] = useState<DayPeriod | 'local'>('local')
   const [seasonPreview, setSeasonPreview] = useState<Season | 'local'>('local')
-  const period = periodPreview === 'local' ? localPeriod : periodPreview
-  const season = seasonPreview === 'local' ? localSeason : seasonPreview
+  const period = periodPreview === 'local' ? local.period : periodPreview
+  const season = seasonPreview === 'local' ? local.season : seasonPreview
   const previewingEnvironment = periodPreview !== 'local' || seasonPreview !== 'local'
   const bgm = useCozyBgm(period)
   const speakDialogue = bgm.speak
@@ -134,20 +134,6 @@ export function TownApp() {
     void speakDialogue(dialogue.text, dialogue.speaker)
     return stopSpeaking
   }, [dialogue, speakDialogue, stopSpeaking])
-
-  useEffect(() => {
-    const update = () => {
-      const currentDate = new Date()
-      setLocalPeriod(getDayPeriod(currentDate))
-      setLocalSeason(getSeason(currentDate))
-    }
-    const timer = window.setInterval(update, 30000)
-    document.addEventListener('visibilitychange', update)
-    return () => {
-      window.clearInterval(timer)
-      document.removeEventListener('visibilitychange', update)
-    }
-  }, [])
 
   useEffect(() => {
     if (!session || initialized.current) return

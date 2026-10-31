@@ -47,6 +47,14 @@ npm run build
 - **Time and seasons:** lighting, sky, lamps, music, birds, and clouds follow local time; the season follows the
   Northern Hemisphere month. The sun button previews any time and season. Changes play out in order: leaves fall
   before snow settles, and snow melts before leaves return.
+- **Home-run derby:** `/baseball` is a home-run derby in a garden ballpark, batting as your town character. Each run
+  plays the pitch count (3–10) and difficulty the admin set for the current month in Korean time; a change takes effect
+  from the next month, and a run started after midnight on the first plays the rules scheduled for it. A ball in play
+  is a home run, a hit, or a foul; a pitch you let go is a strike and one you swing through a miss, and there are no
+  outs. The result banner names the pitch type only after the pitch. The result shows the home runs, their total
+  distance, and the longest. Its sky, light, lawn, and snow follow local time
+  and season like the town's, without changing the score. Phones, tablets, and browsers without WebGL 2 see why they
+  cannot play, with an address to copy.
 
 ## Controls
 
@@ -66,6 +74,8 @@ npm run build
 | Field of view               | Mouse wheel                                      |
 | Debug view                  | `H`                                              |
 | Respawn and recenter camera | `R`                                              |
+| Swing (home-run derby)      | `Space` / `Enter` or the on-screen `Swing`       |
+| Leave the derby             | `Esc` or `Back to town`                          |
 
 The camera button tunes the follow camera live, and `?` reopens help. Turning off `Ambient motion` in help freezes
 clouds, birds, and water; the system's reduced-motion setting slows them instead.
