@@ -1,8 +1,17 @@
 import { CapsuleGeometry, Group, MathUtils, Quaternion, SphereGeometry, Vector3 } from 'three'
 import { clamp } from '../../../motionMath'
-import { addPart, ARM_BONES, type BallplayerRig, basis, reachArm, shoulderPoint } from './ballplayerRig'
+import {
+  addPart,
+  ARM_BONES,
+  ARM_RADII,
+  type BallplayerRig,
+  basis,
+  FOREARM_RADIUS,
+  reachArm,
+  shoulderPoint,
+} from './ballplayerRig'
 import { batPenetration } from './bat'
-import { type BodyVolume, deepestPenetration } from './bodyVolumes'
+import { type BodyVolume, deepestPenetration, segmentDistance } from './bodyVolumes'
 import { solveTwoBone } from './twoBoneIk'
 
 // Animal Crossing mittens: the forearm runs, as thick as it is, into a soft round hand with the bat's handle through its
@@ -16,22 +25,27 @@ import { solveTwoBone } from './twoBoneIk'
 
 /**
  * Half-width across the bat, half-thickness palm to back, and half-length along the forearm; `center` shifts the
- * capsule toward the wrist so the handle runs through the palm; `wrist` buries the forearm's end behind the handle;
- * `gap` spaces the two mittens along the bat so they touch; `ulnar` and `radial` cap the tip toward square-on (degrees,
- * inside the wrist's 40° and 25°).
+ * capsule toward the wrist so the handle runs through the palm; `wrist` buries the forearm's end behind the handle (and
+ * sets the pitcher's and the catcher's bare mittens as far up their forearms, gloves.ts alignHand); `gap` spaces the
+ * two mittens along the bat so they touch; `ulnar` and `radial` cap the tip toward square-on (degrees, inside the
+ * wrist's 40° and 25°).
  */
 export const MITTEN = {
   wide: 0.078,
   thick: 0.065,
   long: 0.095,
   center: -0.025,
-  wrist: 0.06,
+  wrist: 0.07,
   gap: 0.16,
   ulnar: 38,
   radial: 23,
 }
-/** How far an elbow may swivel off its keyed pole (degrees), and how much leaving the pole costs. */
-export const SWIVEL = { limit: 70, weight: 0.5, step: 5, steps: 6 }
+/**
+ * How far an elbow may swivel off its keyed pole (degrees), how much leaving the pole costs, the search's steps, the
+ * depth (rig units) a collision costs as much as straying `change` degrees from the last swivel, and the room (rig
+ * units) the search keeps round the arm, so it stays clear between the moments it is solved at.
+ */
+export const SWIVEL = { limit: 70, weight: 0.5, step: 5, steps: 6, depth: 0.008, change: 15, room: 0.005 }
 
 const { DEG2RAD } = MathUtils
 const ACROSS = new Vector3(0, 1, 0)
@@ -110,7 +124,8 @@ export function settleRound(
 
 /**
  * Settles a mitten on the handle at `center` for an arm from `shoulder` whose elbow swivels `swivel` degrees off
- * `pole` about the shoulder-to-wrist line, into `out`.
+ * `pole` about the shoulder-to-wrist line, into `out`. It ends on the arm reaching its wrist point, so its elbow is the
+ * one placeMitten poses and the elbow search clears the arm the batter shows.
  */
 export function settleMitten(
   out: SettledMitten,
@@ -121,37 +136,66 @@ export function settleMitten(
   swivel: number,
 ) {
   out.forearm.copy(center).sub(shoulder).normalize()
-  for (let round = 0; round < 3; round++) settleRound(out, shoulder, center, axis, pole, swivel)
-  mittenAxis(out.long, out.forearm, axis)
-  out.wrist.copy(center).addScaledVector(out.long, -MITTEN.wrist)
+  for (let round = 0; round < 4; round++) settleRound(out, shoulder, center, axis, pole, swivel)
   return out
 }
 
 const armPoint = new Vector3()
 
 /**
- * How far an arm from `shoulder` through `arm`'s elbow and wrist reaches into the bat and the body (rig units), summed
- * over points along its forearm and upper arm.
+ * Points along the forearm from the elbow (0) toward the wrist (1) that must stay off the bat; the rest runs into the
+ * mitten round the handle.
+ */
+export const FOREARM_FREE_SPAN = [0, 0.2, 0.4, 0.6]
+
+/** An arm's elbow and the wrist point it reaches for. */
+export type ArmSegment = Pick<SettledMitten, 'elbow' | 'wrist'>
+
+/** How far two forearms overlap, with room between them (rig units; 0 when clear). */
+export function forearmOverlap(arm: ArmSegment, other: ArmSegment | null) {
+  if (!other) return 0
+  const room = 2 * (FOREARM_RADIUS + SWIVEL.room)
+  return Math.max(0, room - segmentDistance(arm.elbow, arm.wrist, other.elbow, other.wrist))
+}
+
+/**
+ * How far an arm from `shoulder` through `arm`'s elbow and wrist reaches into the bat, the body, and the `other` arm's
+ * forearm (rig units), summed over points along its forearm and upper arm. The upper arm counts against the head and
+ * the bat toward its elbow only: its shoulder end sits in the torso, and the front one crosses the chest in the stance.
  */
 export function armCollisionDepth(
-  arm: Pick<SettledMitten, 'elbow' | 'wrist'>,
+  arm: ArmSegment,
   shoulder: Vector3,
   knob: Vector3,
   axis: Vector3,
   volumes: BodyVolume[],
+  other: ArmSegment | null = null,
 ) {
   const head = volumes.filter((volume) => volume.part === 'head')
   const { elbow, wrist } = arm
-  const forearmInBat = [0.2, 0.45, 0.7].map((along) =>
-    batPenetration(knob, axis, armPoint.copy(elbow).lerp(wrist, along), 0.052),
+  const { room } = SWIVEL
+  const forearm = FOREARM_RADIUS + room
+  const upperArm = ARM_RADII.upper + room
+  const forearmInBat = FOREARM_FREE_SPAN.map((along) =>
+    batPenetration(knob, axis, armPoint.copy(elbow).lerp(wrist, along), forearm),
   )
   const forearmInBody = [0.3, 0.6, 0.85].map((along) =>
-    deepestPenetration(volumes, armPoint.copy(elbow).lerp(wrist, along), 0.06),
+    deepestPenetration(volumes, armPoint.copy(elbow).lerp(wrist, along), forearm),
   )
   const upperArmInHead = [0.45, 0.7, 0.95].map((along) =>
-    deepestPenetration(head, armPoint.copy(shoulder).lerp(elbow, along), 0.09),
+    deepestPenetration(head, armPoint.copy(shoulder).lerp(elbow, along), ARM_RADII.upper),
   )
-  const parts = [...forearmInBat, deepestPenetration(volumes, elbow, 0.07), ...forearmInBody, ...upperArmInHead]
+  const upperArmInBat = [0.25, 0.5, 0.75, 1].map((along) =>
+    batPenetration(knob, axis, armPoint.copy(shoulder).lerp(elbow, along), upperArm),
+  )
+  const parts = [
+    ...forearmInBat,
+    deepestPenetration(volumes, elbow, ARM_RADII.elbow + room),
+    ...forearmInBody,
+    ...upperArmInHead,
+    ...upperArmInBat,
+    forearmOverlap(arm, other),
+  ]
   return parts.reduce((sum, depth) => sum + depth, 0)
 }
 
@@ -164,9 +208,9 @@ export function parabolaOffset(before: number, at: number, after: number) {
 const searchShoulder = new Vector3()
 
 /**
- * The elbow swivel for arm `index` holding the bat at `center` that keeps the forearm off the bat and the arm out of
- * `volumes`, searched round `near` and paying for every degree it strays from there and from the keyed pole, so a run
- * of searches moves the elbow smoothly.
+ * The elbow swivel for arm `index` holding the bat at `center` that keeps the arm off the bat, out of `volumes`, and
+ * clear of the `other` arm's forearm, searched round `near` and paying for every degree it strays from there and from
+ * the keyed pole, so a run of searches moves the elbow smoothly.
  */
 export function searchSwivel(
   rig: BallplayerRig,
@@ -176,16 +220,17 @@ export function searchSwivel(
   pole: Vector3,
   near: number,
   volumes: BodyVolume[],
+  other: ArmSegment | null = null,
 ) {
-  const { limit, weight, step, steps } = SWIVEL
+  const { limit, weight, step, steps, depth: depthScale, change } = SWIVEL
   const shoulder = shoulderPoint(rig, index, searchShoulder)
   const trials = Array.from({ length: 2 * steps + 1 }, (_, offset) =>
     clamp(near + (offset - steps) * step, -limit, limit),
   )
   const costs = trials.map((trial) => {
     const arm = settleMitten(settled, shoulder, center, bat.axis, pole, trial)
-    const depth = armCollisionDepth(arm, shoulder, bat.knob, bat.axis, volumes)
-    return weight * (trial / 45) ** 2 + (depth / 0.008) ** 2 + ((trial - near) / 15) ** 2
+    const depth = armCollisionDepth(arm, shoulder, bat.knob, bat.axis, volumes, other)
+    return weight * (trial / 45) ** 2 + (depth / depthScale) ** 2 + ((trial - near) / change) ** 2
   })
   const best = costs.indexOf(Math.min(...costs))
   const inside = best > 0 && best < costs.length - 1

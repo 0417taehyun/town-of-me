@@ -3,7 +3,8 @@ import { clamp } from '../../../motionMath'
 import { type BallplayerRig, rigMaterial } from './ballplayerRig'
 
 // The batter's bat in its own frame: the knob at the origin, the barrel up +y, in the rig's town units (an 84 cm bat
-// for the 1.75 m player). The grip tape is thickened from life size so the handle still reads through a mitten.
+// for the 1.75 m player). The grip tape is thickened from life size so the handle still reads through a mitten; the
+// knob flares less than a real one, as the bottom mitten's forearm sweeps close past it as the bat rolls over.
 
 export const BAT = {
   length: 1.006,
@@ -18,8 +19,8 @@ export const BAT = {
 
 /** The bat's radius along its length from the knob: the knob's flare, the grip tape, then the barrel. */
 export const BAT_RADII: [height: number, radius: number][] = [
-  [0, 0.043],
-  [0.022, 0.045],
+  [0, 0.038],
+  [0.022, 0.04],
   [0.04, 0.027],
   [0.44, 0.027],
   [0.441, 0.0205],
@@ -33,8 +34,8 @@ export const BAT_RADII: [height: number, radius: number][] = [
 /** The wood's outline for the lathe (radius, height): thinner under the tape, which wraps it as its own cylinder. */
 const WOOD_PROFILE: [radius: number, height: number][] = [
   [0, 0],
-  [0.043, 0.004],
-  [0.045, 0.022],
+  [0.038, 0.004],
+  [0.04, 0.022],
   [0.026, 0.04],
   [0.016, 0.12],
   [0.017, 0.32],

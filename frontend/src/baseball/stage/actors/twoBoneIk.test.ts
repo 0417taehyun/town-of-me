@@ -38,6 +38,20 @@ describe('solveTwoBone', () => {
     expect(factor).toBe(1)
   })
 
+  it('eases a stretching chain into its full reach, its middle joint never snapping straight', () => {
+    const toward = new Vector3(0.8, -0.3, 0.52).normalize()
+    const steps = Array.from({ length: 121 }, (_, step) => (upper + lower) * (0.85 + step * 0.0025))
+    const middles = steps.map((distance) => {
+      const target = root.clone().addScaledVector(toward, distance)
+      const { middle, end } = solve(target, new Vector3(0, -1, 0), true)
+      expect(end.distanceTo(target)).toBeLessThan(1e-6)
+      return middle
+    })
+    const moves = middles.slice(1).map((middle, index) => middle.distanceTo(middles[index]))
+    const targetStep = (upper + lower) * 0.0025
+    expect(Math.max(...moves)).toBeLessThan(2 * targetStep)
+  })
+
   it('stretches both bones evenly to reach a target past them when asked', () => {
     const target = root.clone().add(new Vector3(0.9, 0, 0))
     const { middle, end, factor } = solve(target, new Vector3(0, -1, 0), true)

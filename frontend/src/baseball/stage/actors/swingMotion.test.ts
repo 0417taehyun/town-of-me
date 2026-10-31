@@ -6,7 +6,16 @@ import { PLAYER_SCALE } from '../stageLayout'
 import { BAT } from './bat'
 import { createBatter, poseBatter } from './batter'
 import { monotoneTrack, sampleTrack } from './keyframes'
-import { sampleSwingPose, SWING_KEY_IDS, SWING_KEY_TIMES, SWING_KEYS } from './swingMotion'
+import {
+  createReturnTracks,
+  RETURN_KEY_MS,
+  sampleSwingPose,
+  SWING_KEY_IDS,
+  SWING_KEY_TIMES,
+  SWING_KEYS,
+  type TrackChannel,
+  swingTrackKeys,
+} from './swingMotion'
 
 const sides = ['right', 'left'] as const
 
@@ -35,6 +44,16 @@ describe('monotone tracks', () => {
   it('carry every channel of the swing between its keys without overshooting', () => {
     const times = SWING_KEY_IDS.map((id) => SWING_KEY_TIMES[id])
     for (const values of Object.values(SWING_KEYS)) expect(staysBetweenKeys(times, values)).toBe(true)
+  })
+
+  it('start every channel of the return on the swing’s finish key and end it on its stance key', () => {
+    const swing = swingTrackKeys()
+    const tracks = createReturnTracks(swing)
+    for (const [channel, values] of Object.entries(swing)) {
+      const track = tracks[channel as TrackChannel]
+      expect(sampleTrack(track, RETURN_KEY_MS.finish)).toBe(values[values.length - 1])
+      expect(sampleTrack(track, RETURN_KEY_MS.stance)).toBe(values[0])
+    }
   })
 })
 

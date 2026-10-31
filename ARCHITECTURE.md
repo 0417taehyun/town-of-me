@@ -147,7 +147,11 @@ proportions posed by joints (two-bone IK legs on planted feet, a chest turning a
 batter (`batter.ts`) is the visitor's character with a bat and mitten hands, playing the pose lab's swing as monotone
 keyframe tracks (`keyframes.ts`, `swingMotion.ts`). It reads the contact point from `game/field.ts` and aims at it, so a
 PERFECT swing squares the bat there, and each swing meets its ball `CONTACT_DELAY_MS` after it starts; a left-handed
-batter is the mirror image. The other team's pitcher (`pitcher.ts`) and catcher (`catcher.ts`) wear its brick red and
+batter is the mirror image. A swing turns its bat and leans toward its ball, holds its finish, and comes back to the
+stance along keys of its own, low and in front of the body. Its keys keep the bat out of the body, and the elbows are
+solved against the body's simple solids (`bodyVolumes.ts`), so the forearms and the mittens stay out of the body and the
+forearms off the bat and each other.
+The other team's pitcher (`pitcher.ts`) and catcher (`catcher.ts`) wear its brick red and
 charcoal (`teamUniforms.ts`); the pitcher's throw is keyed on the same tracks with its release key at `game/pitch.ts`'s
 `RELEASE_POINT`, and the catcher's mitt reaches for where each pitch ends up. `ballplayerCast.ts` drives all three from
 the stage run: the pitcher throws on the derby's windup and release, the batter loads with them and swings each judged

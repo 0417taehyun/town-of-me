@@ -90,9 +90,43 @@ export const SHOULDER = { x: 0.37, y: 1.25, z: 0.06 }
 export const ARM_BONES = { upper: 0.37, fore: 0.35 }
 /** The forearm keeps one thickness all the way into the hand, as in Animal Crossing (no thinner wrist). */
 export const FOREARM_RADIUS = 0.06
+/** The shoulder's and the elbow's balls (radii) and half the upper arm's width, around the forearm's thickness. */
+export const ARM_RADII = { shoulder: 0.1, upper: 0.0925, elbow: 0.07 }
 /** The ball of the foot, which it pivots on, from the knee of a straight leg; and the ankle from there. */
 export const TOE_PIVOT_IN_KNEE = new Vector3(0, -0.365, 0.205)
 export const ANKLE_IN_FOOT = new Vector3(0, -BALLPLAYER_BODY.shin, 0).sub(TOE_PIVOT_IN_KNEE)
+
+/** A rounded box of a ballplayer's lower body: its size, its rounding, and its center in its group's space. */
+export type LegSolid = { size: [number, number, number]; rounding: number; center: Vector3 }
+
+/**
+ * The hips (in the pelvis), a thigh (in its leg), a shin (in its knee), and a shoe (in its foot), wider in relaxed
+ * trousers and taller in boots: what the rig draws and what the batter keeps its arms and bat out of.
+ */
+export function legSolids({ relaxed, boots }: Pick<AvatarAppearance, 'relaxed' | 'boots'>) {
+  return {
+    hips: { size: [relaxed ? 0.58 : 0.52, 0.24, 0.34], rounding: 0.1, center: new Vector3(0, 0.02, 0) },
+    thigh: { size: [relaxed ? 0.3 : 0.24, 0.36, 0.28], rounding: 0.08, center: new Vector3(0, -0.18, 0) },
+    shin: { size: [relaxed ? 0.27 : 0.21, 0.28, 0.24], rounding: 0.075, center: new Vector3(0, -0.14, 0) },
+    shoe: {
+      size: [0.27, boots ? 0.25 : 0.15, 0.41],
+      rounding: boots ? 0.08 : 0.055,
+      center: new Vector3(0, -0.29 + (boots ? 0.05 : 0), 0.07).sub(TOE_PIVOT_IN_KNEE),
+    },
+  } satisfies Record<string, LegSolid>
+}
+
+export function addLegSolid(
+  owner: Pick<BallplayerRig, 'materials'>,
+  parent: Group,
+  solid: LegSolid,
+  color: string,
+  roughness = 1,
+) {
+  const mesh = addPart(owner, parent, getRoundedBox(...solid.size, solid.rounding), color, roughness)
+  mesh.position.copy(solid.center)
+  return mesh
+}
 
 const { DEG2RAD } = MathUtils
 const UP = new Vector3(0, 1, 0)
@@ -144,13 +178,7 @@ export function createBallplayerRig(profile: PlayerProfile): BallplayerRig {
   head.add(headMesh)
   body.add(head)
   const pelvis = new Group()
-  const hips = addPart(
-    owner,
-    pelvis,
-    getRoundedBox(appearance.relaxed ? 0.58 : 0.52, 0.24, 0.34, 0.1),
-    appearance.bottom,
-  )
-  hips.position.y = 0.02
+  addLegSolid(owner, pelvis, legSolids(appearance).hips, appearance.bottom)
   const legs = [buildLeg(owner, appearance), buildLeg(owner, appearance)]
   const arms: Pair<ElbowArm> = [buildElbowArm(owner, root, appearance), buildElbowArm(owner, root, appearance)]
   root.add(body, pelvis, ...legs.flatMap(({ leg, foot }) => [leg, foot]))
@@ -185,22 +213,12 @@ export function buildLeg(owner: Pick<BallplayerRig, 'materials'>, appearance: Av
   const leg = new Group()
   const knee = new Group()
   const foot = new Group()
-  const { relaxed, boots } = appearance
-  const thigh = addPart(owner, leg, getRoundedBox(relaxed ? 0.3 : 0.24, 0.36, 0.28, 0.08), appearance.bottom)
-  thigh.position.y = -0.18
+  const solids = legSolids(appearance)
+  addLegSolid(owner, leg, solids.thigh, appearance.bottom)
   knee.position.y = -BALLPLAYER_BODY.thigh
-  const shinColor = appearance.shorts ? appearance.skin : appearance.bottom
-  const shin = addPart(owner, knee, getRoundedBox(relaxed ? 0.27 : 0.21, 0.28, 0.24, 0.075), shinColor)
-  shin.position.y = -0.14
+  addLegSolid(owner, knee, solids.shin, appearance.shorts ? appearance.skin : appearance.bottom)
   leg.add(knee)
-  const shoe = addPart(
-    owner,
-    foot,
-    getRoundedBox(0.27, boots ? 0.25 : 0.15, 0.41, boots ? 0.08 : 0.055),
-    appearance.shoes,
-    0.85,
-  )
-  shoe.position.set(0, -0.29 + (boots ? 0.05 : 0), 0.07).sub(TOE_PIVOT_IN_KNEE)
+  addLegSolid(owner, foot, solids.shoe, appearance.shoes, 0.85)
   return { leg, knee, foot }
 }
 
@@ -209,10 +227,11 @@ export function buildElbowArm(owner: Pick<BallplayerRig, 'materials'>, root: Gro
   const sleeve = appearance.top
   const bare = appearance.longSleeves ? appearance.top : appearance.skin
   const shoulder = addPart(owner, root, characterGeometries.sphere, sleeve)
-  shoulder.scale.setScalar(0.1)
-  const upper = addPart(owner, root, getRoundedBox(0.185, ARM_BONES.upper, 0.185, 0.085), sleeve)
+  shoulder.scale.setScalar(ARM_RADII.shoulder)
+  const width = 2 * ARM_RADII.upper
+  const upper = addPart(owner, root, getRoundedBox(width, ARM_BONES.upper, width, 0.085), sleeve)
   const elbow = addPart(owner, root, characterGeometries.sphere, bare)
-  elbow.scale.setScalar(0.07)
+  elbow.scale.setScalar(ARM_RADII.elbow)
   const forearm = addPart(owner, root, forearmGeometry, bare)
   return { shoulder, upper, elbow, forearm }
 }

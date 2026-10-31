@@ -1,6 +1,6 @@
 import { MathUtils } from 'three'
 import type { Vec3 } from '../../../data/models'
-import { clamp01, lerp, smoothstep, wrapAngle } from '../../../motionMath'
+import { clamp01, lerp, wrapAngle } from '../../../motionMath'
 import { keyedTracks, type MonotoneTrack, sampleTrack, sampleTracks } from './keyframes'
 
 // The batter's swing as data: the pose lab's pick, "레퍼런스형 · 웅크린 컴팩트". It is the median of 649 measured swings
@@ -10,7 +10,8 @@ import { keyedTracks, type MonotoneTrack, sampleTrack, sampleTracks } from './ke
 // 3 cm lower and further out so the lean keeps the chin clear. At contact the pelvis sits back and off the plate and the
 // front elbow points down, so the chibi's short front arm meets the bat at an angle instead of running along it. The
 // contact key's grip is the pose lab's raised by the 28 cm its aim lifted it to meet a ball at the strike zone's
-// center (0.6 m), so the keys themselves square the bat there and the aim only trims what is left.
+// center (0.6 m), so the keys themselves square the bat there and the aim only trims what is left. At the slot the bat
+// points straight back and a little higher than the research's (-117°, 13°), which laid it through the back shoulder.
 //
 // Units are the batter frame of ballplayerRig.ts (town units, about 2.1 tall), with +x toward the pitcher, +y up, and
 // +z toward the plate. Angles are degrees: a yaw of 0 faces the plate and +90 the pitcher; an azimuth of 0 points at the
@@ -71,8 +72,8 @@ export const SWING_KEYS = {
   gripY: [-0.03, -0.06, -0.035, -0.03, -0.06, -0.14, 0.126, -0.08, 0.18, 0],
   gripZ: [0.38, 0.37, 0.34, 0.34, 0.26, 0.17, -0.09, -0.33, -0.62, -0.62],
   aim: [0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-  batAzimuth: [-156, -166, -169, -171, -150, -117, 11, 100, 187, 278],
-  batElevation: [45, 40, 41, 42, 50, 13, -30, 24, 38, -7],
+  batAzimuth: [-156, -166, -169, -171, -150, -92, 11, 100, 187, 278],
+  batElevation: [45, 40, 41, 42, 50, 24, -30, 24, 38, -7],
   frontPoleAzimuth: [30, 20, 20, 20, 40, 60, 110, 110, 150, 165],
   frontPoleElevation: [-70, -70, -70, -70, -60, -50, -70, -60, -50, -70],
   backPoleAzimuth: [-100, -100, -100, -100, -120, -50, -30, 60, 60, 130],
@@ -98,17 +99,58 @@ export const SWING_WAGGLE = { azimuth: 2.5, elevation: 4, gripY: 0.007, rate: 1.
 
 /**
  * The bat meets the ball this long after a swing starts (ms): the research's launch-to-contact compressed to the
- * game's trigger-to-contact time. The rest of SWING_MS plays on to the finish at about real speed.
+ * game's trigger-to-contact time. The rest of SWING_MS plays on to the finish, slowing from the contact's speed.
  */
 export const CONTACT_DELAY_MS = 46
 export const SWING_MS = 380
-/** The finish holds this long, then the batter eases back into the windup over RETURN_MS. */
-export const FINISH_HOLD_MS = 520
-export const RETURN_MS = 480
+
+// After the finish the batter comes back to its stance along keys of its own, a path the research does not measure.
+// Every turn unwinds one way, the way it came, but low and in front: the chest turns back first and the hands drop to
+// the belly with the bat level, carry it down in front of the knees, then lift it past the plate side and back over
+// the rear shoulder. Taking the short way round, or winding the swing back at its own height, drives the bat through
+// the head and the arms through each other; folding the hands up under the chin instead makes the bat, seen from the
+// batting camera behind the batter, seem to stick out of the head.
+
+export const RETURN_KEY_IDS = ['finish', 'settle', 'relax', 'carry', 'lift', 'stance'] as const
+export type ReturnKeyId = (typeof RETURN_KEY_IDS)[number]
+
+/** Ms from the finish, where a swing's SWING_MS ends: a held finish that settles a little, then the way back. */
+export const RETURN_KEY_MS: Record<ReturnKeyId, number> = {
+  finish: 0,
+  settle: 520,
+  relax: 736,
+  carry: 1048,
+  lift: 1372,
+  stance: 1720,
+}
+
+/**
+ * The return's own keys between the finish and the stance (settle, relax, carry, lift), in RETURN_KEY_IDS order; the
+ * first and last keys are SWING_KEYS' finish and stance. Every channel not keyed here goes `share` of the way from its
+ * finish to its stance. The front foot steps back off the ground instead of sliding.
+ */
+export const RETURN_KEYS = {
+  share: [0.02, 0.15, 0.45, 0.8],
+  chestYaw: [161, 128, 75, 65],
+  gripAngle: [207, 163, 121, 88],
+  gripRadius: [0.71, 0.57, 0.5, 0.34],
+  gripY: [-0.01, -0.18, -0.13, -0.04],
+  batAzimuth: [274, 205, 92, -41],
+  batElevation: [-10, 0, -41, -12],
+  frontFootX: [0.36, 0.36, 0.36, 0.32],
+  frontFootLift: [0, 0, 0, 0.015],
+  frontHeel: [0, 0, 0, 10],
+} satisfies Partial<Record<TrackChannel | 'share', number[]>>
+
+/** The finish holds this long, settling a few degrees, then the batter comes back to its stance over RETURN_MS. */
+export const FINISH_HOLD_MS = RETURN_KEY_MS.settle
+export const RETURN_MS = RETURN_KEY_MS.stance - RETURN_KEY_MS.settle
+/** Once back in its stance, the batter's waggle fades back in over this long. */
+export const WAGGLE_FADE_MS = 300
 
 type KeyedChannel = keyof typeof SWING_KEYS
 /** The grip is interpolated round the pelvis's axis (angle and radius) instead of in x and z. */
-type TrackChannel = Exclude<KeyedChannel, 'gripX' | 'gripZ'> | 'gripAngle' | 'gripRadius'
+export type TrackChannel = Exclude<KeyedChannel, 'gripX' | 'gripZ'> | 'gripAngle' | 'gripRadius'
 
 /**
  * A pose of the swing: every channel, the grip both round the body and in x and z, and each elbow's swivel (degrees)
@@ -118,10 +160,14 @@ export type SwingPose = Record<KeyedChannel | TrackChannel, number> & { backSwiv
 
 export type SwingMotion = {
   tracks: Record<TrackChannel, MonotoneTrack>
+  /** The return's tracks by ms from the finish. */
+  returnTracks: Record<TrackChannel, MonotoneTrack>
   /** The grip shift that puts the contact key's sweet spot on the contact point, faded in by `aim` (batter frame). */
   aimOffset: Vec3
   /** Each elbow's swivel [back, front] by swing second, or null before the batter has solved them. */
   swivels: [MonotoneTrack, MonotoneTrack] | null
+  /** Each elbow's swivel [back, front] by return ms, or null before the batter has solved them. */
+  returnSwivels: [MonotoneTrack, MonotoneTrack] | null
 }
 
 /** Where the stance waggle's beat is (`at`, seconds on any clock) and how much of it plays (0..1). */
@@ -147,13 +193,43 @@ export function gripAngles() {
   return angles
 }
 
-/** The swing's tracks, without its aim or elbow swivels, which the batter solves (batter.ts). */
-export function createSwingMotion(): SwingMotion {
-  const times = SWING_KEY_IDS.map((id) => SWING_KEY_TIMES[id])
+/** Every track channel's values at the swing's keys, the grip as its angle and radius round the pelvis's axis. */
+export function swingTrackKeys(): Record<TrackChannel, number[]> {
   const { gripX, gripZ, ...keyed } = SWING_KEYS
   const gripRadius = gripX.map((x, index) => Math.hypot(x, gripZ[index]))
-  const tracks = keyedTracks<TrackChannel>(times, { ...keyed, gripAngle: gripAngles(), gripRadius })
-  return { tracks, aimOffset: { x: 0, y: 0, z: 0 }, swivels: null }
+  return { ...keyed, gripAngle: gripAngles(), gripRadius }
+}
+
+/** A channel's values at the return's keys, from its `finish` to its `stance`: keyed in RETURN_KEYS, else its share. */
+export function returnKeyValues(channel: TrackChannel, finish: number, stance: number) {
+  const keyed: Partial<Record<TrackChannel, number[]>> = RETURN_KEYS
+  const between = keyed[channel] ?? RETURN_KEYS.share.map((share) => lerp(finish, stance, share))
+  return [finish, ...between, stance]
+}
+
+/** The return's tracks, from the swing's finish key back to its stance key. */
+export function createReturnTracks(swingKeys: Record<TrackChannel, number[]>) {
+  const times = RETURN_KEY_IDS.map((id) => RETURN_KEY_MS[id])
+  const keys = Object.fromEntries(
+    Object.entries<number[]>(swingKeys).map(([channel, values]) => [
+      channel,
+      returnKeyValues(channel as TrackChannel, values[values.length - 1], values[0]),
+    ]),
+  ) as Record<TrackChannel, number[]>
+  return keyedTracks<TrackChannel>(times, keys)
+}
+
+/** The swing's and its return's tracks, without its aim or elbow swivels, which the batter solves (batter.ts). */
+export function createSwingMotion(): SwingMotion {
+  const times = SWING_KEY_IDS.map((id) => SWING_KEY_TIMES[id])
+  const swingKeys = swingTrackKeys()
+  return {
+    tracks: keyedTracks<TrackChannel>(times, swingKeys),
+    returnTracks: createReturnTracks(swingKeys),
+    aimOffset: { x: 0, y: 0, z: 0 },
+    swivels: null,
+    returnSwivels: null,
+  }
 }
 
 /** The pose `seconds` from contact, with the aim faded in by its weight and `waggle` added to the bat and grip. */
@@ -169,6 +245,15 @@ export function sampleSwingPose(motion: SwingMotion, seconds: number, waggle: Wa
   pose.batAzimuth += SWING_WAGGLE.azimuth * Math.sin(beat) * waggle.amount
   pose.batElevation += SWING_WAGGLE.elevation * Math.sin(beat * 0.5 + 1.1) * waggle.amount
   pose.gripY += SWING_WAGGLE.gripY * Math.sin(beat + 0.6) * waggle.amount
+  return pose
+}
+
+/** The return's pose `ms` after the finish, from the held finish back to the stance (its aim is 0 all the way). */
+export function sampleReturnPose(motion: SwingMotion, ms: number): SwingPose {
+  const pose = sampleTracks(motion.returnTracks, ms) as SwingPose
+  pose.backSwivel = motion.returnSwivels ? sampleTrack(motion.returnSwivels[0], ms) : 0
+  pose.frontSwivel = motion.returnSwivels ? sampleTrack(motion.returnSwivels[1], ms) : 0
+  setGripFromAngle(pose)
   return pose
 }
 
@@ -189,23 +274,15 @@ export function windupSeconds(load: number) {
 
 /**
  * Swing seconds `elapsedMs` into a swing that left the windup at second `from` and meets the ball at second
- * `contactAt`: that stretch compressed into CONTACT_DELAY_MS, then on to the finish over the rest of SWING_MS.
+ * `contactAt`: that stretch compressed into CONTACT_DELAY_MS, so the bat answers at once, then on to the finish over
+ * the rest of SWING_MS, slowing from the contact's own speed to a stop the way a bat decelerates after the ball, about
+ * three times as long as it took to get there.
  */
 export function swingSeconds(from: number, contactAt: number, elapsedMs: number) {
-  if (elapsedMs <= CONTACT_DELAY_MS) return lerp(from, contactAt, Math.max(0, elapsedMs) / CONTACT_DELAY_MS)
-  const onward = Math.min(1, (elapsedMs - CONTACT_DELAY_MS) / (SWING_MS - CONTACT_DELAY_MS))
-  return lerp(contactAt, SWING_KEY_TIMES.finish, onward)
-}
-
-/**
- * Eases from the held finish back to the windup pose `amount` (0..1) of the way. The bat and the hands unwind the way
- * they came: taking the short way round instead drives the knob through the chest and the head.
- */
-export function blendSwingPoses(from: SwingPose, to: SwingPose, amount: number): SwingPose {
-  const eased = smoothstep(clamp01(amount))
-  const pose = Object.fromEntries(
-    Object.entries(to).map(([channel, target]) => [channel, lerp(from[channel as keyof SwingPose], target, eased)]),
-  ) as SwingPose
-  setGripFromAngle(pose)
-  return pose
+  const rate = (contactAt - from) / CONTACT_DELAY_MS
+  if (elapsedMs <= CONTACT_DELAY_MS) return from + rate * Math.max(0, elapsedMs)
+  const span = SWING_KEY_TIMES.finish - contactAt
+  const onwardMs = SWING_MS - CONTACT_DELAY_MS
+  const onward = Math.min(1, (elapsedMs - CONTACT_DELAY_MS) / onwardMs)
+  return contactAt + span * (1 - (1 - onward) ** ((rate * onwardMs) / span))
 }

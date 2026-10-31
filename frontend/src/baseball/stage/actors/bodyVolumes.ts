@@ -1,13 +1,14 @@
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three'
+import { clamp } from '../../../motionMath'
 import type { AvatarPart } from '../../../scene/characters/avatarAppearance'
-import { BALLPLAYER_BODY, type BallplayerRig } from './ballplayerRig'
+import { BALLPLAYER_BODY, type BallplayerRig, type LegSolid, legSolids } from './ballplayerRig'
 
-// The ballplayer's head (with its hair, hat, ears, and nose) and torso as simple solids in the rig frame, so the batter
-// can keep its arms out of them and a test can keep the bat out of the head. Each part is the shape its mesh draws:
-// spheres and cones as ellipsoids, cylinders (a sun hat), boxes, and the torso's rounded box.
+// The ballplayer's head (with its hair, hat, ears, and nose), torso, and lower body as simple solids in the rig frame,
+// so the batter can keep its arms and its bat out of them. Each part is the shape its mesh draws: spheres and cones as
+// ellipsoids, cylinders (a sun hat), boxes, and the rounded boxes of the torso, the hips, the legs, and the shoes.
 
 export type BodyVolume = {
-  part: 'head' | 'torso'
+  part: 'head' | 'torso' | 'legs'
   shape: 'ellipsoid' | 'box' | 'cylinder' | 'roundedBox'
   center: Vector3
   /** Turns a rig-frame offset from the center into the solid's own axes. */
@@ -48,11 +49,17 @@ export function headPartVolume(part: AvatarPart, matrix: Matrix4, turn: Quaterni
   }
 }
 
-/** The head's solids and the torso as last posed (poseChest), in the rig frame. */
-export function bodyVolumes(rig: BallplayerRig): BodyVolume[] {
+/** The head's solids (with its hair, hat, ears, and nose) as last posed (poseChest, turnHead), in the rig frame. */
+export function headVolumes(rig: Pick<BallplayerRig, 'body' | 'head' | 'appearance'>): BodyVolume[] {
   const { body, head } = rig
   headMatrix.multiplyMatrices(body.matrix, head.matrix)
   headTurn.copy(body.quaternion).multiply(head.quaternion)
+  return rig.appearance.headParts.filter(isSolidHeadPart).map((part) => headPartVolume(part, headMatrix, headTurn))
+}
+
+/** The head's solids, the torso, and the lower body as last posed (poseLegs, poseChest), in the rig frame. */
+export function bodyVolumes(rig: BallplayerRig): BodyVolume[] {
+  const { body } = rig
   const { torso } = BALLPLAYER_BODY
   const torsoVolume: BodyVolume = {
     part: 'torso',
@@ -62,16 +69,54 @@ export function bodyVolumes(rig: BallplayerRig): BodyVolume[] {
     radii: new Vector3(torso.width / 2, torso.height / 2, torso.depth / 2),
     rounding: torso.rounding,
   }
-  const headVolumes = rig.appearance.headParts
-    .filter(isSolidHeadPart)
-    .map((part) => headPartVolume(part, headMatrix, headTurn))
-  return [...headVolumes, torsoVolume]
+  return [...headVolumes(rig), torsoVolume, ...legVolumes(rig)]
 }
 
 const local = new Vector3()
 
+/** Rounded box `solid` in a group posed at `position` and turned by `turn` (rig frame). */
+export function legSolidVolume(solid: LegSolid, position: Vector3, turn: Quaternion): BodyVolume {
+  const [width, height, depth] = solid.size
+  return {
+    part: 'legs',
+    shape: 'roundedBox',
+    center: solid.center.clone().applyQuaternion(turn).add(position),
+    inverse: turn.clone().invert(),
+    radii: new Vector3(width / 2, height / 2, depth / 2),
+    rounding: solid.rounding,
+  }
+}
+
+const kneeTurn = new Quaternion()
+const kneePosition = new Vector3()
+
+/** Leg `index`'s thigh, shin, and shoe as last posed (poseLegs), in the rig frame. */
+export function oneLegVolumes(rig: BallplayerRig, index: number, solids: ReturnType<typeof legSolids>) {
+  const leg = rig.legs[index]
+  const knee = rig.knees[index]
+  const foot = rig.feet[index]
+  kneeTurn.copy(leg.quaternion).multiply(knee.quaternion)
+  kneePosition.copy(knee.position).applyQuaternion(leg.quaternion).add(leg.position)
+  return [
+    legSolidVolume(solids.thigh, leg.position, leg.quaternion),
+    legSolidVolume(solids.shin, kneePosition, kneeTurn),
+    legSolidVolume(solids.shoe, foot.position, foot.quaternion),
+  ]
+}
+
+/** The hips, both legs, and both shoes as last posed (poseLegs), in the rig frame. */
+export function legVolumes(rig: BallplayerRig): BodyVolume[] {
+  const solids = legSolids(rig.appearance)
+  const hips = legSolidVolume(solids.hips, rig.pelvis.position, rig.pelvis.quaternion)
+  return [hips, ...oneLegVolumes(rig, 0, solids), ...oneLegVolumes(rig, 1, solids)]
+}
+
 /** How deep a sphere (`center`, `radius`) sits inside `volume`, in rig units (0 when clear). */
 export function penetration(volume: BodyVolume, center: Vector3, radius: number) {
+  // Most spheres are far from most solids. None of the shapes below counts a sphere further out than its corners
+  // grown by the radius along every axis (under twice the radius), so this skips only what would come out 0.
+  const reach = volume.radii.length() + 2 * radius
+  if (center.distanceToSquared(volume.center) >= reach * reach) return 0
   local.copy(center).sub(volume.center).applyQuaternion(volume.inverse)
   if (volume.shape === 'roundedBox') return roundedBoxPenetration(volume, local, radius)
   if (volume.shape === 'box') return boxPenetration(volume.radii, local, radius)
@@ -108,5 +153,35 @@ export function cylinderPenetration(radii: Vector3, local: Vector3, radius: numb
 
 /** The deepest a sphere reaches into any of `volumes`, in rig units. */
 export function deepestPenetration(volumes: BodyVolume[], center: Vector3, radius: number) {
-  return Math.max(0, ...volumes.map((volume) => penetration(volume, center, radius)))
+  return volumes.reduce((deepest, volume) => Math.max(deepest, penetration(volume, center, radius)), 0)
+}
+
+const firstDirection = new Vector3()
+const secondDirection = new Vector3()
+const between = new Vector3()
+const firstClosest = new Vector3()
+const secondClosest = new Vector3()
+
+/**
+ * The shortest distance between the segments from `firstStart` to `firstEnd` and from `secondStart` to `secondEnd`
+ * (neither of zero length): the closest pair of points clamped into both segments (Ericson, Real-Time Collision
+ * Detection 5.1.9).
+ */
+export function segmentDistance(firstStart: Vector3, firstEnd: Vector3, secondStart: Vector3, secondEnd: Vector3) {
+  firstDirection.copy(firstEnd).sub(firstStart)
+  secondDirection.copy(secondEnd).sub(secondStart)
+  between.copy(firstStart).sub(secondStart)
+  const firstSquared = firstDirection.lengthSq()
+  const secondSquared = secondDirection.lengthSq()
+  const along = firstDirection.dot(secondDirection)
+  const firstOffset = firstDirection.dot(between)
+  const secondOffset = secondDirection.dot(between)
+  const denominator = firstSquared * secondSquared - along * along
+  const parallel = denominator < 1e-12
+  const first = parallel ? 0 : clamp((along * secondOffset - firstOffset * secondSquared) / denominator, 0, 1)
+  const second = clamp((along * first + secondOffset) / secondSquared, 0, 1)
+  const refined = clamp((along * second - firstOffset) / firstSquared, 0, 1)
+  firstClosest.copy(firstStart).addScaledVector(firstDirection, refined)
+  secondClosest.copy(secondStart).addScaledVector(secondDirection, second)
+  return firstClosest.distanceTo(secondClosest)
 }
