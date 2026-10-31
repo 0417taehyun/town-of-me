@@ -44,6 +44,12 @@ export function bannerResult(hud: DerbyHudState): PitchResult | null {
   return hud.phase === 'result' && settled ? (hud.results.at(-1) ?? null) : null
 }
 
+/** A home run's ball still in the air, which the camera chases: the camera panel steps aside to a corner meanwhile. */
+export function chasingHomeRun(hud: DerbyHudState) {
+  const latest = hud.results.at(-1)
+  return hud.phase === 'result' && latest?.outcome === 'homeRun' && hud.settledPitch !== hud.results.length - 1
+}
+
 /** A pitch let go by is a strike; one swung at and missed is a miss. */
 export type CaptionId = 'ready' | 'coming' | 'finished' | 'strike' | PitchResult['outcome']
 

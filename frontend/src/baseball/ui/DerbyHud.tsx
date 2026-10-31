@@ -13,18 +13,22 @@ import {
  * things a run ranks by, each counting a home run as its banner shows) and a two- or three-word caption in the top
  * band, and once a result's ball is down, its distance and details under the play. It knows only what the stage's
  * events told it (derbyCues.ts), never the pitches to come. The caption and banner are one live region, so a screen
- * reader hears each cue and result. Space and Enter swing anywhere (BaseballApp); the button is for a pointer.
+ * reader hears each cue and result; `cameraState`, what the camera panel's chip shows, is another, heard only. In a
+ * keyboard run Space and Enter swing anywhere (BaseballApp) and `onSwing` gives a pointer a button; a camera run has
+ * none.
  */
 export function DerbyHud({
   hud,
   pitchCount,
   language,
+  cameraState,
   onSwing,
 }: {
   hud: DerbyHudState
   pitchCount: number
   language: AppLanguage
-  onSwing: (timeStamp: number) => void
+  cameraState: string | null
+  onSwing: ((timeStamp: number) => void) | null
 }) {
   const copy = languageCopy[language].baseball.hud
   const score = scoreboardTotals(hud)
@@ -59,7 +63,10 @@ export function DerbyHud({
           </p>
         )}
       </div>
-      {hud.phase !== 'finished' && (
+      <p className="derby-camera-state" role="status">
+        {cameraState}
+      </p>
+      {onSwing && hud.phase !== 'finished' && (
         <button className="derby-swing" type="button" onPointerDown={(event) => onSwing(event.timeStamp)}>
           {copy.swing}
           <kbd>Space</kbd>

@@ -54,7 +54,9 @@ npm run build
   outs. The result banner names the pitch type only after the pitch. The result shows the home runs, their total
   distance, and the longest. Its sky, light, lawn, and snow follow local time
   and season like the town's, without changing the score. Phones, tablets, and browsers without WebGL 2 see why they
-  cannot play, with an address to copy.
+  cannot play, with an address to copy. The camera picture is processed in the browser only and never leaves the
+  device; the camera turns off when you leave the page or after two minutes without movement, and a camera that is
+  refused, missing, or busy shows why with another try. A computer too slow to follow a swing is told so, like a phone.
 
 ## Controls
 
@@ -76,6 +78,7 @@ npm run build
 | Respawn and recenter camera | `R`                                              |
 | Swing (home-run derby)      | `Space` / `Enter` or the on-screen `Swing`       |
 | Leave the derby             | `Esc` or `Back to town`                          |
+| Resize or hide derby camera | `V` or the on-screen `Camera view` button        |
 
 The camera button tunes the follow camera live, and `?` reopens help. Turning off `Ambient motion` in help freezes
 clouds, birds, and water; the system's reduced-motion setting slows them instead.

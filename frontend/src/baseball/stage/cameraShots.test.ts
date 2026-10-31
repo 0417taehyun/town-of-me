@@ -7,7 +7,18 @@ import { sprayPoint } from '../game/flight'
 import { contactSeconds, PITCH_TYPE_IDS, pitchPosition, planPitch, RELEASE_POINT } from '../game/pitch'
 import { PITCH_TARGET_BAND } from '../game/pitchSchedule'
 import { DUGOUT_SPOTS } from '../stadium/fieldLayout'
-import { battingShot, type CameraShot, chaseShot, HUD_RESERVE, isShowcaseHomeRun, wideShot } from './cameraShots'
+import { cameraPanelLayout } from '../ui/cameraPanelLayout'
+import {
+  battingFramePoints,
+  battingShot,
+  type CameraShot,
+  centreInBand,
+  chaseShot,
+  createCameraRig,
+  HUD_RESERVE,
+  isShowcaseHomeRun,
+  wideShot,
+} from './cameraShots'
 
 const aspects = [16 / 9, 4 / 3]
 const sides = ['right', 'left'] as const
@@ -71,6 +82,25 @@ describe('camera shots', () => {
       sides.forEach((side) => {
         const camera = cameraFor(battingShot(aspect, side), aspect)
         ;[RELEASE_POINT, ...plate, ...pitchPaths].forEach((point) => expect(inHudFreeBand(camera, point)).toBe(true))
+      }),
+    )
+  })
+
+  it('fits the batting shot into the band beside the camera panel, never under it, at 16:9 and 4:3', () => {
+    const screens = [
+      { width: 1440, height: 810 },
+      { width: 1024, height: 768 },
+    ]
+    const playing = { screen: 'play', chasing: false, searching: false, size: 'large' } as const
+    screens.forEach((screen) =>
+      sides.forEach((side) => {
+        const { band } = cameraPanelLayout(playing, screen, side)
+        const camera = cameraFor(battingShot(band.width / screen.height, side), screen.width / screen.height)
+        centreInBand(camera, createCameraRig(), band, screen.width, screen.height, 0, true)
+        const xs = battingFramePoints(side).map((point) => ((onScreen(camera, point).x + 1) / 2) * screen.width)
+        const bandLeft = band.centre - band.width / 2
+        expect(Math.min(...xs)).toBeGreaterThanOrEqual(bandLeft)
+        expect(Math.max(...xs)).toBeLessThanOrEqual(bandLeft + band.width)
       }),
     )
   })

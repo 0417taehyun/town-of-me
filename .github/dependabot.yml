@@ -9,10 +9,15 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+        exclude-patterns: ['@mediapipe/*'] # a tasks-vision bump arrives alone and gets the zero-external-request check
     ignore:
       # typescript-eslint supports TypeScript below 6.1, and TypeScript minor releases can break it.
       - dependency-name: typescript
         versions: ['>=6.1.0']
+      # @mediapipe/tasks-vision 1.0.0 and later send usage logs to Google; /baseball pins 0.10.35
+      # (see frontend/src/baseball/vision/tasksVision.ts).
+      - dependency-name: '@mediapipe/tasks-vision'
+        versions: ['>=1.0.0']
 
   - package-ecosystem: github-actions
     directory: /

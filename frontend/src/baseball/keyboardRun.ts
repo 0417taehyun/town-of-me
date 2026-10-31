@@ -1,31 +1,33 @@
 import { effectiveBallparkRules, rankingMonth } from '../data/ballparkRules'
 import type { BallparkSettings } from '../data/models'
+import type { DerbyInput } from './game/derbyScore'
 import type { BattingSide } from './game/field'
 import { createRunPlan } from './game/runPlan'
 import type { RealTimeSwing, StageRunSetup } from './stage/stageRun'
 
-// A run played with the keyboard (or the on-screen swing button): no practice to calibrate from, and a key press is
-// the moment the bat meets the ball.
+// A run's setup, and the keyboard's swings: a run played with the keyboard (or the on-screen swing button) has no
+// practice to calibrate from, and a key press is the moment the bat meets the ball. A camera run takes no key.
 
 /** The visitor bats right-handed until the setup screen lets them choose. */
 export const DEFAULT_BATTING_SIDE: BattingSide = 'right'
 
 /**
- * A keyboard run under the rules `rulesFor` picks for the KST month of `now`: by default those in effect, or in an
- * admin's preview those planned next (data/ballparkRules.ts). Each run reads the month when it starts, so a page left
- * open into a new month plays the rules `ballpark` scheduled for it (as loaded with the page) from its next run.
- * Ranked runs will take their plan from the server instead.
+ * A run played with `input` under the rules `rulesFor` picks for the KST month of `now`: by default those in effect,
+ * or in an admin's preview those planned next (data/ballparkRules.ts). Each run reads the month when it starts, so a
+ * page left open into a new month plays the rules `ballpark` scheduled for it (as loaded with the page) from its next
+ * run. Ranked runs will take their plan from the server instead.
  */
-export function createKeyboardRun(
+export function createDerbyRun(
   ballpark: BallparkSettings,
   now: Date,
   seed: number,
+  input: DerbyInput,
   rulesFor = effectiveBallparkRules,
 ): StageRunSetup {
   const rules = rulesFor(ballpark, rankingMonth(now))
   return {
     plan: createRunPlan(rules, seed),
-    log: { input: 'keyboard', side: DEFAULT_BATTING_SIDE, practice: [] },
+    log: { input, side: DEFAULT_BATTING_SIDE, practice: [] },
   }
 }
 

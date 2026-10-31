@@ -5,6 +5,7 @@ import { createRunPlan, planRunPitch, type RunPlan } from '../game/runPlan'
 import type { StageEvent } from '../stage/stageRun'
 import {
   bannerResult,
+  chasingHomeRun,
   distanceText,
   homeRunDistanceText,
   hudAfterEvent,
@@ -84,6 +85,25 @@ describe('the derby HUD', () => {
     expect(landed.map((row) => row.distance)).toEqual(
       distances.map((_, index) => distances.slice(0, index + 1).reduce((total, distance) => total + distance, 0)),
     )
+  })
+
+  it('chases a home run from its result until its ball is down, and no other ball in play', () => {
+    let hud = NEW_RUN_HUD
+    const chased = deadOnRun(createRunPlan({ pitchCount: 3, difficulty: 'normal' }, 11)).map((event) => {
+      hud = hudAfterEvent(hud, event)
+      return [event.type, chasingHomeRun(hud)]
+    })
+    expect(chased).toEqual([
+      ...[0, 1, 2].flatMap(() => [
+        ['windup', false],
+        ['release', false],
+        ['result', true],
+        ['landed', false],
+      ]),
+      ['finished', false],
+    ])
+    const hit = { ...hud.results[0], outcome: 'hit' as const }
+    expect(chasingHomeRun({ phase: 'result', pitchIndex: 0, results: [hit], settledPitch: -1 })).toBe(false)
   })
 
   it('shows distances in whole meters, spaced in English and not in Korean, and a total to the decimeter', () => {

@@ -14,6 +14,7 @@ import { useVenueMaterials } from '../../scene/venues/venueMaterials'
 import type { BattingSide } from '../game/field'
 import { Dugouts } from '../stadium/Dugouts'
 import { StadiumField } from '../stadium/StadiumField'
+import type { FreeBand } from './cameraShots'
 import { DerbyDirector } from './DerbyDirector'
 import type { RealTimeSwing, StageEvent, StageRunSetup } from './stageRun'
 
@@ -24,8 +25,9 @@ const STADIUM_FOG = { near: 130, far: 380 }
 
 /**
  * The derby's stadium on its own flat canvas (the town's world curve is never installed here). The sky, the light, and
- * the nature follow the visitor's time of day and season like the town's; they only change how it looks. When the
- * graphics fail or are lost, `onUnavailable` lets the page say why in the visitor's language.
+ * the nature follow the visitor's time of day and season like the town's; they only change how it looks. The play is
+ * centred in `band`, the part of the screen the camera panel leaves free. When the graphics fail or are lost,
+ * `onUnavailable` lets the page say why in the visitor's language.
  */
 export function BaseballStage({
   label,
@@ -35,6 +37,7 @@ export function BaseballStage({
   run,
   swings,
   onEvent,
+  band,
   period,
   season,
   reducedMotion,
@@ -47,6 +50,7 @@ export function BaseballStage({
   run: StageRunSetup | null
   swings: MutableRefObject<RealTimeSwing[]>
   onEvent: (event: StageEvent) => void
+  band: FreeBand
   period: DayPeriod
   season: Season
   reducedMotion: boolean
@@ -88,6 +92,7 @@ export function BaseballStage({
         side={side}
         swings={swings}
         onEvent={onEvent}
+        band={band}
         reducedMotion={reducedMotion}
       />
     </GraphicsCanvas>

@@ -8,7 +8,7 @@ import { Ball } from './Ball'
 import { type BallParts, drawBall } from './ballMeshes'
 import { type BallplayerCast, posePitcherAt, posePlayers } from './ballplayerCast'
 import { Ballplayers } from './Ballplayers'
-import { aimCamera, createCameraRig } from './cameraShots'
+import { aimCamera, centreInBand, createCameraRig, type FreeBand } from './cameraShots'
 import {
   createStageRun,
   directedShot,
@@ -26,7 +26,8 @@ import {
  * hears only the events. The pitcher is posed first, since the ball is in his hand until it is released. A new `run`
  * starts over. Swings pushed onto `swings` are taken every frame and played at the moment they report; one from before
  * the run's first pitch is ignored like any swing with no pitch on its way. The run's clock stops while the page is
- * hidden, when frames stop too, so no pitch goes by unseen.
+ * hidden, when frames stop too, so no pitch goes by unseen. The picture is centred in `band` (px), the part of the
+ * screen the camera panel leaves free.
  */
 export function DerbyDirector({
   run,
@@ -34,6 +35,7 @@ export function DerbyDirector({
   side,
   swings,
   onEvent,
+  band,
   reducedMotion,
 }: {
   run: StageRunSetup | null
@@ -41,6 +43,7 @@ export function DerbyDirector({
   side: BattingSide
   swings: MutableRefObject<RealTimeSwing[]>
   onEvent: (event: StageEvent) => void
+  band: FreeBand
   reducedMotion: boolean
 }) {
   const ball = useRef<BallParts>(null)
@@ -76,7 +79,9 @@ export function DerbyDirector({
     const camera = state.camera as PerspectiveCamera
     const cast = players.current
     const view = stageBallView(current, nowMs, cast && posePitcherAt(cast, current, nowMs))
-    const aspect = state.size.width / Math.max(1, state.size.height)
+    const { width, height } = state.size
+    centreInBand(camera, rig, band, width, height, delta, reducedMotion)
+    const aspect = band.width / Math.max(1, height)
     aimCamera(camera, rig, directedShot(current, nowMs, aspect, side, view.position), delta)
     if (ball.current) drawBall(ball.current, view, camera, state.size.height, gameDelta)
     if (cast) posePlayers(cast, current, nowMs, view, delta)

@@ -149,10 +149,30 @@ the stage run: the pitcher throws on the derby's windup and release, the batter 
 swing so its bat meets the ball where and when the stage sends it off, and every head follows the ball (`headLook.ts`),
 the batter's only as far as its bat lets a hat brim or hair turn. Nothing in `game/` reads the rigs.
 
+### `baseball/vision/`
+
+The webcam is read in the browser only, and nothing it sees leaves the device; `/baseball`'s CSP (`connect-src 'self'`,
+`docker/nginx.conf`) enforces that. `tasksVision.ts` imports MediaPipe Tasks Vision only when asked, pinned to exactly
+0.10.35 because 1.0.0 and later send usage logs, and loads everything from this origin: Vite fingerprints the wasm
+from `frontend/`'s own copy of the package (not the one `@react-three/drei` depends on), and the models are committed
+in `public/assets/models/`. It builds a task on the GPU or, when that fails, the CPU, builds it again after a lost
+WebGL context, and keeps frame timestamps strictly increasing. `cameraInput.ts` asks for video only and stops every
+track on `pagehide`, after two minutes without movement, when the camera ends by itself, and when its caller's signal
+aborts. `poseLandmarks.ts` reduces a pose to the wrists and shoulders a swing reads, in the raw, unmirrored image.
+`poseLoop.ts` runs the pose task on each camera frame from the video's frame callback, keeps the camera on while the
+visitor moves, and holds whether it sees them through brief flickers. `performanceTier.ts` times this computer on every
+visit (the 95th percentile of the pose task's time and of the page's drawn-frame gaps after a warm-up, not the camera's
+frame rate; nothing is stored). `deviceGate.ts` names why the camera game cannot start (camera refused, missing, busy,
+or failed; tracking could not start), which the page shows with another try, never a keyboard game; a computer too
+slow to track is blocked like a phone. `cameraTracking.ts` runs the camera for the page, loading the pose task while
+the browser asks for the camera, and draws each frame mirrored with the upper body on the camera panel's canvas
+(`ui/cameraOverlay.ts`), so React hears only status changes and whether the camera sees the visitor.
+
 ### The `/baseball` page
 
 `BaseballApp.tsx` checks the device first (`deviceGate.ts`: a phone or tablet, then WebGL 2) and shows why one cannot
-play in the visitor's language (also when the stadium's graphics fail later), then the character, then the derby. Each
+play in the visitor's language (also when the stadium's graphics fail later, or when the camera finds this computer too
+slow to track), then the character, then the derby. Each
 run reads the KST month it starts in and gets a `crypto` seed (`keyboardRun.ts`), so a page left open into a new month
 plays the rules scheduled for it, as loaded with the page, from its next run. The editor's link to `?rules=next`
 (`isNextRulesPreview` in `baseballRoute.ts`) plays the rules scheduled for next month instead, or this month's when
@@ -161,7 +181,15 @@ a run ticket. The editor opens the preview in the same tab, so the preview's bac
 (`baseballExit`). The HUD (`ui/`) keeps only what the stage's events tell it (`derbyCues.ts`): a release carries
 nothing it shows, so the pitch type reaches the screen only in a result, and the result banner waits until the ball is
 down so it never covers the play; the scoreboard's home runs and their summed distance count a home run as its banner
-shows. The result screen draws the `DerbyResult` that `replayDerby` returns with the `finished` event.
+shows. The result screen draws the `DerbyResult` that `replayDerby` returns with the `finished` event. The rules card
+promises that the camera picture stays on the device and turns off on leaving or after two minutes without movement,
+then turns the camera on. `ui/cameraPanelLayout.ts` places the camera panel: the mirrored camera is the stage while it
+sets up, a column under the scoreboard on the side opposite the batter during a camera run (medium, 29% of the width,
+by default; V or the camera button cycles medium, large, hidden, remembered in `localStorage`), a corner chip while
+the camera chases a home run, and hidden on the result screen (which can turn the camera off) or below a readable
+width, but never while the camera looks for the visitor. The stage centres the play and the HUD its caption and banner
+in the band the panel leaves free (`centreInBand` in `stage/cameraShots.ts`). A camera run takes no key and shows no
+swing button.
 
 ## Backend (`backend/src`)
 

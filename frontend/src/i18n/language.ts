@@ -632,8 +632,59 @@ export const languageCopy = {
           copied: 'Address copied. Paste it into Chrome’s address bar and press Enter.',
           addressLabel: 'Chrome graphics settings address',
         },
+        slow: {
+          title: 'This computer can’t follow a swing in time',
+          description:
+            'It reads the camera too slowly for the derby, so swings would be timed late. Open this page on a faster computer.',
+          copy: 'Copy link',
+          copied: 'Link copied. Open it on a faster computer.',
+          addressLabel: 'Home run derby address',
+        },
         copyByHand: 'Select and copy the address below.',
         reload: 'Reload page',
+      },
+      camera: {
+        turnOn: 'Turn on the camera',
+        turnOff: 'Turn off the camera',
+        tryAgain: 'Try again',
+        notice:
+          'The camera picture is processed on this computer only: it is never recorded or sent anywhere. The camera turns off when you leave this page or after 2 minutes without movement.',
+        setupTitle: 'Step up to the plate',
+        setup: {
+          starting: 'Allow the camera when your browser asks.',
+          loading: 'Getting the camera ready…',
+          measuring: 'Stand where the camera sees your head and shoulders while it checks this computer’s speed.',
+          ready: 'Ready. Step back so the camera sees you, then press Play.',
+        },
+        panelKey: 'During a run, V makes the camera larger or hides it.',
+        states: {
+          starting: 'Camera starting',
+          searching: 'Looking for you',
+          seen: 'Camera sees you',
+          stopped: 'Camera off',
+        },
+        stopped: {
+          idle: 'The camera turned off after 2 minutes without movement.',
+          pagehide: 'The camera turned off when you left the page.',
+          ended: 'The camera stopped. Check that it is connected and no other app is using it, then turn it on again.',
+        },
+        panel: 'Camera view',
+        panelSizes: { medium: 'Medium', large: 'Large', off: 'Hidden' },
+        hiddenWhileSearching: 'Hidden · shows while looking for you',
+        problems: {
+          denied: {
+            title: 'Camera access is off',
+            description: 'Click the site settings icon left of the address bar, set Camera to Allow, then try again.',
+          },
+          missing: { title: 'We couldn’t find a camera', description: 'Connect a camera, then try again.' },
+          busy: { title: 'Another app is using the camera', description: 'Close video-call apps, then try again.' },
+          failed: { title: 'The camera could not start', description: 'Check the camera, then try again.' },
+          tracking: {
+            title: 'Swing tracking could not start',
+            description:
+              'The camera works, but this browser could not start following you. Reload the page, then try again.',
+          },
+        },
       },
     },
     // A venue's own labels, shared by its page and the admin editor.
@@ -1288,8 +1339,54 @@ export const languageCopy = {
           copied: '주소를 복사했어요. Chrome 주소창에 붙여 넣고 Enter를 누르세요.',
           addressLabel: 'Chrome 그래픽 설정 주소',
         },
+        slow: {
+          title: '이 기기에서는 스윙을 정확히 읽기 어려워요',
+          description:
+            '카메라를 읽는 속도가 느려서 스윙 타이밍이 늦게 잡혀요. 더 빠른 컴퓨터에서 이 페이지를 열어 주세요.',
+          copy: '링크 복사',
+          copied: '링크를 복사했어요. 더 빠른 컴퓨터에서 열어 주세요.',
+          addressLabel: '홈런 더비 주소',
+        },
         copyByHand: '아래 주소를 선택해서 복사해 주세요.',
         reload: '새로고침',
+      },
+      camera: {
+        turnOn: '카메라 켜기',
+        turnOff: '카메라 끄기',
+        tryAgain: '다시 시도',
+        notice:
+          '카메라 영상은 이 컴퓨터 안에서만 처리돼요. 녹화하거나 어디로도 보내지 않아요. 이 페이지를 떠나거나 2분 동안 움직임이 없으면 카메라가 꺼져요.',
+        setupTitle: '타석 준비',
+        setup: {
+          starting: '브라우저가 물으면 카메라를 허용해 주세요.',
+          loading: '카메라를 준비하고 있어요…',
+          measuring: '카메라에 머리와 어깨가 보이게 서 주세요. 이 컴퓨터의 인식 속도를 확인하고 있어요.',
+          ready: '준비됐어요. 카메라에 보이게 물러선 뒤 플레이를 눌러 주세요.',
+        },
+        panelKey: '경기 중에 V로 카메라를 크게 하거나 숨겨요.',
+        states: { starting: '카메라 켜는 중', searching: '찾는 중', seen: '보여요', stopped: '카메라 꺼짐' },
+        stopped: {
+          idle: '2분 동안 움직임이 없어서 카메라를 껐어요.',
+          pagehide: '페이지를 떠나서 카메라를 껐어요.',
+          ended: '카메라가 멈췄어요. 연결돼 있는지, 다른 앱이 쓰고 있지 않은지 확인한 뒤 다시 켜 주세요.',
+        },
+        panel: '카메라 화면',
+        panelSizes: { medium: '중간', large: '크게', off: '숨김' },
+        hiddenWhileSearching: '숨김 · 찾는 동안 보여요',
+        problems: {
+          denied: {
+            title: '카메라 권한이 꺼져 있어요',
+            description: '주소창 왼쪽의 사이트 설정 아이콘에서 카메라를 ‘허용’으로 바꾼 뒤 다시 시도해 주세요.',
+          },
+          missing: { title: '카메라를 찾지 못했어요', description: '카메라를 연결한 뒤 다시 시도해 주세요.' },
+          busy: { title: '다른 앱이 카메라를 쓰고 있어요', description: '화상회의 앱 등을 닫고 다시 시도해 주세요.' },
+          failed: { title: '카메라를 켜지 못했어요', description: '카메라를 확인한 뒤 다시 시도해 주세요.' },
+          tracking: {
+            title: '스윙 인식을 시작하지 못했어요',
+            description:
+              '카메라는 켜졌지만 이 브라우저에서 동작 인식을 시작하지 못했어요. 페이지를 새로고침한 뒤 다시 시도해 주세요.',
+          },
+        },
       },
     },
     venues: {

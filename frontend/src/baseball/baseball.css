@@ -18,6 +18,8 @@
     linear-gradient(180deg, #b9ddd8 0%, #dce5bd 58%, #abc77f 100%);
 }
 .derby-screen {
+  /* The camera's picture while it sets up, as wide as a 4:3 picture 90% of the screen's height can be. */
+  --camera-stage-width: min(56vw, 90vh);
   overflow: hidden;
   background: #b9ddd8;
 }
@@ -140,6 +142,27 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
 .derby-actions .primary-button {
   min-width: 168px;
 }
+.derby-secondary {
+  min-height: 52px;
+  padding: 0 22px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--ink);
+  background: var(--surface);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.derby-secondary:hover {
+  background: var(--cream-solid);
+}
+.derby-keyboard-play {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
 .derby-links {
   position: absolute;
   bottom: 0;
@@ -167,6 +190,134 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
 .derby-links .language-select {
   background: var(--surface);
   box-shadow: var(--shadow);
+}
+.derby-camera-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 14px 0 16px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.derby-camera-toggle span {
+  color: var(--muted);
+}
+
+/* The camera's state where the panel shows it already: for a screen reader only. */
+.derby-camera-state {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.derby-camera-stopped {
+  color: #7a3524;
+  font-weight: 700;
+}
+
+/* The setup card stands centred in the room the camera's stage leaves on the side opposite it. */
+.derby-screen .derby-setup {
+  width: min(440px, calc(100% - var(--camera-stage-width) - 64px));
+  padding: 32px 32px 28px;
+}
+.derby-screen .derby-setup[data-panel-side='right'] {
+  left: calc((100% - var(--camera-stage-width) - var(--camera-panel-edge)) / 2);
+}
+.derby-screen .derby-setup[data-panel-side='left'] {
+  left: calc((100% + var(--camera-stage-width) + var(--camera-panel-edge)) / 2);
+}
+.derby-setup-status {
+  margin: 18px 0 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+/* The feed the vision loop reads, rendered so its frames keep coming even while the panel is hidden, but unseen. */
+.camera-feed {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 2px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/*
+ * The camera panel (ui/cameraPanelLayout.ts): the mirrored camera as the stage while it sets up, then during a run a
+ * column under the scoreboard on the side opposite the batter, as wide as the layout says (the play's band is the
+ * rest), and a corner chip while the camera chases a home run. It eases between them; styles.css stills that when the
+ * visitor prefers reduced motion.
+ */
+.camera-panel {
+  --camera-chip-width: 160px;
+  position: absolute;
+  top: 15vh;
+  width: var(--camera-panel-width);
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: 3px solid var(--surface);
+  border-radius: var(--radius-md);
+  background: #1f2a26;
+  box-shadow: var(--shadow);
+  transition:
+    width var(--ease),
+    top var(--ease),
+    transform var(--ease);
+}
+.camera-panel[data-side='right'] {
+  right: var(--camera-panel-edge);
+}
+.camera-panel[data-side='left'] {
+  left: var(--camera-panel-edge);
+}
+.camera-panel[data-placement='stage'] {
+  top: 50%;
+  width: var(--camera-stage-width);
+  transform: translateY(-50%);
+}
+.camera-panel[data-placement='chip'] {
+  top: calc(100% - 2vh - var(--camera-chip-width) * 0.75);
+  width: var(--camera-chip-width);
+}
+.camera-panel canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.camera-state {
+  position: absolute;
+  top: 1.2vh;
+  left: 50%;
+  margin: 0;
+  padding: 0.6vh 1.8vh;
+  border-radius: 999px;
+  color: #fffef9;
+  background: rgba(31, 42, 38, 0.75);
+  font-size: clamp(14px, 3vh, 36px);
+  font-weight: 800;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+.camera-panel[data-seen='true'] .camera-state {
+  background: rgba(71, 111, 96, 0.92);
+}
+.camera-panel[data-placement='chip'] .camera-state {
+  top: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
 }
 
 .derby-result-stats {
@@ -250,11 +401,14 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
 .derby-caption {
   position: absolute;
   top: 2vh;
-  left: 50%;
+  left: var(--play-centre, 50%);
   padding: 1.2vh 3vh;
   transform: translateX(-50%);
-  /* Narrower screens (4:3) shrink it toward the gap between the scoreboard's ends; it can still overlap (TODO.md). */
-  font-size: clamp(28px, min(8vh, 4.2vw), 120px);
+  /*
+   * It sizes to the band the camera panel leaves the play (--play-width), so a narrower band, or a 4:3 screen, shrinks
+   * it toward the gap between the scoreboard's ends; it can still overlap (TODO.md).
+   */
+  font-size: clamp(28px, min(8vh, var(--play-width, 100vw) * 0.042), 120px);
   font-weight: 800;
   line-height: 1;
   white-space: nowrap;
@@ -262,7 +416,7 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
 .derby-banner {
   position: absolute;
   bottom: 12vh;
-  left: 50%;
+  left: var(--play-centre, 50%);
   display: grid;
   justify-items: center;
   gap: 1vh;

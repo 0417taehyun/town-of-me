@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { deviceBlock, type DeviceTraits } from './deviceGate'
+import { cameraProblem, deviceBlock, type DeviceTraits } from './deviceGate'
 
 const macDesktop: DeviceTraits = {
   userAgent:
@@ -46,5 +46,13 @@ describe('the derby device gate', () => {
     }
     expect([macDesktop, touchLaptop].map((device) => deviceBlock(device, () => true))).toEqual([null, null])
     expect(deviceBlock(macDesktop, () => false)).toBe('graphics')
+  })
+
+  it('names why the camera did not start, so the visitor can fix it and try again', () => {
+    const errors = ['NotAllowedError', 'NotFoundError', 'NotReadableError', 'AbortError'].map(
+      (name) => new DOMException('', name),
+    )
+    expect(errors.map(cameraProblem)).toEqual(['denied', 'missing', 'busy', 'failed'])
+    expect(cameraProblem('not an error')).toBe('failed')
   })
 })

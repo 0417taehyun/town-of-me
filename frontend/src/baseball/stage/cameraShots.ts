@@ -133,11 +133,39 @@ export function isShowcaseHomeRun(earlier: readonly PitchResult[], result: Pitch
   return earlier.every((pitch) => pitch.outcome !== 'homeRun' || pitch.distanceDecimetres < result.distanceDecimetres)
 }
 
-/** The camera's eased look point and the shot it last took. */
-export type CameraRig = { look: Vector3; kind: ShotKind | null }
+/**
+ * The camera's eased look point, the shot it last took, and how far (px) right of the screen's centre it draws the
+ * picture's centre.
+ */
+export type CameraRig = { look: Vector3; kind: ShotKind | null; shift: number }
 
 export function createCameraRig(): CameraRig {
-  return { look: new Vector3(), kind: null }
+  return { look: new Vector3(), kind: null, shift: 0 }
+}
+
+/** The part of the screen's width left for the play beside the camera panel, in px: its centre and width. */
+export type FreeBand = { centre: number; width: number }
+
+/** How fast (per second) the picture slides to a new band, as fast as a shot eases. */
+export const BAND_RATE = 4
+
+/**
+ * Draws the picture of a `width` × `height` screen centred in `band`, the part the camera panel leaves free, sliding
+ * there rather than jumping when the panel changes, or jumping with reduced motion. Give the shots `band`'s aspect so
+ * the play fits its width.
+ */
+export function centreInBand(
+  camera: PerspectiveCamera,
+  rig: CameraRig,
+  band: FreeBand,
+  width: number,
+  height: number,
+  delta: number,
+  reducedMotion: boolean,
+) {
+  const target = band.centre - width / 2
+  rig.shift = reducedMotion ? target : damp(rig.shift, target, BAND_RATE, delta)
+  camera.setViewOffset(width, height, -rig.shift, 0, width, height)
 }
 
 const shotTarget = new Vector3()

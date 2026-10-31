@@ -1,0 +1,147 @@
+import type { BattingSide } from '../game/field'
+import type { FreeBand } from '../stage/cameraShots'
+
+// Where the camera panel goes on each screen of a camera run, and how wide it is. While the camera sets up, the
+// mirrored camera is the stage. During a run the panel hangs in a column under the scoreboard on the side opposite the
+// batter, at the size the visitor picks with V (remembered in this browser), and the play is centred in the band it
+// leaves free. It shrinks to a corner chip while the camera chases a home run, and hides on the result screen and
+// whenever the camera is off. It never hides while the camera is looking for the visitor, who has to see it to step
+// back into view.
+
+export type CameraPanelPlacement = 'stage' | 'side' | 'chip' | 'hidden'
+
+export type CameraPanelSize = 'large' | 'medium' | 'off'
+
+export type CameraScreen = 'setup' | 'play' | 'result'
+
+export type PanelSide = 'left' | 'right'
+
+export type Viewport = { width: number; height: number }
+
+/** V's cycle, from the size a first visit starts at. */
+export const CAMERA_PANEL_SIZES: readonly CameraPanelSize[] = ['medium', 'large', 'off']
+
+/** The side panel's width as a share of the screen's. */
+export const PANEL_SHARES = { large: 0.36, medium: 0.29 }
+
+/** The narrowest side panel (px) whose picture and state still read from a step back; a narrower one hides instead. */
+export const MIN_PANEL_WIDTH = 180
+
+/** The panel's gap to the screen's edge (px), which baseball.css reads as `--camera-panel-edge`. */
+export const PANEL_EDGE = 16
+
+/** The tallest the panel's 4:3 picture may be, as a share of the screen's height, so a very wide screen keeps the HUD. */
+export const PANEL_MAX_HEIGHT_SHARE = 0.6
+
+export const PANEL_ASPECT = 4 / 3
+
+/** Where this browser keeps the size picked for the side layout, the only layout so far. */
+export const PANEL_SIZE_KEY = 'town-of-me:baseball:camera-panel:side'
+
+type SizeStore = Pick<Storage, 'getItem' | 'setItem'>
+
+export type CameraPanelState = {
+  /** The screen the camera is on for, or null while the camera is off. */
+  screen: CameraScreen | null
+  /** The camera is following a home run's flight. */
+  chasing: boolean
+  /** The camera is on and does not see the visitor. */
+  searching: boolean
+  /** The size the visitor picked with V. */
+  size: CameraPanelSize
+}
+
+export type CameraPanelLayout = { placement: CameraPanelPlacement; side: PanelSide; width: number; band: FreeBand }
+
+/** The camera's screen: setting up until a run starts, then the run, then its result; null while the camera is off. */
+export function cameraScreen(cameraOn: boolean, running: boolean, finished: boolean): CameraScreen | null {
+  if (!cameraOn) return null
+  if (!running) return 'setup'
+  return finished ? 'result' : 'play'
+}
+
+export function cameraPanelPlacement({ screen, chasing, searching, size }: CameraPanelState): CameraPanelPlacement {
+  if (screen === 'setup') return 'stage'
+  if (screen !== 'play') return 'hidden'
+  if (size === 'off' && !searching) return 'hidden'
+  return chasing ? 'chip' : 'side'
+}
+
+/** The size on screen: a panel the visitor hid comes back at medium while the camera looks for them. */
+export function shownPanelSize(size: CameraPanelSize, searching: boolean): CameraPanelSize {
+  return size === 'off' && searching ? 'medium' : size
+}
+
+/** The side panel's width (px) at `size`, or 0 when it is off or would be too narrow to read. */
+export function sidePanelWidth(size: CameraPanelSize, viewport: Viewport) {
+  if (size === 'off') return 0
+  const tallest = PANEL_MAX_HEIGHT_SHARE * viewport.height * PANEL_ASPECT
+  const width = Math.min(PANEL_SHARES[size] * viewport.width, tallest)
+  return width < MIN_PANEL_WIDTH ? 0 : Math.floor(width)
+}
+
+/** The panel stands on the side opposite the batter: a right-handed batter is on the screen's left. */
+export function panelSideFor(battingSide: BattingSide): PanelSide {
+  return battingSide === 'right' ? 'right' : 'left'
+}
+
+/** The band of a `viewportWidth` screen beside a panel that takes `panelSpan` px from its `side` edge. */
+export function freeBand(viewportWidth: number, panelSpan: number, side: PanelSide): FreeBand {
+  const width = Math.max(0, viewportWidth - panelSpan)
+  const left = side === 'left' ? viewportWidth - width : 0
+  return { centre: left + width / 2, width }
+}
+
+/**
+ * The panel's placement and width, and the band the play is centred in: only a side panel takes room from the play;
+ * the stage is the setup screen's, and the chip sits over a corner of the chase.
+ */
+export function cameraPanelLayout(
+  state: CameraPanelState,
+  viewport: Viewport,
+  battingSide: BattingSide,
+): CameraPanelLayout {
+  const side = panelSideFor(battingSide)
+  const placement = cameraPanelPlacement(state)
+  const width = placement === 'side' ? sidePanelWidth(shownPanelSize(state.size, state.searching), viewport) : 0
+  const shown = placement === 'side' && width === 0 ? 'hidden' : placement
+  const panelSpan = width > 0 ? PANEL_EDGE + width : 0
+  return { placement: shown, side, width, band: freeBand(viewport.width, panelSpan, side) }
+}
+
+export function nextPanelSize(size: CameraPanelSize) {
+  const index = CAMERA_PANEL_SIZES.indexOf(size)
+  return CAMERA_PANEL_SIZES[(index + 1) % CAMERA_PANEL_SIZES.length]
+}
+
+/** This browser's store for the panel size, or null where the browser blocks storage (even reading it can throw). */
+export function browserLocalStore(): SizeStore | null {
+  try {
+    return window.localStorage
+  } catch {
+    return null
+  }
+}
+
+/** The size the visitor last picked in this browser; a first visit, an unknown value, or blocked storage start medium. */
+export function readPanelSize(store: SizeStore | null = browserLocalStore()): CameraPanelSize {
+  try {
+    const stored = store?.getItem(PANEL_SIZE_KEY)
+    return CAMERA_PANEL_SIZES.find((size) => size === stored) ?? CAMERA_PANEL_SIZES[0]
+  } catch {
+    return CAMERA_PANEL_SIZES[0]
+  }
+}
+
+export function savePanelSize(size: CameraPanelSize, store: SizeStore | null = browserLocalStore()) {
+  try {
+    store?.setItem(PANEL_SIZE_KEY, size)
+  } catch {
+    // The size still holds for this visit.
+  }
+}
+
+/** V on any keyboard layout (a Korean one types ㅍ there), unless a modifier makes it a shortcut such as paste. */
+export function isCameraPanelKey(event: Pick<KeyboardEvent, 'code' | 'repeat' | 'altKey' | 'ctrlKey' | 'metaKey'>) {
+  return event.code === 'KeyV' && !event.repeat && !event.altKey && !event.ctrlKey && !event.metaKey
+}
