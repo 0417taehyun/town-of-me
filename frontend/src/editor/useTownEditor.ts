@@ -28,6 +28,20 @@ export function withHistory(state: EditorState, current: TownSnapshot): EditorSt
 }
 
 /**
+ * Edits made while `sent` was being saved stay unsaved but build on the new revision. Untouched venues take the saved
+ * ones, since the backend owns the ballpark rules and may have promoted a schedule; resending the old schedule after
+ * that would be rejected.
+ */
+export function rebaseOnSave(current: TownSnapshot, sent: TownSnapshot, saved: TownSnapshot): TownSnapshot {
+  if (current === sent) return saved
+  return {
+    ...current,
+    venues: current.venues === sent.venues ? saved.venues : current.venues,
+    revision: saved.revision,
+  }
+}
+
+/**
  * Edits always start from a fresh read of the saved town. When it cannot be read, or does not exist, the editor shows
  * its error state instead of starting from anything else, so it can never overwrite the saved town.
  */
@@ -95,13 +109,12 @@ export function useTownEditor(townId: string | null) {
     setNotice(null)
     try {
       const saved = await saveTownLayout(sent)
-      // Edits made while the request was in flight stay unsaved but now build on the new revision.
       setState(
         (current) =>
           current && {
             ...current,
             base: saved,
-            current: current.current === sent ? saved : { ...current.current, revision: saved.revision },
+            current: rebaseOnSave(current.current, sent, saved),
             history: current.current === sent ? [] : current.history,
           },
       )

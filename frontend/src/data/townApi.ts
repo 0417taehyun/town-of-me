@@ -2,15 +2,25 @@ import { GAIT_STYLES } from '../scene/motion/gait'
 import { SKID_STYLES } from '../scene/motion/skidTurn'
 import { normalizeLinkedInProfileUrl } from './linkedInProfile'
 import { recordOrEmpty, requestJson, requireList, requireRecord, requireText, responseRecord } from './apiClient'
-import { normalizePlayerProfile, profileAppearance } from './playerProfile'
+import { isPlayerColor, normalizePlayerProfile, profileAppearance } from './playerProfile'
 import {
+  BALLPARK_COLOR_ROLES,
+  BALLPARK_THEMES,
+  BASEBALL_DIFFICULTIES,
   DEFAULT_TOWN_MOVEMENT,
+  DEFAULT_TOWN_VENUES,
   PET_ROUTE_POINTS,
+  PITCH_COUNT_RANGE,
+  RANKING_MONTH_PATTERN,
   TOWN_GROUND_LIMIT,
   TOWN_OBJECT_TYPES,
   TOWN_OBJECT_VARIANTS,
+  type BallparkColorRole,
+  type BallparkRules,
+  type BallparkSettings,
   type LocalizedText,
   type ResidentDialogue,
+  type ScheduledBallparkRules,
   type TownObject,
   type TownObjectType,
   type TownPoint,
@@ -19,12 +29,14 @@ import {
   type TownResident,
   type TownMovement,
   type TownSnapshot,
+  type TownVenues,
   type Vec3,
 } from './models'
 
 // The wire format of backend/src/town.ts. The backend validates every save; this guards the render boundary.
 
 const objectTypes = new Set<string>(TOWN_OBJECT_TYPES)
+const ballparkColorRoles = new Set<string>(BALLPARK_COLOR_ROLES)
 
 export function trimmedText(value: unknown, label: string) {
   return requireText(value, label).trim()
@@ -169,6 +181,49 @@ export function parseMovement(value: unknown): TownMovement {
   }
 }
 
+/** A town saved before venues existed plays the default ballpark; venue ids this build lacks are left out. */
+export function parseVenues(value: unknown): TownVenues {
+  return { ballpark: parseBallparkSettings(recordOrEmpty(value).ballpark) }
+}
+
+/** Falls back field by field, like movement styles, so a newer town still opens with what this build can show. */
+export function parseBallparkSettings(value: unknown): BallparkSettings {
+  const input = recordOrEmpty(value)
+  const scheduledRules = parseScheduledRules(input.scheduledRules)
+  return {
+    theme: pickStyle(input.theme, BALLPARK_THEMES, DEFAULT_TOWN_VENUES.ballpark.theme),
+    colors: Object.fromEntries(Object.entries(recordOrEmpty(input.colors)).filter(isBallparkColor)),
+    rules: parseBallparkRules(input.rules),
+    ...(scheduledRules ? { scheduledRules } : {}),
+  }
+}
+
+/** An override this build can paint: a known role and a `#rrggbb` color. */
+export function isBallparkColor(entry: [string, unknown]): entry is [BallparkColorRole, string] {
+  return ballparkColorRoles.has(entry[0]) && isPlayerColor(entry[1])
+}
+
+export function parseBallparkRules(value: unknown): BallparkRules {
+  const input = recordOrEmpty(value)
+  const { pitchCount, difficulty } = DEFAULT_TOWN_VENUES.ballpark.rules
+  return {
+    pitchCount: isPitchCount(input.pitchCount) ? input.pitchCount : pitchCount,
+    difficulty: pickStyle(input.difficulty, BASEBALL_DIFFICULTIES, difficulty),
+  }
+}
+
+export function isPitchCount(value: unknown): value is number {
+  const { minimum, maximum } = PITCH_COUNT_RANGE
+  return typeof value === 'number' && Number.isInteger(value) && value >= minimum && value <= maximum
+}
+
+/** A schedule without a `YYYY-MM` month cannot take over, so it is dropped and the rules in effect stay. */
+export function parseScheduledRules(value: unknown): ScheduledBallparkRules | undefined {
+  const input = recordOrEmpty(value)
+  if (typeof input.fromMonth !== 'string' || !RANKING_MONTH_PATTERN.test(input.fromMonth)) return undefined
+  return { fromMonth: input.fromMonth, rules: parseBallparkRules(input.rules) }
+}
+
 // The admin email shape in backend/src/admins.ts.
 const emailPattern = /^[^\s@\p{Cc}]+@[^\s@\p{Cc}]+\.[^\s@\p{Cc}]+$/u
 const emailLengthLimit = 254
@@ -240,6 +295,7 @@ export function parseTownLayout(value: unknown): TownSnapshot {
     pet: parseTownPet(input.pet),
     spawn: parseVector(input.spawn, 'town.spawn'),
     movement: parseMovement(input.movement),
+    venues: parseVenues(input.venues),
     objects,
     residents,
     revision: finiteNumber(input.revision, 'town.revision'),
@@ -265,6 +321,7 @@ export function serializeTownLayout(town: TownSnapshot) {
     pet: town.pet,
     spawn: town.spawn,
     movement: town.movement,
+    venues: town.venues,
     objects: town.objects.map((object) => ({ ...object, color: object.color ?? null })),
     residents: town.residents.map(({ profile, role, relationship, linkedInProfileUrl, reference, ...resident }) => ({
       ...resident,

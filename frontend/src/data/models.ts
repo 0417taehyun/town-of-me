@@ -101,6 +101,49 @@ export type TownMovement = { gait: GaitStyle; skid: SkidStyle }
 
 export const DEFAULT_TOWN_MOVEMENT: TownMovement = { gait: 'plantedFeet', skid: 'long' }
 
+// The ballpark looks this build can draw. A published theme id is never renamed or removed, so a new theme adds only
+// its id and palette. The color roles are the built parts; grass, hedges, trees, and flowers follow the season.
+export const BALLPARK_THEMES = ['garden'] as const
+export const BALLPARK_COLOR_ROLES = ['walls', 'roof', 'trim', 'accent'] as const
+
+// Mirrors ballparkDifficulties, ballparkPitchCountRange, and rankingMonthPattern in backend/src/town.ts, which checks
+// the rules exactly because ranked runs will snapshot them.
+export const BASEBALL_DIFFICULTIES = ['easy', 'normal', 'hard'] as const
+export const PITCH_COUNT_RANGE = { minimum: 3, maximum: 10 } as const
+/** A KST calendar month written `YYYY-MM`; such months sort as text. */
+export const RANKING_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/u
+
+export type BallparkTheme = (typeof BALLPARK_THEMES)[number]
+export type BallparkColorRole = (typeof BALLPARK_COLOR_ROLES)[number]
+export type BaseballDifficulty = (typeof BASEBALL_DIFFICULTIES)[number]
+
+export type BallparkRules = { pitchCount: number; difficulty: BaseballDifficulty }
+
+/** Rules that take over from 00:00 KST on the first day of `fromMonth`, a ranking month. */
+export type ScheduledBallparkRules = { fromMonth: string; rules: BallparkRules }
+
+/** The look applies as soon as it is saved; the rules change only from the start of a KST ranking month. */
+export type BallparkSettings = {
+  theme: BallparkTheme
+  /** Only the roles the admin overrides; every other role keeps the theme's color. */
+  colors: Partial<Record<BallparkColorRole, string>>
+  /**
+   * The rules before `scheduledRules` takes over. Read a month's rules with `effectiveBallparkRules`
+   * (data/ballparkRules.ts); the backend folds a due schedule into these on the next save.
+   */
+  rules: BallparkRules
+  /** Present only while a change is scheduled. */
+  scheduledRules?: ScheduledBallparkRules
+}
+
+/** The large venues at the town's edge, by venue id. */
+export type TownVenues = { ballpark: BallparkSettings }
+
+// The ballpark rules mirror defaultBallparkRules in backend/src/town.ts, which a town saved for the first time gets.
+export const DEFAULT_TOWN_VENUES: TownVenues = {
+  ballpark: { theme: 'garden', colors: {}, rules: { pitchCount: 5, difficulty: 'normal' } },
+}
+
 /** Someone the town's copy names, such as its owner or the pet. */
 export type TownCharacter = { name: LocalizedText }
 
@@ -131,6 +174,7 @@ export type TownSnapshot = {
   pet: TownPet
   spawn: Vec3
   movement: TownMovement
+  venues: TownVenues
   objects: TownObject[]
   residents: TownResident[]
   /** Grows with every save; a save must start from the current revision. */

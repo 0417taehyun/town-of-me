@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { SAMPLE_TOWN } from '../testing/sampleTown'
-import { DEFAULT_TOWN_MOVEMENT } from './models'
+import { DEFAULT_TOWN_MOVEMENT, DEFAULT_TOWN_VENUES } from './models'
 import {
   DialogueDraftError,
   draftResidentDialogue,
@@ -24,6 +24,16 @@ const dialogue = {
 const wireTown = (revision = 1) => ({ ...serializeTownLayout(SAMPLE_TOWN), id: SAMPLE_TOWN.id, revision })
 
 const savedResponse = (revision = 3) => ({ town: { ...wireTown(revision), updatedAt: '2026-10-24T00:00:00.000Z' } })
+
+const ballpark = {
+  theme: 'garden',
+  colors: { roof: '#e8735a' },
+  rules: { pitchCount: 7, difficulty: 'hard' },
+  scheduledRules: { fromMonth: '2026-12', rules: { pitchCount: 3, difficulty: 'easy' } },
+} as const
+
+const withBallpark = (changes: Record<string, unknown>) =>
+  parseTownLayout({ ...wireTown(), venues: { ballpark: { ...ballpark, ...changes } } }).venues.ballpark
 
 describe('town layout API boundary', () => {
   it('round-trips every sample object, resident, and the owner and pet names through the save format', () => {
@@ -120,6 +130,34 @@ describe('town layout API boundary', () => {
       gait: DEFAULT_TOWN_MOVEMENT.gait,
       skid: 'short',
     })
+  })
+
+  it('round-trips the ballpark look, rules, and scheduled rules, so an admin save keeps them', () => {
+    const town = parseTownLayout({ ...wireTown(), venues: { ballpark } })
+    expect(town.venues.ballpark).toEqual(ballpark)
+    expect(parseTownLayout({ ...serializeTownLayout(town), id: town.id, revision: 1 })).toEqual(town)
+    expect(parseTownLayout({ ...wireTown(), venues: undefined }).venues).toEqual(DEFAULT_TOWN_VENUES)
+  })
+
+  it('falls back to the default theme, difficulty, or pitch count for values this build lacks', () => {
+    expect(withBallpark({ theme: 'harvest' }).theme).toBe('garden')
+    const pitchCounts = [2, 3, 10, 11, 4.5, 12, '7']
+    const rules = pitchCounts.map((pitchCount) => withBallpark({ rules: { pitchCount, difficulty: 'expert' } }).rules)
+    expect(rules.map(({ pitchCount }) => pitchCount)).toEqual([5, 3, 10, 5, 5, 5, 5])
+    expect(rules.map(({ difficulty }) => difficulty)).toEqual(pitchCounts.map(() => 'normal'))
+    expect(withBallpark({ rules: { difficulty: 'easy' } }).rules).toEqual({ pitchCount: 5, difficulty: 'easy' })
+  })
+
+  it('drops color overrides for roles the ballpark lacks or that are not #rrggbb, keeping the valid ones', () => {
+    const colors = { roof: '#e8735a', hedge: '#2f5d50', trim: 'coral', walls: 42, accent: '#F2C14E' }
+    expect(withBallpark({ colors }).colors).toEqual({ roof: '#e8735a', accent: '#F2C14E' })
+  })
+
+  it('drops a schedule without a YYYY-MM month and keeps the rules in effect', () => {
+    const schedules = [{ ...ballpark.scheduledRules, fromMonth: '2026-13' }, { rules: ballpark.rules }, '2026-12', null]
+    const parsed = schedules.map((scheduledRules) => withBallpark({ scheduledRules }))
+    expect(parsed.map((settings) => settings.scheduledRules)).toEqual(schedules.map(() => undefined))
+    expect(parsed.map((settings) => settings.rules)).toEqual(schedules.map(() => ballpark.rules))
   })
 
   it('rejects resident motion data that references an unknown bench', () => {
