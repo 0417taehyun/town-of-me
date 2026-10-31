@@ -1,14 +1,40 @@
 import { describe, expect, it } from 'vitest'
-import { advanceDerby, createDerby, type DerbyEvent } from '../game/derby'
-import type { PitchTypeId } from '../game/pitch'
-import { createRunPlan } from '../game/runPlan'
+import { advanceDerby, createDerby, type Derby, type DerbyEvent, phaseEndMs, swingDerby } from '../game/derby'
+import { contactSeconds, type PitchTypeId } from '../game/pitch'
+import { createRunPlan, planRunPitch, type RunPlan } from '../game/runPlan'
 import type { StageEvent } from '../stage/stageRun'
-import { bannerResult, distanceText, homeRunDistanceText, hudAfterEvent, NEW_RUN_HUD } from './derbyCues'
+import {
+  bannerResult,
+  distanceText,
+  homeRunDistanceText,
+  hudAfterEvent,
+  NEW_RUN_HUD,
+  scoreboardTotals,
+} from './derbyCues'
 
-/** What the stage reports for a derby event: a result, then the ball coming down (here, into the mitt). */
+/** What the stage reports for a derby event: a result, then the ball coming down, into the mitt or onto the grass. */
 function stageEventsFor(event: DerbyEvent): StageEvent[] {
   if (event.type !== 'result') return [event]
-  return [event, { type: 'caught', pitchIndex: event.pitchIndex }]
+  const settled = event.result.outcome === 'miss' ? 'caught' : 'landed'
+  return [event, { type: settled, pitchIndex: event.pitchIndex }]
+}
+
+/** A key pressed the moment the pitch on its way reaches the contact point. */
+function swingDeadOn(derby: Derby) {
+  const contactAtMs = derby.phaseStartedMs + contactSeconds(planRunPitch(derby.plan, derby.pitchIndex)) * 1000
+  return swingDerby(derby, { source: 'keyboard', contactAtMs, startedAtMs: contactAtMs, speed: 0, heightError: null })
+}
+
+/** The stage events of a keyboard run swung dead on at every pitch. */
+function deadOnRun(plan: RunPlan) {
+  let derby = createDerby(plan, { input: 'keyboard', side: 'right', practice: [] }, 0)
+  const events: DerbyEvent[] = []
+  while (derby.phase !== 'finished') {
+    const update = derby.phase === 'pitch' ? swingDeadOn(derby) : advanceDerby(derby, phaseEndMs(derby) ?? 0)
+    derby = update.derby
+    events.push(...update.events)
+  }
+  return events.flatMap(stageEventsFor)
 }
 
 describe('the derby HUD', () => {
@@ -35,6 +61,29 @@ describe('the derby HUD', () => {
       ]),
       ['finished', null],
     ])
+  })
+
+  it('adds a home run and its distance to the scoreboard as its banner shows, not when the bat meets the ball', () => {
+    let hud = NEW_RUN_HUD
+    const scoreboard = deadOnRun(createRunPlan({ pitchCount: 3, difficulty: 'normal' }, 11)).map((event) => {
+      hud = hudAfterEvent(hud, event)
+      const { homeRuns, homeRunDistanceDecimetres } = scoreboardTotals(hud)
+      return { type: event.type, homeRuns, distance: homeRunDistanceDecimetres, banner: bannerResult(hud) }
+    })
+    expect(scoreboard.map((row) => [row.type, row.homeRuns])).toEqual([
+      ...[0, 1, 2].flatMap((before) => [
+        ['windup', before],
+        ['release', before],
+        ['result', before],
+        ['landed', before + 1],
+      ]),
+      ['finished', 3],
+    ])
+    const landed = scoreboard.filter((row) => row.type === 'landed')
+    const distances = landed.map((row) => row.banner?.distanceDecimetres ?? 0)
+    expect(landed.map((row) => row.distance)).toEqual(
+      distances.map((_, index) => distances.slice(0, index + 1).reduce((total, distance) => total + distance, 0)),
+    )
   })
 
   it('shows distances in whole meters, spaced in English and not in Korean, and a total to the decimeter', () => {

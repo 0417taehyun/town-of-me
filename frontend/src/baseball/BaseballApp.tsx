@@ -17,7 +17,7 @@ import { useReducedMotion } from '../hooks/useReducedMotion'
 import { type AppLanguage, languageCopy, monthName } from '../i18n/language'
 import { resolveBallparkPalette } from '../scene/venues/ballpark/ballparkThemes'
 import { LanguageSelect } from '../ui/LanguageSelect'
-import { isNextRulesPreview } from './baseballRoute'
+import { type BaseballExit, baseballExit, EXIT_PATHS, isNextRulesPreview } from './baseballRoute'
 import { needsCharacter, withVenueProfile } from './baseballSession'
 import { browserDeviceBlock } from './deviceGate'
 import type { DerbyResult } from './game/derbyScore'
@@ -44,6 +44,8 @@ export function BaseballApp({ townId }: { townId: string }) {
   const [block, setBlock] = useState(browserDeviceBlock)
   const blockGraphics = useCallback(() => setBlock('graphics'), [])
   const copy = languageCopy[language]
+  const preview = isNextRulesPreview(window.location.search)
+  const exit = baseballExit(preview)
 
   useEffect(() => {
     document.title = languageCopy[language].baseball.documentTitle
@@ -52,7 +54,7 @@ export function BaseballApp({ townId }: { townId: string }) {
   if (block)
     return (
       <main className="baseball-app">
-        <BaseballLinks className="baseball-header" language={language} onLanguageChange={setLanguage} />
+        <BaseballLinks className="baseball-header" exit={exit} language={language} onLanguageChange={setLanguage} />
         <DeviceBlocked block={block} language={language} />
       </main>
     )
@@ -91,7 +93,7 @@ export function BaseballApp({ townId }: { townId: string }) {
             firstEntry
             submitLabel={copy.baseball.play}
             onApply={(profile) => save(withVenueProfile(session, profile))}
-            onCancel={() => window.location.assign('/')}
+            onCancel={() => window.location.assign(EXIT_PATHS[exit])}
             onActivateAudio={() => undefined}
           />
         </Suspense>
@@ -101,7 +103,7 @@ export function BaseballApp({ townId }: { townId: string }) {
   return (
     <DerbyScreen
       ballpark={town.venues.ballpark}
-      preview={isNextRulesPreview(window.location.search)}
+      preview={preview}
       profile={session.profile}
       language={language}
       onLanguageChange={setLanguage}
@@ -110,14 +112,19 @@ export function BaseballApp({ townId }: { townId: string }) {
   )
 }
 
-/** The way back to the town and the language choice on every screen of the page, beside any note in `children`. */
+/**
+ * The way back (to the town, or from a preview to the editor) and the language choice on every screen of the page,
+ * beside any note in `children`.
+ */
 export function BaseballLinks({
   className,
+  exit,
   language,
   onLanguageChange,
   children,
 }: {
   className: string
+  exit: BaseballExit
   language: AppLanguage
   onLanguageChange: (language: AppLanguage) => void
   children?: ReactNode
@@ -131,8 +138,8 @@ export function BaseballLinks({
         if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
       }}
     >
-      <a className="baseball-back" href="/">
-        <span aria-hidden="true">←</span> {languageCopy[language].baseball.backToTown}
+      <a className="baseball-back" href={EXIT_PATHS[exit]}>
+        <span aria-hidden="true">←</span> {languageCopy[language].baseball.back[exit]}
       </a>
       <LanguageSelect language={language} className="baseball-language-select" onChange={onLanguageChange} />
       {children}
@@ -144,8 +151,8 @@ export function BaseballLinks({
  * The derby over its stadium: the rules and a play button, then a keyboard run, then its result and another go. Every
  * run reads the KST month when it starts, never when the page loaded. A `preview`, the admin's try of next month's
  * rules, plays those scheduled (or this month's when none are) and says so on every screen; like every keyboard run,
- * it is never ranked. Space or Enter swings while a run plays, and Escape goes back to the town from any of these
- * screens.
+ * it is never ranked. Space or Enter swings while a run plays, and Escape leaves from any of these screens: for the
+ * town, or from a preview back to the editor.
  */
 export function DerbyScreen({
   ballpark,
@@ -175,13 +182,14 @@ export function DerbyScreen({
   const [result, setResult] = useState<DerbyResult | null>(null)
   const playing = run !== null && result === null
   const rulesFor = preview ? plannedBallparkRules : effectiveBallparkRules
+  const exit = baseballExit(preview)
 
   useEffect(() => () => sounds.dispose(), [sounds])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        window.location.assign('/')
+        window.location.assign(EXIT_PATHS[exit])
         return
       }
       if (!playing || !isSwingKey(event)) return
@@ -191,7 +199,7 @@ export function DerbyScreen({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [playing])
+  }, [playing, exit])
 
   const onStageEvent = useCallback(
     (event: StageEvent) => {
@@ -270,8 +278,13 @@ export function DerbyScreen({
           </div>
         </section>
       )}
-      {result && <ResultView result={result} language={language} onPlayAgain={startRun} />}
-      <BaseballLinks className="baseball-header derby-links" language={language} onLanguageChange={onLanguageChange}>
+      {result && <ResultView result={result} exit={exit} language={language} onPlayAgain={startRun} />}
+      <BaseballLinks
+        className="baseball-header derby-links"
+        exit={exit}
+        language={language}
+        onLanguageChange={onLanguageChange}
+      >
         {preview && <p className="derby-preview-badge">{venueCopy.previewBadge}</p>}
       </BaseballLinks>
     </main>

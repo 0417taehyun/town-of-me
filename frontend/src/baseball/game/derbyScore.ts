@@ -10,7 +10,10 @@ import { planRunPitch, type RunPlan } from './runPlan'
 // The live game scores each pitch with these same functions and shows the replayed result at the end, so the numbers
 // on screen are the ones a server recomputing the run will get.
 
-/** A key press measures no speed or bat height, so a keyboard swing is judged without them; its run is never ranked. */
+/**
+ * A key press measures no speed or bat height, so a keyboard swing is judged at a fixed power with the bat level with
+ * the ball; its run is never ranked.
+ */
 export type DerbyInput = 'camera' | 'keyboard'
 
 /**
@@ -93,7 +96,10 @@ export function scorePitch(
   }
 }
 
-/** A raw swing as the judge sees it. A keyboard swing hits at a fixed power with its bat height unknown. */
+/**
+ * A raw swing as the judge sees it. A keyboard swing hits at a fixed power with the bat level with the ball, so a key
+ * timed like the plan carries like it; only a camera swing whose tracking lost the bat is judged at the unknown height.
+ */
 export function toJudgedSwing(
   plan: RunPlan,
   calibration: Calibration,
@@ -102,7 +108,7 @@ export function toJudgedSwing(
   swing: SwingEvent,
 ): JudgedSwing {
   const errorMs = timingErrorMs(planRunPitch(plan, pitchIndex), swing.contactMs, calibration.offsetMs)
-  if (input === 'keyboard' || swing.source === 'keyboard') return { errorMs, power: KEYBOARD_POWER, heightError: null }
+  if (input === 'keyboard' || swing.source === 'keyboard') return { errorMs, power: KEYBOARD_POWER, heightError: 0 }
   return { errorMs, power: swingPower(swing.speed, calibration.peakSpeed), heightError: swing.heightError }
 }
 

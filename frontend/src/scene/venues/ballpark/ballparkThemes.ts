@@ -1,4 +1,9 @@
-import type { BallparkColorRole, BallparkSettings, BallparkTheme } from '../../../data/models'
+import {
+  BALLPARK_COLOR_ROLES,
+  type BallparkColorRole,
+  type BallparkSettings,
+  type BallparkTheme,
+} from '../../../data/models'
 
 // Ballpark themes are data: a new theme is an id in BALLPARK_THEMES (data/models.ts) and a palette here. Grass, hedges,
 // trees, and flowers are not in a palette: they follow the visitor's season like the town's (scene/environment).
@@ -21,15 +26,12 @@ export const BALLPARK_THEME_PALETTES = {
   },
 } satisfies Record<BallparkTheme, BallparkPalette>
 
-/** The theme's palette with the admin's color for each building role they override. */
+/**
+ * The theme's palette with the admin's color for each building role they override. The roles come from the list, so a
+ * role added there takes its override here too.
+ */
 export function resolveBallparkPalette(ballpark: Pick<BallparkSettings, 'theme' | 'colors'>): BallparkPalette {
   const theme = BALLPARK_THEME_PALETTES[ballpark.theme]
-  const { colors } = ballpark
-  return {
-    ...theme,
-    walls: colors.walls ?? theme.walls,
-    roof: colors.roof ?? theme.roof,
-    trim: colors.trim ?? theme.trim,
-    accent: colors.accent ?? theme.accent,
-  }
+  const roleColors = BALLPARK_COLOR_ROLES.map((role) => [role, ballpark.colors[role] ?? theme[role]])
+  return { ...theme, ...(Object.fromEntries(roleColors) as Record<BallparkColorRole, string>) }
 }

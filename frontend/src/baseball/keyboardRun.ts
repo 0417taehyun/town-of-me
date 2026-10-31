@@ -41,7 +41,7 @@ export function keyboardSwing(timeStamp: number): RealTimeSwing {
 
 /**
  * Space or Enter swings, held keys repeat nothing, and a key pressed on a focused control keeps its own meaning there:
- * Enter on "Back to town" still leaves, and Space on a language button still switches. Only the swing button swings.
+ * Enter on the back link still leaves, and Space on a language button still switches. Only the swing button swings.
  */
 export function isSwingKey(event: Pick<KeyboardEvent, 'key' | 'repeat' | 'target'>) {
   if (event.key !== ' ' && event.key !== 'Enter') return false

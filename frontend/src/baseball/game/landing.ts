@@ -11,7 +11,7 @@ export type Outcome = 'homeRun' | 'hit' | 'foul' | 'miss'
 
 /**
  * A swing as the judge sees it: the timing error after calibration (ms, minus = early), the power, and the bat's height
- * against the ball at the contact point (m, plus = above it), or null when nothing measured it (keyboard, lost tracking).
+ * against the ball at the contact point (m, plus = above it), or null when the camera lost the bat.
  */
 export type JudgedSwing = { errorMs: number; power: number; heightError: number | null }
 

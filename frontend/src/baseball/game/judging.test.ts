@@ -7,10 +7,12 @@ import { landingFor, type Landing } from './landing'
 const timingRank: Record<TimingId, number> = { tooEarly: 0, tooLate: 0, early: 1, late: 1, good: 2, perfect: 3 }
 const outcomeRank: Record<Landing['outcome'], number> = { miss: 0, foul: 1, hit: 2, homeRun: 3 }
 const difficulties = Object.values(DIFFICULTY_RULES)
+/** A level bat sends every GOOD swing out of the park; a lost one carries shorter, so some land as hits. */
+const batHeights = [0, null]
 
-function keyboardLanding(errorMs: number, difficulty: keyof typeof DIFFICULTY_RULES) {
+function landingOn(difficulty: keyof typeof DIFFICULTY_RULES, errorMs: number, heightError: number | null) {
   return landingFor(
-    { errorMs, power: KEYBOARD_POWER, heightError: null },
+    { errorMs, power: KEYBOARD_POWER, heightError },
     DIFFICULTY_RULES[difficulty].timingWindows,
     'right',
   )
@@ -30,11 +32,13 @@ describe('swing judging', () => {
       )
       expect(hard).toBeLessThanOrEqual(normal)
       expect(normal).toBeLessThanOrEqual(easy)
-      const [easyLanding, normalLanding, hardLanding] = (['easy', 'normal', 'hard'] as const).map((difficulty) =>
-        landingScore(keyboardLanding(errorMs, difficulty)),
-      )
-      expect(hardLanding).toBeLessThanOrEqual(normalLanding)
-      expect(normalLanding).toBeLessThanOrEqual(easyLanding)
+      batHeights.forEach((heightError) => {
+        const [easyLanding, normalLanding, hardLanding] = (['easy', 'normal', 'hard'] as const).map((difficulty) =>
+          landingScore(landingOn(difficulty, errorMs, heightError)),
+        )
+        expect(hardLanding).toBeLessThanOrEqual(normalLanding)
+        expect(normalLanding).toBeLessThanOrEqual(easyLanding)
+      })
     })
   })
 

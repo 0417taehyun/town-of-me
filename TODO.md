@@ -10,8 +10,9 @@ what changed.
 - Let route handles (residents' and the pet's) move with the keyboard, not only by dragging.
 - Add redo, multi-select, grid snapping, and a two-finger twist to rotate the top view if they prove necessary.
 - Page the guestbook beyond the newest 100 notes if it fills up.
-- Give the `/baseball?rules=next` preview a way back to `/admin`; its back link and Escape lead to the town, so only
-  the browser's Back button returns to the editor.
+- Lay out the `/baseball` HUD for 4:3 and 16:10 screens: its centred English caption covers the home-run count once
+  the summed distance reaches four digits (by about 60 px at 1024×768 and 10 px at 1440×900), and by 9-36 px on 4:3
+  even with three.
 
 ## Backend and security
 

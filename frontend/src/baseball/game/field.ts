@@ -18,17 +18,6 @@ export const BASES = {
   third: { x: -baseOffset, z: -baseOffset },
 }
 
-/** Where the seven fielders stand while a pitch is on its way; the game places the pitcher and catcher itself. */
-export const FIELDER_SPOTS = {
-  first: { x: 21.5, z: -23.5 },
-  second: { x: 9, z: -33.5 },
-  shortstop: { x: -9, z: -33.5 },
-  third: { x: -21.5, z: -23.5 },
-  left: { x: -30, z: -58 },
-  center: { x: 0, z: -70 },
-  right: { x: 30, z: -58 },
-}
-
 /** Heights above the plate (m) and half its width: waist height for the town character, whose hips sit about 0.6 m up. */
 export const STRIKE_ZONE = { bottom: 0.35, top: 0.85, center: 0.6, halfWidth: 0.25 }
 

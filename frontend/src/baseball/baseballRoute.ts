@@ -15,3 +15,13 @@ export const NEXT_RULES_PREVIEW_PATH = `${BASEBALL_PATH}?rules=next`
 export function isNextRulesPreview(search: string) {
   return new URLSearchParams(search).get('rules') === 'next'
 }
+
+/** Where the page's back links and Escape lead, by `baseballExit`. */
+export const EXIT_PATHS = { town: '/', editor: '/admin' } as const
+
+export type BaseballExit = keyof typeof EXIT_PATHS
+
+/** The editor opens its preview in the same tab, so a preview leaves for the editor and any other run for the town. */
+export function baseballExit(preview: boolean): BaseballExit {
+  return preview ? 'editor' : 'town'
+}

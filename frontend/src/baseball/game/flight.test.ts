@@ -17,13 +17,19 @@ const ballsInPlay = Array.from({ length: 29 }, (_, step) => step * 10 - 140)
   )
   .filter((landing) => landing.outcome !== 'miss')
 
+/** Whether a field point is fair and at or past the fence in its own direction, where a home run leaves the park. */
+function pastFence(point: { x: number; z: number }) {
+  const spray = Math.atan2(point.x, -point.z)
+  return Math.abs(spray) <= FOUL_ANGLE && Math.hypot(point.x, point.z) >= fenceDistance(spray)
+}
+
 /** The ball's height on the step it passes the fence, for each time it does. */
 function heightsAtFence(landing: Landing) {
   const flight = createFlight(start, launchForLanding(landing, start))
   return Array.from({ length: 2000 }, () => {
-    const crossedBefore = flight.crossedFence
+    const pastBefore = pastFence(flight.position)
     stepFlight(flight, FLIGHT_STEP_SECONDS)
-    return flight.crossedFence && !crossedBefore ? flight.position.y : null
+    return pastFence(flight.position) && !pastBefore ? flight.position.y : null
   }).filter((height) => height !== null)
 }
 

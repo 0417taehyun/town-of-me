@@ -1,4 +1,5 @@
 import { type AppLanguage, languageCopy } from '../../i18n/language'
+import { type BaseballExit, EXIT_PATHS } from '../baseballRoute'
 import type { DerbyResult } from '../game/derbyScore'
 import { homeRunDistanceText } from './derbyCues'
 
@@ -9,10 +10,12 @@ import { homeRunDistanceText } from './derbyCues'
  */
 export function ResultView({
   result,
+  exit,
   language,
   onPlayAgain,
 }: {
   result: DerbyResult
+  exit: BaseballExit
   language: AppLanguage
   onPlayAgain: () => void
 }) {
@@ -42,8 +45,8 @@ export function ResultView({
         <button className="primary-button" type="button" autoFocus onClick={onPlayAgain}>
           {copy.result.playAgain}
         </button>
-        <a className="baseball-back" href="/">
-          {copy.backToTown}
+        <a className="baseball-back" href={EXIT_PATHS[exit]}>
+          {copy.back[exit]}
         </a>
       </div>
     </section>

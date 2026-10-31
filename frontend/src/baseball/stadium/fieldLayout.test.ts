@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { FENCE_HEIGHT, fenceDistance } from '../game/field'
-import { sprayOf } from '../game/flight'
 import { createFenceSweep, HEDGE_PROFILE } from './fieldLayout'
+
+/** The spray angle (radians, plus = right field) of a field point seen from home plate. */
+function sprayOf(point: { x: number; z: number }) {
+  return Math.atan2(point.x, -point.z)
+}
 
 describe('stadium hedge', () => {
   it("stands on the judge's fence line and no taller than the fence a home run clears", () => {

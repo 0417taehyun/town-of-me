@@ -579,7 +579,7 @@ export const languageCopy = {
       title: 'Home Run Derby',
       loading: 'Opening the ballpark…',
       loadError: 'We could not open the ballpark.',
-      backToTown: 'Back to town',
+      back: { town: 'Back to town', editor: 'Back to the editor' },
       play: 'Play',
       rulesTitle: 'Rules',
       stageLabel: 'The ballpark, seen from behind home plate',
@@ -587,7 +587,7 @@ export const languageCopy = {
       hud: {
         pitch: 'Pitch',
         homeRuns: 'HR',
-        longest: 'Longest',
+        homeRunDistance: 'Total distance',
         swing: 'Swing',
         captions: {
           ready: 'Play ball!',
@@ -1235,7 +1235,7 @@ export const languageCopy = {
       title: '홈런 더비',
       loading: '야구장을 여는 중…',
       loadError: '야구장을 열지 못했습니다.',
-      backToTown: '마을로 돌아가기',
+      back: { town: '마을로 돌아가기', editor: '에디터로 돌아가기' },
       play: '플레이',
       rulesTitle: '경기 규칙',
       stageLabel: '홈플레이트 뒤에서 본 야구장',
@@ -1243,7 +1243,7 @@ export const languageCopy = {
       hud: {
         pitch: '투구',
         homeRuns: '홈런',
-        longest: '최장',
+        homeRunDistance: '총 비거리',
         swing: '스윙',
         captions: {
           ready: '플레이 볼!',

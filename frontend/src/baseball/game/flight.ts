@@ -1,5 +1,4 @@
 import type { Vec3 } from '../../data/models'
-import { fenceDistance, FOUL_ANGLE } from './field'
 import type { Landing } from './landing'
 
 // The batted ball as drawn: gravity and drag in fixed steps, aimed to come down where landing.ts already decided.
@@ -25,24 +24,10 @@ export type BallFlight = {
   /** Frame time not yet stepped, always under one step. */
   pendingSeconds: number
   landed: boolean
-  /** Set on the step a fair ball passes the fence, the moment a home run leaves the park. */
-  crossedFence: boolean
 }
 
 export function createFlight(start: Vec3, velocity: Vec3): BallFlight {
-  return {
-    position: { ...start },
-    velocity: { ...velocity },
-    elapsed: 0,
-    pendingSeconds: 0,
-    landed: false,
-    crossedFence: false,
-  }
-}
-
-/** The spray angle (radians, plus = right field) of a field point seen from home plate. */
-export function sprayOf(point: { x: number; z: number }) {
-  return Math.atan2(point.x, -point.z)
+  return { position: { ...start }, velocity: { ...velocity }, elapsed: 0, pendingSeconds: 0, landed: false }
 }
 
 /** The ground point `distance` m from home plate at spray angle `spray`. */
@@ -72,7 +57,6 @@ export function integrateFlight(flight: BallFlight) {
   position.y += velocity.y * FLIGHT_STEP_SECONDS
   position.z += velocity.z * FLIGHT_STEP_SECONDS
   flight.elapsed += FLIGHT_STEP_SECONDS
-  checkFence(flight)
   if (position.y > BALL_REST_HEIGHT || velocity.y >= 0) return
   const fraction = (before.y - BALL_REST_HEIGHT) / (before.y - position.y)
   position.x = before.x + (position.x - before.x) * fraction
@@ -81,15 +65,7 @@ export function integrateFlight(flight: BallFlight) {
   flight.landed = true
 }
 
-/** Marks the moment a fair ball reaches the fence, so the stage can cheer a home run as it leaves the park. */
-export function checkFence(flight: BallFlight) {
-  const { x, z } = flight.position
-  const spray = sprayOf(flight.position)
-  if (flight.crossedFence || Math.abs(spray) > FOUL_ANGLE || Math.hypot(x, z) < fenceDistance(spray)) return
-  flight.crossedFence = true
-}
-
-/** Flies a copy to the grass, so fielders know where and when the ball comes down before it does. */
+/** Flies a copy to the grass, so the stage knows where and when the ball comes down before it does. */
 export function predictLanding(start: Vec3, velocity: Vec3) {
   const flight = createFlight(start, velocity)
   for (let step = 0; step < MAX_FLIGHT_STEPS && !flight.landed; step += 1) integrateFlight(flight)

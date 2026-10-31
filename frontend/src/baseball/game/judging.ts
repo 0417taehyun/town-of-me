@@ -1,18 +1,11 @@
 import type { TimingWindows } from './difficulty'
 import { contactSeconds, type PitchPlan } from './pitch'
 
-/**
- * Bump when a change to a scoring file (field, seededRandom, pitch, pitchSchedule, difficulty, judging, landing,
- * calibration, runPlan, derbyScore, ../statistics) could score the same run differently, so a stored run says which
- * rules judged it.
- */
-export const JUDGE_VERSION = 1
-
 /** PERFECT and GOOD put the ball in play, early and late foul it off, and too early or too late miss it. */
 export type TimingId = 'perfect' | 'good' | 'early' | 'late' | 'tooEarly' | 'tooLate'
 
 export const SWING_POWER_RANGE = { minimum: 0.5, maximum: 1.15 }
-/** A key press measures no speed, so a keyboard swing hits at this power, with its bat height unknown. */
+/** A key press measures no speed, so a keyboard swing hits at this power, with the bat level with the ball. */
 export const KEYBOARD_POWER = 0.95
 
 /**

@@ -1,7 +1,7 @@
 import type { DerbySound } from '../../audio/derbySounds'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import type { DerbyPhase } from '../game/derby'
-import type { PitchResult } from '../game/derbyScore'
+import { homeRunTotals, type PitchResult } from '../game/derbyScore'
 import type { StageEvent } from '../stage/stageRun'
 
 // The derby's cues, made from the stage's events: what the HUD shows and what the speakers play. The HUD keeps only the
@@ -27,9 +27,12 @@ export function hudAfterEvent(hud: DerbyHudState, event: StageEvent): DerbyHudSt
   return hud
 }
 
-/** The results whose balls have come down: the scoreboard counts a home run as its banner shows it. */
-export function settledResults(hud: DerbyHudState) {
-  return hud.results.slice(0, hud.settledPitch + 1)
+/**
+ * The scoreboard's home runs and their summed distance, from the results whose balls have come down, so a home run
+ * counts as its banner shows it.
+ */
+export function scoreboardTotals(hud: DerbyHudState) {
+  return homeRunTotals(hud.results.slice(0, hud.settledPitch + 1))
 }
 
 /**

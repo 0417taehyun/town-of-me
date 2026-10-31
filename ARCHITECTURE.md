@@ -119,7 +119,8 @@ comparisons, and `Math.sqrt` only, and import nothing at runtime from outside `b
 `baseball/statistics.ts`, so a server can mirror them and score a run the same way. `flight.ts` is display only and
 not one of them. `derbyScore.ts` is that seam: `replayDerby` scores a run from its `RunPlan` (seed and the month's
 rules) and its raw `DerbyInputLog`, recalibrating from the practice swings in it; each swing records whether a camera
-or a key made it, and a key swing is judged at a fixed power. `derby.ts` plays a run on `gameClock.ts` time with the
+or a key made it, and a key swing is judged at a fixed power with the bat level with the ball (a camera swing whose
+tracking lost the bat counts a common height error instead). `derby.ts` plays a run on `gameClock.ts` time with the
 same functions, so the numbers shown live are the replayed ones.
 
 ### `baseball/stage/` and `baseball/stadium/`
@@ -142,9 +143,11 @@ run reads the KST month it starts in and gets a `crypto` seed (`keyboardRun.ts`)
 plays the rules scheduled for it, as loaded with the page, from its next run. The editor's link to `?rules=next`
 (`isNextRulesPreview` in `baseballRoute.ts`) plays the rules scheduled for next month instead, or this month's when
 none are (`plannedBallparkRules`), badged `Preview · not ranked`; once ranked runs exist, such a preview must never get
-a run ticket. The HUD (`ui/`) keeps only what the stage's events tell it (`derbyCues.ts`): a release carries nothing it
-shows, so the pitch type reaches the screen only in a result, and the result banner waits until the ball is down so it
-never covers the play. The result screen draws the `DerbyResult` that `replayDerby` returns with the `finished` event.
+a run ticket. The editor opens the preview in the same tab, so the preview's back links and Escape return to `/admin`
+(`baseballExit`). The HUD (`ui/`) keeps only what the stage's events tell it (`derbyCues.ts`): a release carries
+nothing it shows, so the pitch type reaches the screen only in a result, and the result banner waits until the ball is
+down so it never covers the play; the scoreboard's home runs and their summed distance count a home run as its banner
+shows. The result screen draws the `DerbyResult` that `replayDerby` returns with the `finished` event.
 
 ## Backend (`backend/src`)
 

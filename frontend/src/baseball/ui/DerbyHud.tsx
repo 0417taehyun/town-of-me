@@ -1,19 +1,19 @@
 import { type AppLanguage, languageCopy } from '../../i18n/language'
-import { homeRunTotals } from '../game/derbyScore'
 import {
   bannerResult,
   bannerText,
   captionId,
   type DerbyHudState,
   homeRunDistanceText,
-  settledResults,
+  scoreboardTotals,
 } from './derbyCues'
 
 /**
- * The run as it plays, sized to read from a step back: the scoreboard and a two- or three-word caption in the top band,
- * and once a result's ball is down, its distance and details under the play. It knows only what the stage's events
- * told it (derbyCues.ts), never the pitches to come. The caption and banner are one live region, so a screen reader
- * hears each cue and result. Space and Enter swing anywhere (BaseballApp); the button is for a pointer.
+ * The run as it plays, sized to read from a step back: the scoreboard (home runs, then their summed distance, the two
+ * things a run ranks by, each counting a home run as its banner shows) and a two- or three-word caption in the top
+ * band, and once a result's ball is down, its distance and details under the play. It knows only what the stage's
+ * events told it (derbyCues.ts), never the pitches to come. The caption and banner are one live region, so a screen
+ * reader hears each cue and result. Space and Enter swing anywhere (BaseballApp); the button is for a pointer.
  */
 export function DerbyHud({
   hud,
@@ -27,7 +27,7 @@ export function DerbyHud({
   onSwing: (timeStamp: number) => void
 }) {
   const copy = languageCopy[language].baseball.hud
-  const score = homeRunTotals(settledResults(hud))
+  const score = scoreboardTotals(hud)
   const shown = bannerResult(hud)
   const banner = shown && bannerText(shown, language)
   return (
@@ -45,8 +45,8 @@ export function DerbyHud({
             <strong>{score.homeRuns}</strong>
           </p>
           <p className="derby-stat">
-            <span>{copy.longest}</span>
-            <strong>{homeRunDistanceText(score.longestHomeRunDecimetres, language)}</strong>
+            <span>{copy.homeRunDistance}</span>
+            <strong>{homeRunDistanceText(score.homeRunDistanceDecimetres, language)}</strong>
           </p>
         </div>
       </div>
