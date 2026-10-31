@@ -1,0 +1,23 @@
+version: 2
+updates:
+  # Both workspaces share one lockfile at the root. Shared tools (ESLint, TypeScript, Prettier) bump both modules'
+  # package.json in one pull request, which the module-scope check allows for dependency-only changes.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # typescript-eslint supports TypeScript below 6.1, and TypeScript minor releases can break it.
+      - dependency-name: typescript
+        versions: ['>=6.1.0']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+
+  # Docker base images are left out: tags such as node:26-alpine already pull the latest patch on a fresh build, and
+  # Node majors are moved by hand between LTS releases.

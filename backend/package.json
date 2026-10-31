@@ -1,0 +1,30 @@
+{
+  "name": "town-of-me-backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "npm run build && node ../scripts/run-parallel.mjs dev:compile dev:serve",
+    "dev:compile": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "dev:serve": "node watch-server.mjs",
+    "lint": "tsc -p tsconfig.json --noEmit && eslint .",
+    "start": "node server.mjs",
+    "test": "npm run build && node dist/test/run.js",
+    "format": "prettier --write . --ignore-path ../.gitignore",
+    "format:check": "prettier --check . --ignore-path ../.gitignore"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/pg": "8.23.1",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0",
+    "prettier": "3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.0"
+  },
+  "dependencies": {
+    "jose": "6.2.13",
+    "pg": "8.23.1"
+  }
+}

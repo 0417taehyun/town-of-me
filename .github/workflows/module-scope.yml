@@ -1,0 +1,34 @@
+name: Module scope
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  single-module:
+    name: Reject mixed frontend/backend changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Check changed module paths
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PULL_REQUEST_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BASE: ${{ github.event.before }}
+        run: |
+          base="$PUSH_BASE"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then base="$PULL_REQUEST_BASE"; fi
+          if [[ -z "$base" || "$base" =~ ^0+$ ]]; then base="$(git rev-list --max-parents=0 HEAD)"; fi
+
+          changed_files="$(git diff --name-only "$base" "$GITHUB_SHA")"
+          # A dependency-only change (package manifests and the root lockfile, as Dependabot opens) may touch both.
+          if ! grep -qvE '^((frontend|backend)/)?package\.json$|^package-lock\.json$' <<< "$changed_files"; then exit 0; fi
+          if grep -q '^frontend/' <<< "$changed_files" && grep -q '^backend/' <<< "$changed_files"; then
+            echo "A change may not modify both frontend/ and backend/. Split it into separate changes."
+            exit 1
+          fi

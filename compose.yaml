@@ -1,0 +1,71 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    # Comes back with Docker after a restart, so `npm run dev` finds the database.
+    restart: unless-stopped
+    environment:
+      # The image creates this database and role on first start; change the password outside local use.
+      POSTGRES_DB: ${POSTGRES_DB:-town_of_me}
+      POSTGRES_USER: ${POSTGRES_USER:-town_of_me}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-town_of_me}
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    environment:
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      ALLOWED_ORIGINS: http://localhost:${FRONTEND_PORT:-8080}
+      DATABASE_URL: postgres://${POSTGRES_USER:-town_of_me}:${POSTGRES_PASSWORD:-town_of_me}@postgres:5432/${POSTGRES_DB:-town_of_me}
+      FRONTEND_URL: http://localhost:${FRONTEND_PORT:-8080}/admin
+      LINKED_IN_CLIENT_ID: ${LINKED_IN_CLIENT_ID:-}
+      LINKED_IN_CLIENT_SECRET: ${LINKED_IN_CLIENT_SECRET:-}
+      LINKED_IN_REDIRECT_URI: ${LINKED_IN_REDIRECT_URI:-http://localhost:3000/v1/auth/linkedin/callback}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openrouter/auto}
+      OPENROUTER_SITE_NAME: ${OPENROUTER_SITE_NAME:-Town of Me}
+      OPENROUTER_SITE_URL: ${OPENROUTER_SITE_URL:-http://localhost:8080}
+      PORT: 3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '${BACKEND_PORT:-3000}:3000'
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/healthz').then(response => { if (!response.ok) process.exit(1) }).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - '${FRONTEND_PORT:-8080}:80'
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1/healthz']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  postgres-data:

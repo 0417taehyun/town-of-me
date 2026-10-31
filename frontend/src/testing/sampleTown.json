@@ -1,0 +1,3179 @@
+{
+  "id": "mossbell",
+  "name": "Mossbell",
+  "spawn": {
+    "x": 0,
+    "y": 1.2,
+    "z": 6
+  },
+  "movement": {
+    "gait": "plantedFeet",
+    "skid": "long"
+  },
+  "objects": [
+    {
+      "id": "house-owner",
+      "type": "house",
+      "position": {
+        "x": -29,
+        "y": 0,
+        "z": -24
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": "#d9826f",
+      "ownerName": "Robin",
+      "description": "Builder of this little town"
+    },
+    {
+      "id": "house-maple",
+      "type": "house",
+      "position": {
+        "x": 22,
+        "y": 0,
+        "z": -29
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": "#e7aa58",
+      "ownerName": "Maple",
+      "description": "Baker at the corner bakery"
+    },
+    {
+      "id": "house-juno",
+      "type": "house",
+      "position": {
+        "x": 30,
+        "y": 0,
+        "z": 17
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": "#78aeb3",
+      "ownerName": "Juno",
+      "description": "Gardener of the community garden"
+    },
+    {
+      "id": "house-pip",
+      "type": "house",
+      "position": {
+        "x": -21,
+        "y": 0,
+        "z": 28
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": "#9e8bc1",
+      "ownerName": "Pip",
+      "description": "Keeper of the lighthouse"
+    },
+    {
+      "id": "bench-west",
+      "type": "bench",
+      "position": {
+        "x": -8,
+        "y": 0,
+        "z": 4
+      },
+      "rotation": 0,
+      "scale": 1,
+      "seats": 2,
+      "color": null
+    },
+    {
+      "id": "bench-east",
+      "type": "bench",
+      "position": {
+        "x": 8,
+        "y": 0,
+        "z": -4
+      },
+      "rotation": 0,
+      "scale": 1,
+      "seats": 2,
+      "color": null
+    },
+    {
+      "id": "bench-north",
+      "type": "bench",
+      "position": {
+        "x": -7,
+        "y": 0,
+        "z": -18
+      },
+      "rotation": 0,
+      "scale": 1,
+      "seats": 1,
+      "color": null
+    },
+    {
+      "id": "bench-garden",
+      "type": "bench",
+      "position": {
+        "x": 16,
+        "y": 0,
+        "z": 28
+      },
+      "rotation": 0,
+      "scale": 1,
+      "seats": 2,
+      "color": null
+    },
+    {
+      "id": "bench-west-grove",
+      "type": "bench",
+      "position": {
+        "x": -30,
+        "y": 0,
+        "z": 13
+      },
+      "rotation": 0,
+      "scale": 1,
+      "seats": 2,
+      "color": null
+    },
+    {
+      "id": "bench-southwest",
+      "type": "bench",
+      "position": {
+        "x": -15,
+        "y": 0,
+        "z": -13
+      },
+      "rotation": 0,
+      "scale": 1,
+      "seats": 2,
+      "color": null
+    },
+    {
+      "id": "bench-northeast",
+      "type": "bench",
+      "position": {
+        "x": 18,
+        "y": 0,
+        "z": 14
+      },
+      "rotation": 0,
+      "scale": 1,
+      "seats": 2,
+      "color": null
+    },
+    {
+      "id": "bench-south",
+      "type": "bench",
+      "position": {
+        "x": 4,
+        "y": 0,
+        "z": -22
+      },
+      "rotation": 0,
+      "scale": 1,
+      "seats": 1,
+      "color": null
+    },
+    {
+      "id": "toto-house",
+      "type": "dogHouse",
+      "position": {
+        "x": -36.2,
+        "y": 0,
+        "z": -23.2
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": "#d88a43"
+    },
+    {
+      "id": "lamp-1",
+      "type": "lamp",
+      "position": {
+        "x": -7,
+        "y": 0,
+        "z": -7
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "lamp-2",
+      "type": "lamp",
+      "position": {
+        "x": 7,
+        "y": 0,
+        "z": -7
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "lamp-3",
+      "type": "lamp",
+      "position": {
+        "x": -7,
+        "y": 0,
+        "z": 7
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "lamp-4",
+      "type": "lamp",
+      "position": {
+        "x": 7,
+        "y": 0,
+        "z": 7
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "lamp-5",
+      "type": "lamp",
+      "position": {
+        "x": -22,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "lamp-6",
+      "type": "lamp",
+      "position": {
+        "x": 22,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "lamp-7",
+      "type": "lamp",
+      "position": {
+        "x": -15,
+        "y": 0,
+        "z": -9
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "lamp-8",
+      "type": "lamp",
+      "position": {
+        "x": 14,
+        "y": 0,
+        "z": -12
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "lamp-9",
+      "type": "lamp",
+      "position": {
+        "x": -17,
+        "y": 0,
+        "z": 14
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "lamp-10",
+      "type": "lamp",
+      "position": {
+        "x": 16.535756805311127,
+        "y": 0,
+        "z": 16.293431345515803
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "lamp-11",
+      "type": "lamp",
+      "position": {
+        "x": -7,
+        "y": 0,
+        "z": 28
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "lamp-12",
+      "type": "lamp",
+      "position": {
+        "x": 8,
+        "y": 0,
+        "z": 25
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "lamp-13",
+      "type": "lamp",
+      "position": {
+        "x": -32,
+        "y": 0,
+        "z": -4
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "lamp-14",
+      "type": "lamp",
+      "position": {
+        "x": 30,
+        "y": 0,
+        "z": -8
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "rock-1",
+      "type": "rock",
+      "position": {
+        "x": -34,
+        "y": 0,
+        "z": 11
+      },
+      "rotation": 0,
+      "scale": 1.2,
+      "color": null
+    },
+    {
+      "id": "rock-2",
+      "type": "rock",
+      "position": {
+        "x": 37,
+        "y": 0,
+        "z": 4
+      },
+      "rotation": 0,
+      "scale": 0.8,
+      "color": null
+    },
+    {
+      "id": "rock-3",
+      "type": "rock",
+      "position": {
+        "x": 14,
+        "y": 0,
+        "z": 39
+      },
+      "rotation": 0,
+      "scale": 1.1,
+      "color": null
+    },
+    {
+      "id": "rock-4",
+      "type": "rock",
+      "position": {
+        "x": -11,
+        "y": 0,
+        "z": -39
+      },
+      "rotation": 0,
+      "scale": 0.7,
+      "color": null
+    },
+    {
+      "id": "tree-0",
+      "type": "tree",
+      "position": {
+        "x": -47,
+        "y": 0,
+        "z": -44
+      },
+      "rotation": 0,
+      "scale": 0.82,
+      "color": null
+    },
+    {
+      "id": "tree-1",
+      "type": "tree",
+      "position": {
+        "x": -38,
+        "y": 0,
+        "z": -47
+      },
+      "rotation": 0.37,
+      "scale": 0.8899999999999999,
+      "color": null
+    },
+    {
+      "id": "tree-2",
+      "type": "tree",
+      "position": {
+        "x": -28,
+        "y": 0,
+        "z": -46
+      },
+      "rotation": 0.74,
+      "scale": 0.96,
+      "color": null
+    },
+    {
+      "id": "tree-3",
+      "type": "tree",
+      "position": {
+        "x": -17,
+        "y": 0,
+        "z": -47
+      },
+      "rotation": 1.1099999999999999,
+      "scale": 1.03,
+      "color": null
+    },
+    {
+      "id": "tree-4",
+      "type": "tree",
+      "position": {
+        "x": -7,
+        "y": 0,
+        "z": -46
+      },
+      "rotation": 1.48,
+      "scale": 1.1,
+      "color": null
+    },
+    {
+      "id": "tree-5",
+      "type": "tree",
+      "position": {
+        "x": 8,
+        "y": 0,
+        "z": -47
+      },
+      "rotation": 1.85,
+      "scale": 0.82,
+      "color": null
+    },
+    {
+      "id": "tree-6",
+      "type": "tree",
+      "position": {
+        "x": 18,
+        "y": 0,
+        "z": -46
+      },
+      "rotation": 2.2199999999999998,
+      "scale": 0.8899999999999999,
+      "color": null
+    },
+    {
+      "id": "tree-7",
+      "type": "tree",
+      "position": {
+        "x": 29,
+        "y": 0,
+        "z": -47
+      },
+      "rotation": 0,
+      "scale": 0.96,
+      "color": null
+    },
+    {
+      "id": "tree-8",
+      "type": "tree",
+      "position": {
+        "x": 40,
+        "y": 0,
+        "z": -45
+      },
+      "rotation": 0.37,
+      "scale": 1.03,
+      "color": null
+    },
+    {
+      "id": "tree-9",
+      "type": "tree",
+      "position": {
+        "x": 47,
+        "y": 0,
+        "z": -39
+      },
+      "rotation": 0.74,
+      "scale": 1.1,
+      "color": null
+    },
+    {
+      "id": "tree-10",
+      "type": "tree",
+      "position": {
+        "x": 47,
+        "y": 0,
+        "z": -29
+      },
+      "rotation": 1.1099999999999999,
+      "scale": 0.82,
+      "color": null
+    },
+    {
+      "id": "tree-11",
+      "type": "tree",
+      "position": {
+        "x": 46,
+        "y": 0,
+        "z": -18
+      },
+      "rotation": 1.48,
+      "scale": 0.8899999999999999,
+      "color": null
+    },
+    {
+      "id": "tree-12",
+      "type": "tree",
+      "position": {
+        "x": 48,
+        "y": 0,
+        "z": -8
+      },
+      "rotation": 1.85,
+      "scale": 0.96,
+      "color": null
+    },
+    {
+      "id": "tree-13",
+      "type": "tree",
+      "position": {
+        "x": 47,
+        "y": 0,
+        "z": 8
+      },
+      "rotation": 2.2199999999999998,
+      "scale": 1.03,
+      "color": null
+    },
+    {
+      "id": "tree-14",
+      "type": "tree",
+      "position": {
+        "x": 47,
+        "y": 0,
+        "z": 19
+      },
+      "rotation": 0,
+      "scale": 1.1,
+      "color": null
+    },
+    {
+      "id": "tree-15",
+      "type": "tree",
+      "position": {
+        "x": 46,
+        "y": 0,
+        "z": 31
+      },
+      "rotation": 0.37,
+      "scale": 0.82,
+      "color": null
+    },
+    {
+      "id": "tree-16",
+      "type": "tree",
+      "position": {
+        "x": 45,
+        "y": 0,
+        "z": 42
+      },
+      "rotation": 0.74,
+      "scale": 0.8899999999999999,
+      "color": null
+    },
+    {
+      "id": "tree-17",
+      "type": "tree",
+      "position": {
+        "x": 36,
+        "y": 0,
+        "z": 47
+      },
+      "rotation": 1.1099999999999999,
+      "scale": 0.96,
+      "color": null
+    },
+    {
+      "id": "tree-18",
+      "type": "tree",
+      "position": {
+        "x": 25,
+        "y": 0,
+        "z": 46
+      },
+      "rotation": 1.48,
+      "scale": 1.03,
+      "color": null
+    },
+    {
+      "id": "tree-19",
+      "type": "tree",
+      "position": {
+        "x": 14,
+        "y": 0,
+        "z": 47
+      },
+      "rotation": 1.85,
+      "scale": 1.1,
+      "color": null
+    },
+    {
+      "id": "tree-20",
+      "type": "tree",
+      "position": {
+        "x": 3,
+        "y": 0,
+        "z": 46
+      },
+      "rotation": 2.2199999999999998,
+      "scale": 0.82,
+      "color": null
+    },
+    {
+      "id": "tree-21",
+      "type": "tree",
+      "position": {
+        "x": -9,
+        "y": 0,
+        "z": 47
+      },
+      "rotation": 0,
+      "scale": 0.8899999999999999,
+      "color": null
+    },
+    {
+      "id": "tree-22",
+      "type": "tree",
+      "position": {
+        "x": -20,
+        "y": 0,
+        "z": 46
+      },
+      "rotation": 0.37,
+      "scale": 0.96,
+      "color": null
+    },
+    {
+      "id": "tree-23",
+      "type": "tree",
+      "position": {
+        "x": -31,
+        "y": 0,
+        "z": 47
+      },
+      "rotation": 0.74,
+      "scale": 1.03,
+      "color": null
+    },
+    {
+      "id": "tree-24",
+      "type": "tree",
+      "position": {
+        "x": -42,
+        "y": 0,
+        "z": 44
+      },
+      "rotation": 1.1099999999999999,
+      "scale": 1.1,
+      "color": null
+    },
+    {
+      "id": "tree-25",
+      "type": "tree",
+      "position": {
+        "x": -47,
+        "y": 0,
+        "z": 36
+      },
+      "rotation": 1.48,
+      "scale": 0.82,
+      "color": null
+    },
+    {
+      "id": "tree-26",
+      "type": "tree",
+      "position": {
+        "x": -46,
+        "y": 0,
+        "z": 25
+      },
+      "rotation": 1.85,
+      "scale": 0.8899999999999999,
+      "color": null
+    },
+    {
+      "id": "tree-27",
+      "type": "tree",
+      "position": {
+        "x": -47,
+        "y": 0,
+        "z": 14
+      },
+      "rotation": 2.2199999999999998,
+      "scale": 0.96,
+      "color": null
+    },
+    {
+      "id": "tree-28",
+      "type": "tree",
+      "position": {
+        "x": -46,
+        "y": 0,
+        "z": 3
+      },
+      "rotation": 0,
+      "scale": 1.03,
+      "color": null
+    },
+    {
+      "id": "tree-29",
+      "type": "tree",
+      "position": {
+        "x": -47,
+        "y": 0,
+        "z": -8
+      },
+      "rotation": 0.37,
+      "scale": 1.1,
+      "color": null
+    },
+    {
+      "id": "tree-30",
+      "type": "tree",
+      "position": {
+        "x": -46,
+        "y": 0,
+        "z": -20
+      },
+      "rotation": 0.74,
+      "scale": 0.82,
+      "color": null
+    },
+    {
+      "id": "tree-31",
+      "type": "tree",
+      "position": {
+        "x": -47,
+        "y": 0,
+        "z": -31
+      },
+      "rotation": 1.1099999999999999,
+      "scale": 0.8899999999999999,
+      "color": null
+    },
+    {
+      "id": "tree-32",
+      "type": "tree",
+      "position": {
+        "x": -38,
+        "y": 0,
+        "z": -35
+      },
+      "rotation": 1.48,
+      "scale": 0.96,
+      "color": null
+    },
+    {
+      "id": "tree-33",
+      "type": "tree",
+      "position": {
+        "x": -31,
+        "y": 0,
+        "z": -31
+      },
+      "rotation": 1.85,
+      "scale": 1.03,
+      "color": null
+    },
+    {
+      "id": "tree-34",
+      "type": "tree",
+      "position": {
+        "x": -17,
+        "y": 0,
+        "z": -34
+      },
+      "rotation": 2.2199999999999998,
+      "scale": 1.1,
+      "color": null
+    },
+    {
+      "id": "tree-35",
+      "type": "tree",
+      "position": {
+        "x": -10,
+        "y": 0,
+        "z": -27
+      },
+      "rotation": 0,
+      "scale": 0.82,
+      "color": null
+    },
+    {
+      "id": "tree-36",
+      "type": "tree",
+      "position": {
+        "x": 12,
+        "y": 0,
+        "z": -33
+      },
+      "rotation": 0.37,
+      "scale": 0.8899999999999999,
+      "color": null
+    },
+    {
+      "id": "tree-37",
+      "type": "tree",
+      "position": {
+        "x": 15.119705963452596,
+        "y": 0,
+        "z": -27.392729584066622
+      },
+      "rotation": 0.74,
+      "scale": 0.96,
+      "color": null
+    },
+    {
+      "id": "tree-38",
+      "type": "tree",
+      "position": {
+        "x": 34,
+        "y": 0,
+        "z": -34
+      },
+      "rotation": 1.1099999999999999,
+      "scale": 1.03,
+      "color": null
+    },
+    {
+      "id": "tree-39",
+      "type": "tree",
+      "position": {
+        "x": 39,
+        "y": 0,
+        "z": -25
+      },
+      "rotation": 1.48,
+      "scale": 1.1,
+      "color": null
+    },
+    {
+      "id": "tree-40",
+      "type": "tree",
+      "position": {
+        "x": -37,
+        "y": 0,
+        "z": -8
+      },
+      "rotation": 1.85,
+      "scale": 0.82,
+      "color": null
+    },
+    {
+      "id": "tree-41",
+      "type": "tree",
+      "position": {
+        "x": -33,
+        "y": 0,
+        "z": 4
+      },
+      "rotation": 2.2199999999999998,
+      "scale": 0.8899999999999999,
+      "color": null
+    },
+    {
+      "id": "tree-42",
+      "type": "tree",
+      "position": {
+        "x": -39,
+        "y": 0,
+        "z": 15
+      },
+      "rotation": 0,
+      "scale": 0.96,
+      "color": null
+    },
+    {
+      "id": "tree-43",
+      "type": "tree",
+      "position": {
+        "x": -34,
+        "y": 0,
+        "z": 31
+      },
+      "rotation": 0.37,
+      "scale": 1.03,
+      "color": null
+    },
+    {
+      "id": "tree-44",
+      "type": "tree",
+      "position": {
+        "x": -13.8,
+        "y": 0,
+        "z": 34
+      },
+      "rotation": 0.74,
+      "scale": 1.1,
+      "color": null
+    },
+    {
+      "id": "tree-45",
+      "type": "tree",
+      "position": {
+        "x": -12,
+        "y": 0,
+        "z": 26
+      },
+      "rotation": 1.1099999999999999,
+      "scale": 0.82,
+      "color": null
+    },
+    {
+      "id": "tree-46",
+      "type": "tree",
+      "position": {
+        "x": 12,
+        "y": 0,
+        "z": 29
+      },
+      "rotation": 1.48,
+      "scale": 0.8899999999999999,
+      "color": null
+    },
+    {
+      "id": "tree-47",
+      "type": "tree",
+      "position": {
+        "x": 19,
+        "y": 0,
+        "z": 36
+      },
+      "rotation": 1.85,
+      "scale": 0.96,
+      "color": null
+    },
+    {
+      "id": "tree-48",
+      "type": "tree",
+      "position": {
+        "x": 34,
+        "y": 0,
+        "z": 29
+      },
+      "rotation": 2.2199999999999998,
+      "scale": 1.03,
+      "color": null
+    },
+    {
+      "id": "tree-49",
+      "type": "tree",
+      "position": {
+        "x": 38,
+        "y": 0,
+        "z": 14
+      },
+      "rotation": 0,
+      "scale": 1.1,
+      "color": null
+    },
+    {
+      "id": "tree-50",
+      "type": "tree",
+      "position": {
+        "x": 35,
+        "y": 0,
+        "z": 3
+      },
+      "rotation": 0.37,
+      "scale": 0.82,
+      "color": null
+    },
+    {
+      "id": "tree-51",
+      "type": "tree",
+      "position": {
+        "x": 37,
+        "y": 0,
+        "z": -9
+      },
+      "rotation": 0.74,
+      "scale": 0.8899999999999999,
+      "color": null
+    },
+    {
+      "id": "tree-52",
+      "type": "tree",
+      "position": {
+        "x": -28,
+        "y": 0,
+        "z": 10
+      },
+      "rotation": 1.1099999999999999,
+      "scale": 0.96,
+      "color": null
+    },
+    {
+      "id": "tree-53",
+      "type": "tree",
+      "position": {
+        "x": -27.5868626910316,
+        "y": 0,
+        "z": 28.07151361062225
+      },
+      "rotation": 1.48,
+      "scale": 1.03,
+      "color": null
+    },
+    {
+      "id": "tree-54",
+      "type": "tree",
+      "position": {
+        "x": 27,
+        "y": 0,
+        "z": 10
+      },
+      "rotation": 1.85,
+      "scale": 1.1,
+      "color": null
+    },
+    {
+      "id": "tree-55",
+      "type": "tree",
+      "position": {
+        "x": 29,
+        "y": 0,
+        "z": -5
+      },
+      "rotation": 2.2199999999999998,
+      "scale": 0.82,
+      "color": null
+    },
+    {
+      "id": "tree-56",
+      "type": "tree",
+      "position": {
+        "x": -16,
+        "y": 0,
+        "z": -5
+      },
+      "rotation": 0,
+      "scale": 0.8899999999999999,
+      "color": null
+    },
+    {
+      "id": "tree-57",
+      "type": "tree",
+      "position": {
+        "x": 18,
+        "y": 0,
+        "z": 5
+      },
+      "rotation": 0.37,
+      "scale": 0.96,
+      "color": null
+    },
+    {
+      "id": "flower-0",
+      "type": "flower",
+      "position": {
+        "x": -6,
+        "y": 0,
+        "z": 11
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-1",
+      "type": "flower",
+      "position": {
+        "x": -4,
+        "y": 0,
+        "z": 12
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-2",
+      "type": "flower",
+      "position": {
+        "x": -1,
+        "y": 0,
+        "z": 11
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-3",
+      "type": "flower",
+      "position": {
+        "x": 3,
+        "y": 0,
+        "z": 12
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-4",
+      "type": "flower",
+      "position": {
+        "x": 6,
+        "y": 0,
+        "z": 11
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-5",
+      "type": "flower",
+      "position": {
+        "x": -18,
+        "y": 0,
+        "z": 7
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-6",
+      "type": "flower",
+      "position": {
+        "x": -17,
+        "y": 0,
+        "z": 9
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-7",
+      "type": "flower",
+      "position": {
+        "x": 16,
+        "y": 0,
+        "z": 18
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-8",
+      "type": "flower",
+      "position": {
+        "x": 18,
+        "y": 0,
+        "z": 19
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-9",
+      "type": "flower",
+      "position": {
+        "x": -28.706568654484197,
+        "y": 0,
+        "z": -13.464243194688875
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-10",
+      "type": "flower",
+      "position": {
+        "x": -26.6,
+        "y": 0,
+        "z": -13
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-11",
+      "type": "flower",
+      "position": {
+        "x": 29,
+        "y": 0,
+        "z": -13
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-12",
+      "type": "flower",
+      "position": {
+        "x": 31,
+        "y": 0,
+        "z": -14
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-13",
+      "type": "flower",
+      "position": {
+        "x": -30,
+        "y": 0,
+        "z": 18
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-14",
+      "type": "flower",
+      "position": {
+        "x": -28,
+        "y": 0,
+        "z": 19
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-15",
+      "type": "flower",
+      "position": {
+        "x": 28,
+        "y": 0,
+        "z": 27.2
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-16",
+      "type": "flower",
+      "position": {
+        "x": 36.6,
+        "y": 0,
+        "z": 22
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-17",
+      "type": "flower",
+      "position": {
+        "x": -11,
+        "y": 0,
+        "z": 15
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-18",
+      "type": "flower",
+      "position": {
+        "x": -9,
+        "y": 0,
+        "z": 13
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-19",
+      "type": "flower",
+      "position": {
+        "x": 9,
+        "y": 0,
+        "z": 15
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-20",
+      "type": "flower",
+      "position": {
+        "x": 12,
+        "y": 0,
+        "z": 17
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-21",
+      "type": "flower",
+      "position": {
+        "x": -20,
+        "y": 0,
+        "z": -8
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-22",
+      "type": "flower",
+      "position": {
+        "x": -14,
+        "y": 0,
+        "z": -10
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-23",
+      "type": "flower",
+      "position": {
+        "x": 14,
+        "y": 0,
+        "z": -10
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-24",
+      "type": "flower",
+      "position": {
+        "x": 20,
+        "y": 0,
+        "z": -8
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-25",
+      "type": "flower",
+      "position": {
+        "x": -36,
+        "y": 0,
+        "z": 22
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-26",
+      "type": "flower",
+      "position": {
+        "x": -34,
+        "y": 0,
+        "z": 24
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-27",
+      "type": "flower",
+      "position": {
+        "x": 37.8,
+        "y": 0,
+        "z": 17
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-28",
+      "type": "flower",
+      "position": {
+        "x": 39,
+        "y": 0,
+        "z": 19
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-29",
+      "type": "flower",
+      "position": {
+        "x": -8,
+        "y": 0,
+        "z": 31
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-30",
+      "type": "flower",
+      "position": {
+        "x": 7,
+        "y": 0,
+        "z": 33
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-31",
+      "type": "flower",
+      "position": {
+        "x": -40,
+        "y": 0,
+        "z": -15
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-32",
+      "type": "flower",
+      "position": {
+        "x": 40,
+        "y": 0,
+        "z": -18
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-33",
+      "type": "flower",
+      "position": {
+        "x": 16,
+        "y": 0,
+        "z": 34
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-34",
+      "type": "flower",
+      "position": {
+        "x": -20.392729584066622,
+        "y": 0,
+        "z": 38.880294036547404
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-35",
+      "type": "flower",
+      "position": {
+        "x": -43,
+        "y": 0,
+        "z": -3
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-36",
+      "type": "flower",
+      "position": {
+        "x": -40,
+        "y": 0,
+        "z": 5
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-37",
+      "type": "flower",
+      "position": {
+        "x": -35,
+        "y": 0,
+        "z": -2
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-38",
+      "type": "flower",
+      "position": {
+        "x": -15,
+        "y": 0,
+        "z": -23
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-39",
+      "type": "flower",
+      "position": {
+        "x": -10,
+        "y": 0,
+        "z": -25
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-40",
+      "type": "flower",
+      "position": {
+        "x": -4,
+        "y": 0,
+        "z": -23
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-41",
+      "type": "flower",
+      "position": {
+        "x": 5.4,
+        "y": 0,
+        "z": -24
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-42",
+      "type": "flower",
+      "position": {
+        "x": 10,
+        "y": 0,
+        "z": -23
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-43",
+      "type": "flower",
+      "position": {
+        "x": 15,
+        "y": 0,
+        "z": -25
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-44",
+      "type": "flower",
+      "position": {
+        "x": 34,
+        "y": 0,
+        "z": -5
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-45",
+      "type": "flower",
+      "position": {
+        "x": 39,
+        "y": 0,
+        "z": 1
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-46",
+      "type": "flower",
+      "position": {
+        "x": 42,
+        "y": 0,
+        "z": 9
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-47",
+      "type": "flower",
+      "position": {
+        "x": -43,
+        "y": 0,
+        "z": 29
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-48",
+      "type": "flower",
+      "position": {
+        "x": -39,
+        "y": 0,
+        "z": 35
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-49",
+      "type": "flower",
+      "position": {
+        "x": -34,
+        "y": 0,
+        "z": 39
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-50",
+      "type": "flower",
+      "position": {
+        "x": -17,
+        "y": 0,
+        "z": 41
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-51",
+      "type": "flower",
+      "position": {
+        "x": -8,
+        "y": 0,
+        "z": 39
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-52",
+      "type": "flower",
+      "position": {
+        "x": 1,
+        "y": 0,
+        "z": 42
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-53",
+      "type": "flower",
+      "position": {
+        "x": 10,
+        "y": 0,
+        "z": 40
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-54",
+      "type": "flower",
+      "position": {
+        "x": 18,
+        "y": 0,
+        "z": 42
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-55",
+      "type": "flower",
+      "position": {
+        "x": 34,
+        "y": 0,
+        "z": 34
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-56",
+      "type": "flower",
+      "position": {
+        "x": 40,
+        "y": 0,
+        "z": 28
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-57",
+      "type": "flower",
+      "position": {
+        "x": -39,
+        "y": 0,
+        "z": -30
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-58",
+      "type": "flower",
+      "position": {
+        "x": 38,
+        "y": 0,
+        "z": -31
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-59",
+      "type": "flower",
+      "position": {
+        "x": -19,
+        "y": 0,
+        "z": -15
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-60",
+      "type": "flower",
+      "position": {
+        "x": -12.6,
+        "y": 0,
+        "z": -13
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-61",
+      "type": "flower",
+      "position": {
+        "x": -9,
+        "y": 0,
+        "z": -15
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-62",
+      "type": "flower",
+      "position": {
+        "x": 8,
+        "y": 0,
+        "z": -15
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-63",
+      "type": "flower",
+      "position": {
+        "x": 13,
+        "y": 0,
+        "z": -14
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-64",
+      "type": "flower",
+      "position": {
+        "x": 18,
+        "y": 0,
+        "z": -15
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-65",
+      "type": "flower",
+      "position": {
+        "x": -19,
+        "y": 0,
+        "z": 13
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-66",
+      "type": "flower",
+      "position": {
+        "x": -14,
+        "y": 0,
+        "z": 15
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-67",
+      "type": "flower",
+      "position": {
+        "x": -9,
+        "y": 0,
+        "z": 14
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-68",
+      "type": "flower",
+      "position": {
+        "x": 8,
+        "y": 0,
+        "z": 14
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-69",
+      "type": "flower",
+      "position": {
+        "x": 13,
+        "y": 0,
+        "z": 13
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-70",
+      "type": "flower",
+      "position": {
+        "x": 18.535756805311127,
+        "y": 0,
+        "z": 16.293431345515803
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-71",
+      "type": "flower",
+      "position": {
+        "x": -34,
+        "y": 0,
+        "z": -8
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-72",
+      "type": "flower",
+      "position": {
+        "x": -30,
+        "y": 0,
+        "z": -6
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-73",
+      "type": "flower",
+      "position": {
+        "x": 31.4,
+        "y": 0,
+        "z": -8
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-74",
+      "type": "flower",
+      "position": {
+        "x": 34,
+        "y": 0,
+        "z": -7
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-75",
+      "type": "flower",
+      "position": {
+        "x": -31,
+        "y": 0,
+        "z": 24
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-76",
+      "type": "flower",
+      "position": {
+        "x": -10,
+        "y": 0,
+        "z": 25
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-77",
+      "type": "flower",
+      "position": {
+        "x": 20,
+        "y": 0,
+        "z": 29
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "flower-78",
+      "type": "flower",
+      "position": {
+        "x": 24,
+        "y": 0,
+        "z": 32
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "weed-0",
+      "type": "weed",
+      "position": {
+        "x": -13,
+        "y": 0,
+        "z": 7
+      },
+      "rotation": 0,
+      "scale": 0.82,
+      "color": null
+    },
+    {
+      "id": "weed-1",
+      "type": "weed",
+      "position": {
+        "x": -10,
+        "y": 0,
+        "z": 9
+      },
+      "rotation": 0,
+      "scale": 0.9299999999999999,
+      "color": null
+    },
+    {
+      "id": "weed-2",
+      "type": "weed",
+      "position": {
+        "x": 10,
+        "y": 0,
+        "z": 8
+      },
+      "rotation": 0,
+      "scale": 1.04,
+      "color": null
+    },
+    {
+      "id": "weed-3",
+      "type": "weed",
+      "position": {
+        "x": 13,
+        "y": 0,
+        "z": 6
+      },
+      "rotation": 0,
+      "scale": 1.15,
+      "color": null
+    },
+    {
+      "id": "weed-4",
+      "type": "weed",
+      "position": {
+        "x": -21,
+        "y": 0,
+        "z": -7
+      },
+      "rotation": 0,
+      "scale": 1.26,
+      "color": null
+    },
+    {
+      "id": "weed-5",
+      "type": "weed",
+      "position": {
+        "x": -14.7065686544842,
+        "y": 0,
+        "z": -10.464243194688875
+      },
+      "rotation": 0,
+      "scale": 0.82,
+      "color": null
+    },
+    {
+      "id": "weed-6",
+      "type": "weed",
+      "position": {
+        "x": 17,
+        "y": 0,
+        "z": -10
+      },
+      "rotation": 0,
+      "scale": 0.9299999999999999,
+      "color": null
+    },
+    {
+      "id": "weed-7",
+      "type": "weed",
+      "position": {
+        "x": 21,
+        "y": 0,
+        "z": -7
+      },
+      "rotation": 0,
+      "scale": 1.04,
+      "color": null
+    },
+    {
+      "id": "weed-8",
+      "type": "weed",
+      "position": {
+        "x": -36,
+        "y": 0,
+        "z": 7
+      },
+      "rotation": 0,
+      "scale": 1.15,
+      "color": null
+    },
+    {
+      "id": "weed-9",
+      "type": "weed",
+      "position": {
+        "x": 34,
+        "y": 0,
+        "z": 10
+      },
+      "rotation": 0,
+      "scale": 1.26,
+      "color": null
+    },
+    {
+      "id": "weed-10",
+      "type": "weed",
+      "position": {
+        "x": -10,
+        "y": 0,
+        "z": 35
+      },
+      "rotation": 0,
+      "scale": 0.82,
+      "color": null
+    },
+    {
+      "id": "weed-11",
+      "type": "weed",
+      "position": {
+        "x": 10,
+        "y": 0,
+        "z": 37
+      },
+      "rotation": 0,
+      "scale": 0.9299999999999999,
+      "color": null
+    },
+    {
+      "id": "fountain",
+      "type": "fountain",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "guestbook",
+      "type": "guestbook",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": -5.2
+      },
+      "rotation": 0,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bush-west",
+      "type": "bush",
+      "position": {
+        "x": -5.2,
+        "y": 0,
+        "z": -4.2
+      },
+      "rotation": 0,
+      "scale": 0.92,
+      "color": null
+    },
+    {
+      "id": "bush-east",
+      "type": "bush",
+      "position": {
+        "x": 5.2,
+        "y": 0,
+        "z": 4.2
+      },
+      "rotation": 0,
+      "scale": 1.1,
+      "color": null
+    },
+    {
+      "id": "mushroom-east",
+      "type": "mushroom",
+      "position": {
+        "x": 12,
+        "y": 0,
+        "z": 9
+      },
+      "rotation": 0,
+      "scale": 0.9,
+      "color": null
+    },
+    {
+      "id": "mushroom-west",
+      "type": "mushroom",
+      "position": {
+        "x": -31,
+        "y": 0,
+        "z": 7
+      },
+      "rotation": 0,
+      "scale": 1.15,
+      "color": null
+    },
+    {
+      "id": "pumpkin-west-large",
+      "type": "pumpkin",
+      "position": {
+        "x": -16,
+        "y": 0,
+        "z": 14
+      },
+      "rotation": 0,
+      "scale": 1.05,
+      "color": null
+    },
+    {
+      "id": "pumpkin-west-small",
+      "type": "pumpkin",
+      "position": {
+        "x": -14.5,
+        "y": 0,
+        "z": 14.5
+      },
+      "rotation": 0,
+      "scale": 0.85,
+      "color": null
+    },
+    {
+      "id": "road-north-south",
+      "type": "road",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": 0,
+      "scale": 1,
+      "width": 6,
+      "color": "#d7c79f",
+      "points": [
+        [0, -53],
+        [-1.5, -36],
+        [2, -17],
+        [0, 0],
+        [-2, 19],
+        [1.5, 37],
+        [0, 53]
+      ]
+    },
+    {
+      "id": "road-east-west",
+      "type": "road",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": 0,
+      "scale": 1,
+      "width": 6,
+      "color": "#d7c79f",
+      "points": [
+        [-53, 1],
+        [-36, -1.5],
+        [-17, 2],
+        [0, 0],
+        [18, -2],
+        [36, 1.5],
+        [53, 0]
+      ]
+    },
+    {
+      "id": "road-house-owner",
+      "type": "road",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": 0,
+      "scale": 1,
+      "width": 5,
+      "color": "#cfbd92",
+      "points": [
+        [-5.8, -5.8],
+        [-16.3, -12.512000000000002],
+        [-29, -20.6]
+      ]
+    },
+    {
+      "id": "road-house-maple",
+      "type": "road",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": 0,
+      "scale": 1,
+      "width": 5,
+      "color": "#cfbd92",
+      "points": [
+        [5.8, -5.8],
+        [12.8, -11.512],
+        [22, -25.6]
+      ]
+    },
+    {
+      "id": "road-house-juno",
+      "type": "road",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": 0,
+      "scale": 1,
+      "width": 5,
+      "color": "#cfbd92",
+      "points": [
+        [5.8, 5.8],
+        [16.8, 12.408],
+        [30, 20.4]
+      ]
+    },
+    {
+      "id": "road-house-pip",
+      "type": "road",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": 0,
+      "scale": 1,
+      "width": 5,
+      "color": "#cfbd92",
+      "points": [
+        [-5.8, 5.8],
+        [-12.3, 14.527999999999999],
+        [-21, 31.4]
+      ]
+    },
+    {
+      "id": "bird-0",
+      "type": "bird",
+      "position": {
+        "x": -15.454073435175815,
+        "y": 5.2,
+        "z": 31.990740885812556
+      },
+      "rotation": 2.8144501108126243,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-1",
+      "type": "bird",
+      "position": {
+        "x": 27.20944048051024,
+        "y": 6.15,
+        "z": -69.7028244259127
+      },
+      "rotation": 0.728165689195172,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-2",
+      "type": "bird",
+      "position": {
+        "x": 6.123911872782628,
+        "y": 7.1,
+        "z": -63.00125795409258
+      },
+      "rotation": 2.56748910435257,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-3",
+      "type": "bird",
+      "position": {
+        "x": 14.49747477818164,
+        "y": 8.05,
+        "z": -19.850802656437736
+      },
+      "rotation": 2.1656131560576597,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-4",
+      "type": "bird",
+      "position": {
+        "x": 35.84263349621324,
+        "y": 9,
+        "z": 63.660074655090284
+      },
+      "rotation": 4.267332006752464,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-5",
+      "type": "bird",
+      "position": {
+        "x": -32.048129835748114,
+        "y": 9.95,
+        "z": 64.8703492549248
+      },
+      "rotation": 5.907448993305372,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-6",
+      "type": "bird",
+      "position": {
+        "x": -23.36821022508957,
+        "y": 10.899999999999999,
+        "z": 47.09584484829975
+      },
+      "rotation": 0.41929070451226486,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-7",
+      "type": "bird",
+      "position": {
+        "x": -63.08918006645399,
+        "y": 11.85,
+        "z": 4.60116301997914
+      },
+      "rotation": 4.6424325193087155,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-8",
+      "type": "bird",
+      "position": {
+        "x": 36.406650115095545,
+        "y": 5.5,
+        "z": -28.15080991062132
+      },
+      "rotation": 5.208808683503621,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-9",
+      "type": "bird",
+      "position": {
+        "x": 5.36361723949085,
+        "y": 6.45,
+        "z": -54.927668724994874
+      },
+      "rotation": 2.2490758109436757,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-10",
+      "type": "bird",
+      "position": {
+        "x": -48.80707149000955,
+        "y": 7.3999999999999995,
+        "z": -68.79386289183458
+      },
+      "rotation": 5.654327945512013,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-11",
+      "type": "bird",
+      "position": {
+        "x": 32.17348651320208,
+        "y": 8.350000000000001,
+        "z": -45.98558981917449
+      },
+      "rotation": 4.100377802908307,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-12",
+      "type": "bird",
+      "position": {
+        "x": 33.71424487690092,
+        "y": 9.3,
+        "z": -46.04339052544674
+      },
+      "rotation": 1.5673455158776277,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-13",
+      "type": "bird",
+      "position": {
+        "x": -44.83748810208681,
+        "y": 10.25,
+        "z": 47.85610261467809
+      },
+      "rotation": 5.526873290902629,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-14",
+      "type": "bird",
+      "position": {
+        "x": 3.1546345454989932,
+        "y": 11.2,
+        "z": -14.27569877676433
+      },
+      "rotation": 4.940831928133269,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-15",
+      "type": "bird",
+      "position": {
+        "x": 12.842907831764023,
+        "y": 12.15,
+        "z": 0.49096448994532693
+      },
+      "rotation": 4.421807160211226,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-16",
+      "type": "bird",
+      "position": {
+        "x": 33.01080964898574,
+        "y": 5.8,
+        "z": 26.950448557181517
+      },
+      "rotation": 5.585954346128582,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-17",
+      "type": "bird",
+      "position": {
+        "x": -44.37420637703326,
+        "y": 6.75,
+        "z": 25.904058397463814
+      },
+      "rotation": 2.5893811306319083,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-18",
+      "type": "bird",
+      "position": {
+        "x": 49.37605120576336,
+        "y": 7.699999999999999,
+        "z": 42.874883760814555
+      },
+      "rotation": 2.5259200587778246,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-19",
+      "type": "bird",
+      "position": {
+        "x": 49.17211320171191,
+        "y": 8.65,
+        "z": -29.470747817103984
+      },
+      "rotation": 3.199195370727031,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-20",
+      "type": "bird",
+      "position": {
+        "x": -9.071439162507886,
+        "y": 9.6,
+        "z": 15.48779273420223
+      },
+      "rotation": 1.4114721332284366,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-21",
+      "type": "bird",
+      "position": {
+        "x": 29.82823565689614,
+        "y": 10.549999999999999,
+        "z": -29.336587863399473
+      },
+      "rotation": 0.6730899645215992,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-22",
+      "type": "bird",
+      "position": {
+        "x": 8.389687503222376,
+        "y": 11.499999999999998,
+        "z": 46.53944274774403
+      },
+      "rotation": 2.2814849152901013,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "bird-23",
+      "type": "bird",
+      "position": {
+        "x": 20.589628845918924,
+        "y": 12.45,
+        "z": -51.753604716141126
+      },
+      "rotation": 0.3150353690476431,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "cloud-0",
+      "type": "cloud",
+      "position": {
+        "x": 24,
+        "y": 12,
+        "z": 0
+      },
+      "rotation": 0.5412824808965576,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "cloud-1",
+      "type": "cloud",
+      "position": {
+        "x": -32.44413464266109,
+        "y": 13.4,
+        "z": 28.370692381894553
+      },
+      "rotation": 3.0340149349345755,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "cloud-2",
+      "type": "cloud",
+      "position": {
+        "x": 5.594834559413002,
+        "y": 14.8,
+        "z": -59.7702963340069
+      },
+      "rotation": 4.900694829244851,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "cloud-3",
+      "type": "cloud",
+      "position": {
+        "x": 51.10951022482689,
+        "y": 16.2,
+        "z": 61.90039876621972
+      },
+      "rotation": 4.641280091328322,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "cloud-4",
+      "type": "cloud",
+      "position": {
+        "x": -102.4104364893999,
+        "y": 12,
+        "z": -16.7202459777929
+      },
+      "rotation": 3.359390148289666,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "cloud-5",
+      "type": "cloud",
+      "position": {
+        "x": 20.249919054540687,
+        "y": 13.4,
+        "z": -12.881800273430343
+      },
+      "rotation": 5.381798638795338,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "cloud-6",
+      "type": "cloud",
+      "position": {
+        "x": -11.421765998142249,
+        "y": 14.8,
+        "z": 40.5602444059355
+      },
+      "rotation": 3.9846425244236934,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "cloud-7",
+      "type": "cloud",
+      "position": {
+        "x": -29.499333639610725,
+        "y": 16.2,
+        "z": -53.24628052716524
+      },
+      "rotation": 4.596645162618667,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "cloud-8",
+      "type": "cloud",
+      "position": {
+        "x": 78.90373338826745,
+        "y": 12,
+        "z": 26.755120137436
+      },
+      "rotation": 3.758344784248763,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "cloud-9",
+      "type": "cloud",
+      "position": {
+        "x": -96.13078434276927,
+        "y": 13.4,
+        "z": 36.631994571042185
+      },
+      "rotation": 4.978659943319083,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "cloud-10",
+      "type": "cloud",
+      "position": {
+        "x": 10.17160180962083,
+        "y": 14.8,
+        "z": -21.737951067810375
+      },
+      "rotation": 0.5022562879411164,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "cloud-11",
+      "type": "cloud",
+      "position": {
+        "x": 13.169981565803958,
+        "y": 16.2,
+        "z": 40.0744464558205
+      },
+      "rotation": 5.340162295423084,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "cloud-12",
+      "type": "cloud",
+      "position": {
+        "x": -55.37476108983019,
+        "y": 12,
+        "z": -30.082442885198272
+      },
+      "rotation": 2.8982956636364476,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "cloud-13",
+      "type": "cloud",
+      "position": {
+        "x": 82.04000762629605,
+        "y": 13.4,
+        "z": -16.751314009753855
+      },
+      "rotation": 4.852505284585459,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "cloud-14",
+      "type": "cloud",
+      "position": {
+        "x": -59.809613643148836,
+        "y": 14.8,
+        "z": 78.53648971695776
+      },
+      "rotation": 1.2860042179804358,
+      "scale": 1,
+      "color": null
+    },
+    {
+      "id": "cloud-15",
+      "type": "cloud",
+      "position": {
+        "x": -3.08540961288724,
+        "y": 16.2,
+        "z": -23.80084552113019
+      },
+      "rotation": 0.05875515929679381,
+      "scale": 1,
+      "color": null
+    }
+  ],
+  "residents": [
+    {
+      "id": "maple",
+      "name": "Maple",
+      "benchId": "bench-north",
+      "seatIndex": 6,
+      "startSeated": false,
+      "route": [
+        [3, 4],
+        [17, 3],
+        [24, -8],
+        [22, -25],
+        [11, -27],
+        [0, -22],
+        [-7, -18],
+        [0, -7],
+        [5, -7],
+        [5, 4]
+      ],
+      "dialogue": {
+        "aboutOwner": {
+          "ko": "로빈은 작은 문제를 먼저 알아채고 조용히 고쳐 두는 사람이에요. 제 사워도우가 계속 실패할 때 빵을 전부 맛보며 기록해 줘서, 함께 원인을 찾았어요.",
+          "en": "Robin notices small problems early and fixes them quietly. When my sourdough kept failing, Robin tasted every loaf and kept notes until we found the cause together."
+        },
+        "followUps": [
+          {
+            "question": {
+              "ko": "로빈은 어려운 대화를 어떻게 해요?",
+              "en": "How does Robin handle hard conversations?"
+            },
+            "answer": {
+              "ko": "먼저 듣고 나서 솔직하게 말해요. 그래서 어려운 이야기도 편하게 나눌 수 있어요.",
+              "en": "Robin listens first and then speaks plainly, so even hard conversations feel easy."
+            }
+          }
+        ]
+      },
+      "appearance": {
+        "hair": "curls",
+        "hat": "sunhat",
+        "eyes": "round",
+        "ears": "pointed",
+        "nose": "button",
+        "mouth": "quiet",
+        "mustache": "none",
+        "top": "shirt",
+        "bottom": "shorts",
+        "shoes": "boots",
+        "colors": {
+          "skin": "#8c5d43",
+          "hair": "#a75838",
+          "hat": "#638fab",
+          "top": "#374b65",
+          "bottom": "#e49350",
+          "shoes": "#79647c"
+        }
+      },
+      "role": {
+        "ko": "모퉁이 빵집 제빵사",
+        "en": "Baker at the corner bakery"
+      },
+      "relationship": {
+        "ko": "5년째 이웃",
+        "en": "Neighbor for five years"
+      },
+      "linkedInProfileUrl": null,
+      "reference": {
+        "ko": "저는 로빈과 5년째 이웃으로 지내고 있어요. 로빈은 빵집 간판이 비뚤어진 걸 먼저 알아채고 문 열기 전에 조용히 고쳐 두는 사람이에요. 제가 새 사워도우를 시도할 때는 실패한 빵을 전부 맛보며 매번 무엇이 달라졌는지 적어 줘서, 함께 원인을 찾을 수 있었어요. 로빈은 먼저 듣고 솔직하게 말해서, 어려운 이야기도 편하게 나눌 수 있어요.",
+        "en": "I have lived next to Robin for five years. Robin is the neighbor who notices when the bakery's sign is crooked and quietly fixes it before opening. When I tried a new sourdough, Robin tasted every failed loaf and wrote down what changed each time, so we found the problem together. Robin listens first and speaks plainly, which makes hard conversations easy."
+      }
+    },
+    {
+      "id": "juno",
+      "name": "Juno",
+      "benchId": "bench-east",
+      "seatIndex": 0,
+      "startSeated": true,
+      "route": [
+        [8, -4],
+        [20, -2],
+        [27, 7],
+        [30, 20],
+        [16, 20],
+        [0, 21],
+        [0, 8]
+      ],
+      "dialogue": {
+        "aboutOwner": {
+          "ko": "로빈은 무언가를 만들기 전에 사람들에게 필요한 걸 먼저 물어봐요. 첫 토마토가 시들었을 때도 날씨 탓 대신 함께 흙을 검사했고, 다음 해엔 텃밭이 골목 절반을 먹여 살렸어요.",
+          "en": "Robin asks people what they need before building anything. When our first tomatoes failed, Robin tested the soil with me instead of blaming the weather, and the next year the garden fed half the street."
+        },
+        "followUps": [
+          {
+            "question": {
+              "ko": "텃밭은 어떻게 만들었어요?",
+              "en": "What was building the garden like?"
+            },
+            "answer": {
+              "ko": "설계는 로빈이 했지만, 먼저 이웃 모두에게 무엇을 키우고 싶은지 물어봤어요.",
+              "en": "Robin drew the plan, but first asked every neighbor what they wanted to grow."
+            }
+          }
+        ]
+      },
+      "appearance": {
+        "hair": "bob",
+        "hat": "none",
+        "eyes": "round",
+        "ears": "round",
+        "nose": "wide",
+        "mouth": "grin",
+        "mustache": "none",
+        "top": "tee",
+        "bottom": "trousers",
+        "shoes": "boots",
+        "colors": {
+          "skin": "#e9ba99",
+          "hair": "#886da6",
+          "hat": "#4bf00e",
+          "top": "#580565",
+          "bottom": "#ca7765",
+          "shoes": "#896e8a"
+        }
+      },
+      "role": {
+        "ko": "마을 정원사",
+        "en": "Town gardener"
+      },
+      "relationship": {
+        "ko": "함께 공동 텃밭을 만든 사이",
+        "en": "Built the community garden together"
+      },
+      "linkedInProfileUrl": null,
+      "reference": {
+        "ko": "로빈과 저는 마을 동쪽의 공동 텃밭을 함께 만들었어요. 설계는 로빈이 했지만, 그보다 중요한 건 땅을 파기 전에 이웃 모두에게 무엇을 키우고 싶은지 먼저 물어봤다는 거예요. 첫 여름에 토마토가 다 시들었을 때도 로빈은 날씨 탓을 하지 않았어요. 함께 흙을 검사하고 물 주는 시간을 바꿨고, 다음 해에는 텃밭이 골목 절반을 먹여 살렸어요.",
+        "en": "Robin and I built the community garden on the east side of town. Robin drew the plan, but more importantly asked every neighbor what they wanted to grow before digging a single bed. When the first summer's tomatoes failed, Robin did not blame the weather; we tested the soil, changed the watering schedule, and the next year the garden fed half the street."
+      }
+    },
+    {
+      "id": "pip",
+      "name": "Pip",
+      "benchId": "bench-west",
+      "seatIndex": 0,
+      "startSeated": false,
+      "route": [
+        [-8, 4],
+        [-20, 3],
+        [-26, 14],
+        [-21, 31],
+        [-11, 31],
+        [0, 27],
+        [0, 8]
+      ],
+      "dialogue": {
+        "aboutOwner": {
+          "ko": "로빈은 늘 무엇이 어떻게 돌아가는지 궁금해했어요. 열 살 때 등대 시계를 분해했다가 다시 조립했는데, 전보다 더 잘 돌아갔어요.",
+          "en": "Robin has always wanted to know how things work. At ten, Robin took apart the lighthouse clock and put it back together, and it ran better than before."
+        },
+        "followUps": [
+          {
+            "question": {
+              "ko": "로빈은 새로운 걸 어떻게 배워요?",
+              "en": "How does Robin learn new things?"
+            },
+            "answer": {
+              "ko": "직접 해 보고, 무슨 일이 있었는지 적고, 묻는 사람에게 설명해 주면서요.",
+              "en": "By trying things, writing down what happened, and explaining it to anyone who asks."
+            }
+          }
+        ]
+      },
+      "appearance": {
+        "hair": "bob",
+        "hat": "cap",
+        "eyes": "happy",
+        "ears": "small",
+        "nose": "small",
+        "mouth": "smile",
+        "mustache": "none",
+        "top": "shirt",
+        "bottom": "trousers",
+        "shoes": "sneakers",
+        "colors": {
+          "skin": "#bc885f",
+          "hair": "#272525",
+          "hat": "#127cb4",
+          "top": "#ece3cc",
+          "bottom": "#638fab",
+          "shoes": "#d8b879"
+        }
+      },
+      "role": {
+        "ko": "등대지기",
+        "en": "Keeper of the lighthouse"
+      },
+      "relationship": {
+        "ko": "어릴 적 친구",
+        "en": "Childhood friend"
+      },
+      "linkedInProfileUrl": null,
+      "reference": {
+        "ko": "로빈은 분수에서 종이배 경주를 하던 어릴 때부터 제 친구예요. 로빈은 무엇이 어떻게 돌아가는지 늘 궁금해했어요. 열 살 때 등대 시계를 분해했다가 다시 조립했는데, 오히려 더 잘 돌아갔죠. 지금도 직접 해 보고 무슨 일이 있었는지 적어 가며 배우고, 묻는 사람에게는 언제든 기꺼이 설명해 줘요.",
+        "en": "Robin has been my friend since we were kids racing paper boats in the fountain. Robin is curious about how things work: at ten, Robin took apart the lighthouse clock and put it back together, and it ran better. Robin still learns that way, by trying things and writing down what happened, and is always happy to explain it to anyone who asks."
+      }
+    },
+    {
+      "id": "robin",
+      "name": "Robin",
+      "benchId": "bench-southwest",
+      "seatIndex": 0,
+      "startSeated": false,
+      "route": [
+        [-15, -13],
+        [-20, -17.5],
+        [-28, -19],
+        [-24, -12],
+        [-19, -10]
+      ],
+      "dialogue": null,
+      "appearance": {
+        "hair": "crop",
+        "hat": "beanie",
+        "eyes": "oval",
+        "ears": "round",
+        "nose": "small",
+        "mouth": "smile",
+        "mustache": "none",
+        "top": "sweater",
+        "bottom": "relaxed trousers",
+        "shoes": "sneakers",
+        "colors": {
+          "skin": "#c9935f",
+          "hair": "#503a2e",
+          "hat": "#ad514a",
+          "top": "#6f987c",
+          "bottom": "#374b65",
+          "shoes": "#ece3cc"
+        }
+      },
+      "role": null,
+      "relationship": null,
+      "linkedInProfileUrl": null,
+      "reference": null
+    }
+  ],
+  "owner": {
+    "name": {
+      "ko": "로빈",
+      "en": "Robin"
+    },
+    "introduction": {
+      "ko": "안녕하세요, 로빈이에요. 함께 일했던 사람들의 이야기로 저를 소개하고 싶어서 이 작은 마을을 만들었어요. 천천히 둘러보면서 주민들에게 저와 일해 본 이야기를 들어 보세요.",
+      "en": "Hi, I'm Robin. I built this little town to introduce myself through the people I've worked with. Take a stroll and ask the residents what working with me is like."
+    },
+    "contactEmail": "robin@example.com",
+    "residentId": "robin",
+    "questions": [
+      {
+        "question": {
+          "ko": "요즘은 무슨 일을 하고 있어요?",
+          "en": "What are you working on these days?"
+        },
+        "answer": {
+          "ko": "이 마을을 조금씩 넓히고 있어요. 다음에는 분수 옆에 동네 사람들이 책을 나눠 읽는 작은 도서관을 만들고 싶어요.",
+          "en": "I'm growing this town a little at a time. Next, I'd like to build a small library by the fountain where neighbors can share books."
+        }
+      },
+      {
+        "question": {
+          "ko": "일할 때 가장 즐거운 순간은 언제예요?",
+          "en": "What do you enjoy most about your work?"
+        },
+        "answer": {
+          "ko": "작은 개선 하나가 누군가의 하루를 편하게 만들 때요. 다들 지나치는 불편함을 찾아 조용히 고쳐 두는 걸 좋아해요.",
+          "en": "When one small fix makes someone's day easier. I like finding the little snag everyone walks past and quietly smoothing it out."
+        }
+      },
+      {
+        "question": {
+          "ko": "어떻게 연락하면 돼요?",
+          "en": "How can I reach you?"
+        },
+        "answer": {
+          "ko": "‘로빈에게 연락하기’ 버튼으로 이메일을 보내 주세요. 모든 메일을 읽고 며칠 안에 답장할게요.",
+          "en": "Send me an email with the “Reach out to Robin” button. I read every message and reply within a few days."
+        }
+      }
+    ]
+  },
+  "pet": {
+    "name": {
+      "ko": "토토",
+      "en": "Toto"
+    },
+    "route": null
+  }
+}
