@@ -421,8 +421,10 @@ async function checkBallparkRuleSchedule(store: MemoryStore, assert: Assert): Pr
   // Midnight on January 1 in Seoul, while UTC and the Americas are still in December.
   const firstSecondOfJanuary = Date.parse('2025-12-31T15:00:00Z')
   const january = { fromMonth: '2026-01', rules: { pitchCount: 7, difficulty: 'hard' } }
+  const saveIn = (townId: string, ballpark: Record<string, unknown>, baseRevision: number, now: number) =>
+    service.saveTown(admin, townId, { ...sampleTownLayout, venues: { ballpark }, baseRevision }, now)
   const save = (ballpark: Record<string, unknown>, baseRevision: number, now: number) =>
-    service.saveTown(admin, 'rulebook', { ...sampleTownLayout, venues: { ballpark }, baseRevision }, now)
+    saveIn('rulebook', ballpark, baseRevision, now)
   const refusalCode = (ballpark: Record<string, unknown>, baseRevision: number, now: number) =>
     save(ballpark, baseRevision, now).then(
       () => null,
@@ -451,7 +453,17 @@ async function checkBallparkRuleSchedule(store: MemoryStore, assert: Assert): Pr
     isDeepStrictEqual(stale.venues.ballpark.rules, defaultRules),
     'the rules a save sends, as a stale editor tab would, never change the rules in effect',
   )
-  // Reads never check the clock; storeContract reads back a stored schedule whose month has passed.
+  const api = createApi({ service, authStore: store, allowedOrigins: new Set([origin]), frontendUrl: origin })
+  const read = await api(new Request(`${origin}/v1/towns/rulebook`))
+  assert(
+    isDeepStrictEqual(((await read.json()) as { town: { venues: { ballpark: unknown } } }).town.venues.ballpark, {
+      theme: 'garden',
+      colors: {},
+      rules: defaultRules,
+      scheduledRules: january,
+    }),
+    'reads never check the clock: a stored schedule for 2026-01, a month the real clock has passed, still reads as saved',
+  )
 
   for (const scheduledRules of [
     { ...january, rules: { pitchCount: 4, difficulty: 'easy' } },
@@ -478,6 +490,26 @@ async function checkBallparkRuleSchedule(store: MemoryStore, assert: Assert): Pr
       firstSecondOfJanuary,
     )) === 'INVALID_INPUT',
     'a town with no schedule cannot schedule the KST month already under way',
+  )
+  const afterPromotion = await save({ rules: { pitchCount: 3, difficulty: 'easy' } }, 3, firstSecondOfJanuary)
+  assert(
+    isDeepStrictEqual(afterPromotion.venues.ballpark.rules, january.rules),
+    'once promoted, the rules stay in effect for the month, whatever rules a later save sends',
+  )
+
+  await saveIn('unsent-schedule', { scheduledRules: january }, 0, lastSecondOfDecember)
+  const promotedUnsent = await saveIn('unsent-schedule', {}, 1, firstSecondOfJanuary)
+  assert(
+    isDeepStrictEqual(promotedUnsent.venues.ballpark.rules, january.rules) &&
+      !('scheduledRules' in promotedUnsent.venues.ballpark),
+    'from the first second of its KST month, a save that leaves the schedule out still promotes it into the rules',
+  )
+
+  await saveIn('cancelled-schedule', { scheduledRules: january }, 0, lastSecondOfDecember)
+  const cancelled = await saveIn('cancelled-schedule', {}, 1, lastSecondOfDecember)
+  assert(
+    !('scheduledRules' in cancelled.venues.ballpark),
+    'before its KST month comes, a save that leaves the schedule out cancels it',
   )
 }
 
