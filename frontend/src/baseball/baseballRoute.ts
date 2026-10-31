@@ -7,3 +7,11 @@ export const BASEBALL_PATH = '/baseball'
 export function isBaseballPath(pathname: string) {
   return pathname.replace(/\/+$/u, '') === BASEBALL_PATH
 }
+
+/** The derby under the rules scheduled for next month, for the admin to try; such a run is never ranked. */
+export const NEXT_RULES_PREVIEW_PATH = `${BASEBALL_PATH}?rules=next`
+
+/** Whether the page's query asks for the rules scheduled for next month instead of this month's. */
+export function isNextRulesPreview(search: string) {
+  return new URLSearchParams(search).get('rules') === 'next'
+}

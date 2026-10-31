@@ -2606,6 +2606,15 @@ input[type='range']::-webkit-slider-thumb {
   font-size: 0.74rem;
   font-weight: 700;
 }
+.editor-rules {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
 .editor-points p,
 .editor-note {
   margin: 0;

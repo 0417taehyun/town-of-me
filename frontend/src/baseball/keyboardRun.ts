@@ -11,12 +11,18 @@ import type { RealTimeSwing, StageRunSetup } from './stage/stageRun'
 export const DEFAULT_BATTING_SIDE: BattingSide = 'right'
 
 /**
- * A keyboard run under the rules in effect in the KST month of `now`. Each run reads the month when it starts, so a
- * page left open into a new month plays the rules `ballpark` scheduled for it (as loaded with the page) from its next
- * run. Ranked runs will take their plan from the server instead.
+ * A keyboard run under the rules `rulesFor` picks for the KST month of `now`: by default those in effect, or in an
+ * admin's preview those planned next (data/ballparkRules.ts). Each run reads the month when it starts, so a page left
+ * open into a new month plays the rules `ballpark` scheduled for it (as loaded with the page) from its next run.
+ * Ranked runs will take their plan from the server instead.
  */
-export function createKeyboardRun(ballpark: BallparkSettings, now: Date, seed: number): StageRunSetup {
-  const rules = effectiveBallparkRules(ballpark, rankingMonth(now))
+export function createKeyboardRun(
+  ballpark: BallparkSettings,
+  now: Date,
+  seed: number,
+  rulesFor = effectiveBallparkRules,
+): StageRunSetup {
+  const rules = rulesFor(ballpark, rankingMonth(now))
   return {
     plan: createRunPlan(rules, seed),
     log: { input: 'keyboard', side: DEFAULT_BATTING_SIDE, practice: [] },

@@ -10,6 +10,8 @@ what changed.
 - Let route handles (residents' and the pet's) move with the keyboard, not only by dragging.
 - Add redo, multi-select, grid snapping, and a two-finger twist to rotate the top view if they prove necessary.
 - Page the guestbook beyond the newest 100 notes if it fills up.
+- Give the `/baseball?rules=next` preview a way back to `/admin`; its back link and Escape lead to the town, so only
+  the browser's Back button returns to the editor.
 
 ## Backend and security
 
@@ -23,6 +25,9 @@ what changed.
   quality against real references.
 - Decide what happens after an account is deleted (`deleted_at`): erasure or anonymization, retention periods, and
   database backup and restore.
+- Refuse a changed ballpark schedule whose `fromMonth` is not the server's next KST month. Near the month boundary an
+  admin device whose clock runs fast promotes the stored schedule early in the editor, and a rules edit then drops or
+  moves it on save without an error.
 
 ## Deployment
 

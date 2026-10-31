@@ -1,6 +1,11 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createDerbySounds } from '../audio/derbySounds'
-import { effectiveBallparkRules, rankingMonth, upcomingBallparkRules } from '../data/ballparkRules'
+import {
+  effectiveBallparkRules,
+  plannedBallparkRules,
+  rankingMonth,
+  upcomingBallparkRules,
+} from '../data/ballparkRules'
 import { InMemoryDemoRepository } from '../data/InMemoryDemoRepository'
 import type { BallparkSettings } from '../data/models'
 import { normalizePlayerProfile, type PlayerProfile } from '../data/playerProfile'
@@ -12,6 +17,7 @@ import { useReducedMotion } from '../hooks/useReducedMotion'
 import { type AppLanguage, languageCopy, monthName } from '../i18n/language'
 import { resolveBallparkPalette } from '../scene/venues/ballpark/ballparkThemes'
 import { LanguageSelect } from '../ui/LanguageSelect'
+import { isNextRulesPreview } from './baseballRoute'
 import { needsCharacter, withVenueProfile } from './baseballSession'
 import { browserDeviceBlock } from './deviceGate'
 import type { DerbyResult } from './game/derbyScore'
@@ -95,6 +101,7 @@ export function BaseballApp({ townId }: { townId: string }) {
   return (
     <DerbyScreen
       ballpark={town.venues.ballpark}
+      preview={isNextRulesPreview(window.location.search)}
       profile={session.profile}
       language={language}
       onLanguageChange={setLanguage}
@@ -103,15 +110,17 @@ export function BaseballApp({ townId }: { townId: string }) {
   )
 }
 
-/** The way back to the town and the language choice, on every screen of the page. */
+/** The way back to the town and the language choice on every screen of the page, beside any note in `children`. */
 export function BaseballLinks({
   className,
   language,
   onLanguageChange,
+  children,
 }: {
   className: string
   language: AppLanguage
   onLanguageChange: (language: AppLanguage) => void
+  children?: ReactNode
 }) {
   return (
     // A pointer leaves no focus behind here, so the next Space or Enter swings instead of pressing a link or language
@@ -126,23 +135,28 @@ export function BaseballLinks({
         <span aria-hidden="true">←</span> {languageCopy[language].baseball.backToTown}
       </a>
       <LanguageSelect language={language} className="baseball-language-select" onChange={onLanguageChange} />
+      {children}
     </header>
   )
 }
 
 /**
  * The derby over its stadium: the rules and a play button, then a keyboard run, then its result and another go. Every
- * run reads the KST month when it starts, never when the page loaded. Space or Enter swings while a run plays, and
- * Escape goes back to the town from any of these screens.
+ * run reads the KST month when it starts, never when the page loaded. A `preview`, the admin's try of next month's
+ * rules, plays those scheduled (or this month's when none are) and says so on every screen; like every keyboard run,
+ * it is never ranked. Space or Enter swings while a run plays, and Escape goes back to the town from any of these
+ * screens.
  */
 export function DerbyScreen({
   ballpark,
+  preview,
   profile,
   language,
   onLanguageChange,
   onGraphicsUnavailable,
 }: {
   ballpark: BallparkSettings
+  preview: boolean
   profile: PlayerProfile | undefined
   language: AppLanguage
   onLanguageChange: (language: AppLanguage) => void
@@ -160,6 +174,7 @@ export function DerbyScreen({
   const [hud, setHud] = useState(NEW_RUN_HUD)
   const [result, setResult] = useState<DerbyResult | null>(null)
   const playing = run !== null && result === null
+  const rulesFor = preview ? plannedBallparkRules : effectiveBallparkRules
 
   useEffect(() => () => sounds.dispose(), [sounds])
 
@@ -194,7 +209,7 @@ export function DerbyScreen({
     swings.current = []
     setHud(NEW_RUN_HUD)
     setResult(null)
-    setRun(createKeyboardRun(ballpark, new Date(), randomRunSeed()))
+    setRun(createKeyboardRun(ballpark, new Date(), randomRunSeed(), rulesFor))
   }
 
   const month = rankingMonth(new Date())
@@ -240,6 +255,13 @@ export function DerbyScreen({
               </li>
             )}
           </ul>
+          {preview && (
+            <p className="baseball-note derby-preview-note">
+              {upcoming
+                ? venueCopy.previewPlays(monthName(upcoming.fromMonth, month, language))
+                : venueCopy.previewCurrent}
+            </p>
+          )}
           <p className="baseball-note">{copy.baseball.controls}</p>
           <div className="derby-actions">
             <button className="primary-button" type="button" autoFocus onClick={startRun}>
@@ -249,7 +271,9 @@ export function DerbyScreen({
         </section>
       )}
       {result && <ResultView result={result} language={language} onPlayAgain={startRun} />}
-      <BaseballLinks className="baseball-header derby-links" language={language} onLanguageChange={onLanguageChange} />
+      <BaseballLinks className="baseball-header derby-links" language={language} onLanguageChange={onLanguageChange}>
+        {preview && <p className="derby-preview-badge">{venueCopy.previewBadge}</p>}
+      </BaseballLinks>
     </main>
   )
 }

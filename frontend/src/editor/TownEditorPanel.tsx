@@ -1,7 +1,18 @@
 import { useEffect, useEffectEvent, useState, type MutableRefObject, type ReactNode } from 'react'
 import { MathUtils, type Vector3 } from 'three'
+import { NEXT_RULES_PREVIEW_PATH } from '../baseball/baseballRoute'
 import {
+  effectiveBallparkRules,
+  plannedBallparkRules,
+  rankingMonth,
+  upcomingBallparkRules,
+} from '../data/ballparkRules'
+import {
+  BALLPARK_COLOR_ROLES,
+  BASEBALL_DIFFICULTIES,
   PET_ROUTE_POINTS,
+  PITCH_COUNT_RANGE,
+  type BaseballDifficulty,
   type LocalizedText,
   type TownMovement,
   type TownObject,
@@ -16,7 +27,8 @@ import { SKID_STYLES, type SkidStyle } from '../scene/motion/skidTurn'
 import { TOWN_OBJECT_KINDS } from '../scene/objects/kinds'
 import { appearanceFields, DEFAULT_PLAYER_PROFILE } from '../data/playerProfile'
 import type { AppLanguage } from '../i18n/language'
-import { languageCopy } from '../i18n/language'
+import { languageCopy, monthName } from '../i18n/language'
+import { resolveBallparkPalette } from '../scene/venues/ballpark/ballparkThemes'
 import { AppearanceSection, ColorChoice } from '../ui/CharacterAppearanceControls'
 import {
   duplicateObjects,
@@ -58,6 +70,9 @@ import {
   setResidentOwnership,
   startPetRoute,
   updateResidentProfile,
+  withBallparkColor,
+  withBallparkSchedule,
+  withoutBallparkSchedule,
   type EditorSelection,
   type EditorView,
   type LayoutProblem,
@@ -271,6 +286,106 @@ export function TownMovementFields({ town, copy, edit }: { town: TownSnapshot; c
   )
 }
 
+/**
+ * The ballpark's building colors, which apply once saved, and the rules for next month: the rules in effect never
+ * change within a KST month, so the admin only schedules. Trying the schedule opens /baseball in this tab, because a
+ * new tab would start without this tab's session storage (the visitor's character and language) behind /baseball's
+ * opener isolation; leaving would lose unsaved edits, so the link shows only when everything is saved.
+ */
+export function BallparkSettingsFields({
+  town,
+  language,
+  dirty,
+  edit,
+}: {
+  town: TownSnapshot
+  language: AppLanguage
+  dirty: boolean
+  edit: Edit
+}) {
+  const copy = languageCopy[language].venues.ballpark
+  const ballpark = town.venues.ballpark
+  // The device's clock picks the month, both shown and scheduled from. Near the KST month boundary a fast clock
+  // promotes a stored schedule early, and a rules edit then drops or moves it on save; the backend cannot tell that
+  // from a real cancel or reschedule.
+  const month = rankingMonth(new Date())
+  const inEffect = effectiveBallparkRules(ballpark, month)
+  const upcoming = upcomingBallparkRules(ballpark, month)
+  const planned = plannedBallparkRules(ballpark, month)
+  const palette = resolveBallparkPalette(ballpark)
+  return (
+    <fieldset className="editor-appearance">
+      <legend>{copy.settingsTitle}</legend>
+      {BALLPARK_COLOR_ROLES.map((role) => (
+        <ColorValueField
+          key={role}
+          label={copy.colorRoles[role]}
+          value={palette[role]}
+          overridden={ballpark.colors[role] !== undefined}
+          resetLabel={copy.themeColor}
+          edit={edit}
+          onChange={(color) => (current) => withBallparkColor(current, role, color)}
+        />
+      ))}
+      <p className="editor-note">{copy.colorsNote}</p>
+      <fieldset className="editor-appearance">
+        <legend>{copy.nextRulesTitle}</legend>
+        <ul className="editor-rules">
+          <li>{copy.rulesThisMonth(inEffect.pitchCount, copy.difficulties[inEffect.difficulty])}</li>
+          {upcoming && (
+            <li>
+              {copy.rulesFrom(
+                monthName(upcoming.fromMonth, month, language),
+                upcoming.rules.pitchCount,
+                copy.difficulties[upcoming.rules.difficulty],
+              )}
+            </li>
+          )}
+        </ul>
+        <RangeField
+          label={copy.pitchCount}
+          value={planned.pitchCount}
+          min={PITCH_COUNT_RANGE.minimum}
+          max={PITCH_COUNT_RANGE.maximum}
+          step={1}
+          edit={edit}
+          onChange={(pitchCount) => (current) => withBallparkSchedule(current, { pitchCount }, month)}
+        />
+        <SelectField
+          label={copy.difficulty}
+          value={planned.difficulty}
+          options={BASEBALL_DIFFICULTIES.map((difficulty) => ({
+            value: difficulty,
+            label: copy.difficulties[difficulty],
+          }))}
+          onChange={(difficulty) =>
+            edit((current) => withBallparkSchedule(current, { difficulty: difficulty as BaseballDifficulty }, month))
+          }
+        />
+        <p className="editor-note">{copy.difficultyNote}</p>
+        <p className="editor-note">{copy.nextRulesNote}</p>
+        {upcoming && (
+          <div className="editor-actions">
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => edit((current) => withoutBallparkSchedule(current, month))}
+            >
+              {copy.cancelSchedule}
+            </button>
+            {!dirty && (
+              <a className="text-button" href={NEXT_RULES_PREVIEW_PATH}>
+                {copy.tryNextRules}
+              </a>
+            )}
+          </div>
+        )}
+        {upcoming && dirty && <p className="editor-note">{copy.saveToTry}</p>}
+      </fieldset>
+    </fieldset>
+  )
+}
+
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="editor-field">
@@ -446,6 +561,47 @@ export function ColorField({ objects, copy, edit }: { objects: readonly TownObje
           onClick={() => edit(changeObjects(ids, { color: undefined }))}
         >
           {copy.defaultColor}
+        </button>
+      </span>
+    </Field>
+  )
+}
+
+/** A color shown as it applies, the default while nothing overrides it; `onChange(null)` gives it back the default. */
+export function ColorValueField({
+  label,
+  value,
+  overridden,
+  resetLabel,
+  edit,
+  onChange,
+}: {
+  label: string
+  value: string
+  overridden: boolean
+  resetLabel: string
+  edit: Edit
+  onChange: (color: string | null) => (town: TownSnapshot) => TownSnapshot
+}) {
+  const gesture = useGestureEdit(edit)
+  return (
+    <Field label={label}>
+      <span className="editor-color">
+        <input
+          type="color"
+          value={value}
+          onFocus={gesture.start}
+          onClick={gesture.start}
+          onChange={(event) => gesture.apply(onChange(event.currentTarget.value))}
+        />
+        <button
+          className="text-button"
+          type="button"
+          aria-label={`${resetLabel} (${label})`}
+          disabled={!overridden}
+          onClick={() => edit(onChange(null))}
+        >
+          {resetLabel}
         </button>
       </span>
     </Field>
@@ -1004,6 +1160,7 @@ export function Inspector({
   settingsShown,
   language,
   copy,
+  dirty,
   detailsHidden,
   edit,
   onSelect,
@@ -1016,6 +1173,8 @@ export function Inspector({
   /** The town settings, opened from the toolbar while nothing is selected. */
   settingsShown: boolean
   language: AppLanguage
+  /** Whether anything is unsaved; only a saved town offers to leave the editor to try its ballpark rules. */
+  dirty: boolean
   copy: Copy
   /** Only a phone-sized screen offers hiding the details, to give the map more room. */
   detailsHidden: boolean
@@ -1087,6 +1246,7 @@ export function Inspector({
         {settingsShown && <TownNameFields town={town} language={language} copy={copy} edit={edit} />}
         {settingsShown && petWalkFields}
         {settingsShown && <TownMovementFields town={town} copy={copy} edit={edit} />}
+        {settingsShown && <BallparkSettingsFields town={town} language={language} dirty={dirty} edit={edit} />}
       </div>
     </aside>
   )
@@ -1300,6 +1460,7 @@ export function TownEditorPanel({
           settingsShown={settingsShown}
           language={language}
           copy={copy}
+          dirty={editor.dirty}
           detailsHidden={detailsHidden}
           edit={edit}
           onSelect={select}

@@ -147,6 +147,23 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   justify-content: flex-start;
   padding: 0 3vw 2vh;
 }
+/* An admin's try of next month's rules, kept in sight on every screen of the run. */
+.derby-preview-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  margin: 0;
+  padding: 0 16px;
+  border-radius: 999px;
+  color: #7a3524;
+  background: #fbe3d9;
+  box-shadow: var(--shadow);
+  font-weight: 800;
+}
+.derby-preview-note {
+  color: #7a3524;
+  font-weight: 700;
+}
 .derby-links .language-select {
   background: var(--surface);
   box-shadow: var(--shadow);

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { TownSnapshot } from '../data/models'
+import { rankingMonth, upcomingBallparkRules } from '../data/ballparkRules'
+import type { BallparkSettings, TownSnapshot } from '../data/models'
 import { fetchTownLayout, saveTownLayout, TownSaveError } from '../data/townApi'
 import type { EditorSelection } from './townEditing'
 
@@ -8,7 +9,7 @@ const HISTORY_LIMIT = 100
 export type EditorNotice = 'saved' | 'conflict' | 'forbidden' | 'invalid' | 'error'
 export type EditorStatus = 'idle' | 'loading' | 'error' | 'ready'
 
-type EditorState = { key: string; base: TownSnapshot; current: TownSnapshot; history: TownSnapshot[] }
+export type EditorState = { key: string; base: TownSnapshot; current: TownSnapshot; history: TownSnapshot[] }
 
 export function getSaveFailureNotice(error: unknown): EditorNotice {
   if (!(error instanceof TownSaveError)) return 'error'
@@ -28,16 +29,55 @@ export function withHistory(state: EditorState, current: TownSnapshot): EditorSt
 }
 
 /**
- * Edits made while `sent` was being saved stay unsaved but build on the new revision. Untouched venues take the saved
- * ones, since the backend owns the ballpark rules and may have promoted a schedule; resending the old schedule after
- * that would be rejected.
+ * A town edited while `sent` was being saved stays unsaved but builds on the new revision. Untouched venues take the
+ * saved ones, and an edited ballpark keeps only the admin's changes over them (`rebaseBallpark`), since the backend
+ * owns the ballpark rules and may have promoted a schedule; resending the old schedule after that would be rejected.
  */
-export function rebaseOnSave(current: TownSnapshot, sent: TownSnapshot, saved: TownSnapshot): TownSnapshot {
+export function rebaseOnSave(
+  current: TownSnapshot,
+  sent: TownSnapshot,
+  saved: TownSnapshot,
+  month: string,
+): TownSnapshot {
   if (current === sent) return saved
+  if (current.venues === sent.venues) return { ...current, venues: saved.venues, revision: saved.revision }
+  const ballpark = rebaseBallpark(current.venues.ballpark, sent.venues.ballpark, saved.venues.ballpark, month)
+  return { ...current, venues: { ...current.venues, ballpark }, revision: saved.revision }
+}
+
+/**
+ * The admin's look on the backend's rules in effect, with the backend's schedule unless the admin changed it since
+ * `sent`. A schedule due by the KST `month` is never kept: that save promoted it, so sending it again would be refused.
+ */
+export function rebaseBallpark(
+  edited: BallparkSettings,
+  sent: BallparkSettings,
+  saved: BallparkSettings,
+  month: string,
+): BallparkSettings {
+  const scheduledRules =
+    edited.scheduledRules === sent.scheduledRules ? saved.scheduledRules : upcomingBallparkRules(edited, month)
   return {
-    ...current,
-    venues: current.venues === sent.venues ? saved.venues : current.venues,
-    revision: saved.revision,
+    theme: edited.theme,
+    colors: edited.colors,
+    rules: saved.rules,
+    ...(scheduledRules ? { scheduledRules } : {}),
+  }
+}
+
+/**
+ * The editor once `sent` is saved as `saved`. Undo stops at the saved town, as after any save: an undo step from
+ * before it could resend what the save replaced, such as a schedule it promoted, so those steps go. Edits made while it
+ * was saving keep their undo steps, rebased on it like the town itself.
+ */
+export function afterSave(state: EditorState, sent: TownSnapshot, saved: TownSnapshot, month: string): EditorState {
+  const sentStep = state.history.lastIndexOf(sent)
+  const steps = state.current === sent || sentStep < 0 ? [] : state.history.slice(sentStep)
+  return {
+    ...state,
+    base: saved,
+    current: rebaseOnSave(state.current, sent, saved, month),
+    history: steps.map((step) => rebaseOnSave(step, sent, saved, month)),
   }
 }
 
@@ -109,15 +149,8 @@ export function useTownEditor(townId: string | null) {
     setNotice(null)
     try {
       const saved = await saveTownLayout(sent)
-      setState(
-        (current) =>
-          current && {
-            ...current,
-            base: saved,
-            current: rebaseOnSave(current.current, sent, saved),
-            history: current.current === sent ? [] : current.history,
-          },
-      )
+      const month = rankingMonth(new Date())
+      setState((current) => current && afterSave(current, sent, saved, month))
       setNotice('saved')
     } catch (error) {
       setNotice(getSaveFailureNotice(error))

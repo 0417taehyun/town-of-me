@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { BallparkSettings, TownSnapshot } from '../data/models'
 import { SAMPLE_TOWN } from '../testing/sampleTown'
 import { getRoadWorldPoints } from '../scene/objects/roads/roadLayout'
 import {
@@ -26,6 +27,9 @@ import {
   startPetRoute,
   updateObject,
   updateResident,
+  withBallparkColor,
+  withBallparkSchedule,
+  withoutBallparkSchedule,
 } from './townEditing'
 
 const sequence = (...values: number[]) => {
@@ -203,5 +207,67 @@ describe('town editing', () => {
     expect(turned.position.x).toBeCloseTo(42)
     expect(turned.position).toMatchObject({ y: 42 })
     expect(turned.position.z).toBeCloseTo(-4)
+  })
+})
+
+const withBallpark = (changes: Partial<BallparkSettings>): TownSnapshot => ({
+  ...SAMPLE_TOWN,
+  venues: { ballpark: { ...SAMPLE_TOWN.venues.ballpark, rules: { pitchCount: 5, difficulty: 'normal' }, ...changes } },
+})
+
+describe('ballpark settings', () => {
+  it('schedules new rules from next month only, first making a schedule due this month the rules in effect', () => {
+    // The stored town still carries November's schedule, since nothing has been saved since November began.
+    const town = withBallpark({
+      scheduledRules: { fromMonth: '2026-11', rules: { pitchCount: 7, difficulty: 'hard' } },
+    })
+    const rescheduled = withBallparkSchedule(town, { pitchCount: 8, difficulty: 'easy' }, '2026-11')
+    expect(rescheduled.venues.ballpark).toMatchObject({
+      rules: { pitchCount: 7, difficulty: 'hard' },
+      scheduledRules: { fromMonth: '2026-12', rules: { pitchCount: 8, difficulty: 'easy' } },
+    })
+    const december = withBallparkSchedule(withBallpark({}), { pitchCount: 3, difficulty: 'normal' }, '2026-12')
+    expect(december.venues.ballpark.scheduledRules?.fromMonth).toBe('2027-01')
+  })
+
+  it("changes one of next month's rules over the ones already scheduled, not this month's", () => {
+    const town = withBallpark({
+      scheduledRules: { fromMonth: '2026-12', rules: { pitchCount: 8, difficulty: 'hard' } },
+    })
+    expect(withBallparkSchedule(town, { difficulty: 'easy' }, '2026-11').venues.ballpark.scheduledRules).toEqual({
+      fromMonth: '2026-12',
+      rules: { pitchCount: 8, difficulty: 'easy' },
+    })
+  })
+
+  it("leaves nothing scheduled when next month's rules are this month's, or the schedule is cancelled", () => {
+    const upcoming = withBallpark({
+      scheduledRules: { fromMonth: '2026-12', rules: { pitchCount: 8, difficulty: 'hard' } },
+    })
+    const due = withBallpark({ scheduledRules: { fromMonth: '2026-11', rules: { pitchCount: 7, difficulty: 'hard' } } })
+    const settled = [
+      withBallparkSchedule(upcoming, { pitchCount: 5, difficulty: 'normal' }, '2026-11'),
+      withoutBallparkSchedule(upcoming, '2026-11'),
+      withBallparkSchedule(due, { pitchCount: 7, difficulty: 'hard' }, '2026-11'),
+    ]
+    expect(settled.map(({ venues }) => 'scheduledRules' in venues.ballpark)).toEqual([false, false, false])
+    expect(settled.map(({ venues }) => venues.ballpark.rules.pitchCount)).toEqual([5, 5, 7])
+  })
+
+  it('changes the rules without touching the look or anything else in the town, and the look without the rules', () => {
+    const town = withBallpark({ colors: { roof: '#e8735a' } })
+    const scheduled = withBallparkSchedule(town, { pitchCount: 9, difficulty: 'easy' }, '2026-11')
+    expect({ ...scheduled, venues: town.venues }).toEqual(town)
+    expect(scheduled.venues.ballpark).toMatchObject({ theme: town.venues.ballpark.theme, colors: { roof: '#e8735a' } })
+    const recolored = withBallparkColor(scheduled, 'walls', '#f4e9d0')
+    expect(recolored.venues.ballpark).toEqual({
+      ...scheduled.venues.ballpark,
+      colors: { roof: '#e8735a', walls: '#f4e9d0' },
+    })
+  })
+
+  it('gives one role back to the theme and keeps the other overrides', () => {
+    const town = withBallpark({ colors: { roof: '#e8735a', trim: '#fdfaf2' } })
+    expect(withBallparkColor(town, 'roof', null).venues.ballpark.colors).toEqual({ trim: '#fdfaf2' })
   })
 })

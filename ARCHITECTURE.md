@@ -139,10 +139,12 @@ in place until the ballplayer rigs replace them.
 `BaseballApp.tsx` checks the device first (`deviceGate.ts`: a phone or tablet, then WebGL 2) and shows why one cannot
 play in the visitor's language (also when the stadium's graphics fail later), then the character, then the derby. Each
 run reads the KST month it starts in and gets a `crypto` seed (`keyboardRun.ts`), so a page left open into a new month
-plays the rules scheduled for it, as loaded with the page, from its next run. The HUD (`ui/`) keeps only what the
-stage's events tell it (`derbyCues.ts`): a release carries nothing it shows, so the pitch type reaches the screen only
-in a result, and the result banner waits until the ball is down so it never covers the play. The result screen draws the `DerbyResult` that
-`replayDerby` returns with the `finished` event.
+plays the rules scheduled for it, as loaded with the page, from its next run. The editor's link to `?rules=next`
+(`isNextRulesPreview` in `baseballRoute.ts`) plays the rules scheduled for next month instead, or this month's when
+none are (`plannedBallparkRules`), badged `Preview · not ranked`; once ranked runs exist, such a preview must never get
+a run ticket. The HUD (`ui/`) keeps only what the stage's events tell it (`derbyCues.ts`): a release carries nothing it
+shows, so the pitch type reaches the screen only in a result, and the result banner waits until the ball is down so it
+never covers the play. The result screen draws the `DerbyResult` that `replayDerby` returns with the `finished` event.
 
 ## Backend (`backend/src`)
 
