@@ -20,10 +20,15 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           PULL_REQUEST_BASE: ${{ github.event.pull_request.base.sha }}
           PUSH_BASE: ${{ github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           base="$PUSH_BASE"
           if [[ "$EVENT_NAME" == "pull_request" ]]; then base="$PULL_REQUEST_BASE"; fi
-          if [[ -z "$base" || "$base" =~ ^0+$ ]]; then base="$(git rev-list --max-parents=0 HEAD)"; fi
+          # A new branch's first push has no "before" (all zeros), and a force-push's old tip is not fetched:
+          # compare such a push with where it left the default branch.
+          if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            base="$(git merge-base "origin/$DEFAULT_BRANCH" HEAD 2>/dev/null || git rev-list --max-parents=0 HEAD)"
+          fi
 
           changed_files="$(git diff --name-only "$base" "$GITHUB_SHA")"
           # A dependency-only change (package manifests and the root lockfile, as Dependabot opens) may touch both.
