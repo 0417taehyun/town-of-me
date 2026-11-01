@@ -9,7 +9,9 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
-        exclude-patterns: ['@mediapipe/*'] # a tasks-vision bump arrives alone and gets the zero-external-request check
+        # A tasks-vision or Pretendard bump arrives alone and gets the zero-external-request check; a Pretendard bump
+        # also updates its row in frontend/public/assets/CREDITS.md and Pretendard-LICENSE.txt.
+        exclude-patterns: ['@mediapipe/*', 'pretendard']
     ignore:
       # typescript-eslint supports TypeScript below 6.1, and TypeScript minor releases can break it.
       - dependency-name: typescript

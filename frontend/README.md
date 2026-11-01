@@ -180,4 +180,6 @@ returns from a glance after a short pause. Defaults: field of view 44°, eye-lev
 Every bundled third-party file is listed with its title, author, source, license, and changes in
 [`public/assets/CREDITS.md`](public/assets/CREDITS.md): four models from the
 [Kenney Nature Kit](https://kenney.nl/assets/nature-kit) (rocks, mushrooms, bushes, and pumpkins) and the bark recording,
-all CC0 1.0. Characters, flowers, trees, buildings, and everything else are original procedural geometry.
+all CC0 1.0; the two MediaPipe models for `/baseball`, Apache-2.0; and the Pretendard font, SIL OFL 1.1, with its license
+in [`public/assets/Pretendard-LICENSE.txt`](public/assets/Pretendard-LICENSE.txt). Characters, flowers, trees,
+buildings, and everything else are original procedural geometry.

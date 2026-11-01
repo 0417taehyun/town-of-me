@@ -11,7 +11,7 @@ The frontend is served at <http://localhost:8080> and the backend health endpoin
 `BACKEND_PORT` when needed.
 
 The frontend's Nginx origin compresses text assets and sets cache headers for deployment behind a
-CDN: fingerprinted JS, CSS, and WebAssembly files are immutable for a year (a missing one's 404 is
+CDN: fingerprinted JS, CSS, WebAssembly, and font files are immutable for a year (a missing one's 404 is
 not), other assets such as the pose models are revalidated daily, and the HTML entry point and `/v1/`
 responses are not cached. Configure the CDN to honor these origin headers, enable Brotli (and gzip
 fallback) for text assets, and pass `/v1/` through without caching. No CDN provider is required for
@@ -21,13 +21,12 @@ The home run derby at `/baseball` (and `/baseball/`) is the only document allowe
 and never the microphone or screen capture (`Permissions-Policy: camera=(self), microphone=(),
 display-capture=()`), so it alone gets a strict Content Security Policy: scripts (with
 WebAssembly) and connections from this origin only; images, media, and workers also from `blob:` URLs
-(images from `data:` too); styles from this origin and Pretendard's path on `cdn.jsdelivr.net`, fonts
-only from that path; no plugins or `<base>`; forms post only to this origin; and no page may frame it
-(`frame-ancestors 'none'`). It is also sent with `Cross-Origin-Opener-Policy: same-origin`, so a page
-that opens it gets no handle to it, and `Referrer-Policy: no-referrer`. Every other document, `/` and
-`/admin` included, is sent with `camera=()`. Browsers apply these headers only on a full page load, so
-the town and the ballpark link to each other with plain links. A CDN in front must pass them through
-unchanged.
+(images from `data:` too); styles and fonts from this origin only; no plugins or `<base>`; forms post
+only to this origin; and no page may frame it (`frame-ancestors 'none'`). It is also sent with
+`Cross-Origin-Opener-Policy: same-origin`, so a page that opens it gets no handle to it, and
+`Referrer-Policy: no-referrer`. Every other document, `/` and `/admin` included, is sent with
+`camera=()`. Browsers apply these headers only on a full page load, so the town and the ballpark link
+to each other with plain links. A CDN in front must pass them through unchanged.
 
 ```sh
 FRONTEND_PORT=8081 BACKEND_PORT=3001 docker compose up --build

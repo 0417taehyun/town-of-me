@@ -1,7 +1,7 @@
 import { CanvasTexture, SRGBColorSpace } from 'three'
 
 const SIGN_HEIGHT = 160
-const SIGN_FONT = "800 92px 'Pretendard Variable', Pretendard, system-ui, sans-serif"
+export const SIGN_FONT = "800 92px 'Pretendard Variable', Pretendard, system-ui, sans-serif"
 const FALLBACK_FONT = '800 92px system-ui, sans-serif'
 
 /**

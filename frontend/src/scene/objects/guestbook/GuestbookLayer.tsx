@@ -4,7 +4,7 @@ import type { AppLanguage } from '../../../i18n/language'
 import { languageCopy } from '../../../i18n/language'
 import { getRoundedBox } from '../../roundedBox'
 import type { TownLayerProps } from '../townObjectKind'
-import { drawSignTexture } from './signTexture'
+import { drawSignTexture, SIGN_FONT } from './signTexture'
 
 const pinnedNotes = [
   { x: -1.15, y: 2.25, rotation: -0.06, color: '#fff3cf', pin: '#c85f50' },
@@ -22,15 +22,19 @@ export const SIGN_HEIGHT = 0.7
  * front of it and trees or characters can hide it, unlike an HTML label floating over everything.
  */
 export function GuestbookSign({ title }: { title: string }) {
-  const [fontsLoaded, setFontsLoaded] = useState(false)
+  // The font's subsets load by unicode-range, and `document.fonts.ready` does not wait for glyphs only a canvas uses, so
+  // the sign waits for its own title's glyphs and redraws once they are in (or the load fails and the fallback stays).
+  const [webFontTitle, setWebFontTitle] = useState<string>()
   useEffect(() => {
     let active = true
-    void document.fonts?.ready.then(() => active && setFontsLoaded(true))
+    const redraw = () => active && setWebFontTitle(title)
+    void document.fonts?.load(SIGN_FONT, title).then(redraw, redraw)
     return () => {
       active = false
     }
-  }, [])
-  const sign = useMemo(() => drawSignTexture(title, fontsLoaded), [title, fontsLoaded])
+  }, [title])
+  const webFontReady = webFontTitle === title
+  const sign = useMemo(() => drawSignTexture(title, webFontReady), [title, webFontReady])
   useEffect(() => () => sign.texture.dispose(), [sign])
   const width = SIGN_HEIGHT * sign.aspect
   return (
