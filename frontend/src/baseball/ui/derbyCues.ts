@@ -117,6 +117,23 @@ export function captionId(hud: DerbyHudState): CaptionId {
   return 'coming'
 }
 
+/** The outcomes a big title pops up for: a ball in play's, a pitch let go by (a strike), or a swing that missed it. */
+export type OutcomeTitleId = 'homeRun' | 'hit' | 'foul' | 'strike' | 'miss'
+
+/**
+ * The big title over the play for the latest pitch, once its outcome is seen: a ball in play's as the camera starts
+ * chasing it, so it never covers the bat meeting the ball, and a strike's or a miss's as the mitt catches the pitch;
+ * until the next windup. It names the outcome only: the banner under the play waits for the ball to come down.
+ */
+export function outcomeTitle(hud: DerbyHudState): OutcomeTitleId | null {
+  const judged = judgedResult(hud)
+  if (!judged) return null
+  const latest = hud.results.length - 1
+  const seen = judged.outcome === 'miss' ? hud.settledPitch === latest : hud.chasedPitch === latest
+  if (!seen) return null
+  return judged.timing === null ? 'strike' : judged.outcome
+}
+
 /** Practice's caption: before it, a pitch on its way, then the swing's word, or a nudge after a pitch let go by. */
 export type PracticeCaptionId = 'start' | 'coming' | 'letGo' | PracticeFeedback
 

@@ -734,3 +734,67 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   font-weight: 700;
   line-height: 1.1;
 }
+
+/*
+ * The outcome's big word, popping up over the play as it is seen and fading on its own (derbyCues.ts outcomeTitle):
+ * gold for a home run, green for a hit. It sits under the top band, above where the chase keeps the ball, as large as
+ * the play band allows for its length (--title-ems).
+ */
+.derby-outcome-title {
+  position: absolute;
+  top: 24%;
+  left: var(--play-centre, 50%);
+  margin: 0;
+  color: var(--cream);
+  font-size: min(15vh, var(--play-width, 100vw) * 0.8 / var(--title-ems, 4));
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  -webkit-text-stroke: 0.7vh var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 0 1vh 2.4vh rgba(45, 69, 61, 0.35);
+  transform: translate(-50%, -50%);
+  animation: derby-outcome-title-in 1600ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  transition: left var(--ease);
+}
+.derby-outcome-title[data-outcome='homeRun'] {
+  color: #f4c542;
+}
+.derby-outcome-title[data-outcome='hit'] {
+  color: #a6dcae;
+}
+@keyframes derby-outcome-title-in {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  16% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.08);
+  }
+  26% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+/* Without the pop, the word still fades on its time, rather than not showing at all. */
+@keyframes derby-outcome-title-fade {
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .derby-outcome-title {
+    animation-name: derby-outcome-title-fade;
+    animation-duration: 1600ms !important;
+  }
+}

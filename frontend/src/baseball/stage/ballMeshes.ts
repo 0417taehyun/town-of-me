@@ -9,6 +9,8 @@ import {
   MeshStandardMaterial,
   RingGeometry,
   SphereGeometry,
+  Sprite,
+  SpriteMaterial,
   SRGBColorSpace,
   Vector3,
   type PerspectiveCamera,
@@ -19,7 +21,8 @@ import { BALL_RADIUS } from '../game/field'
 import { FIELD_LAYERS } from '../stadium/fieldLayout'
 
 // The ball as drawn: a regulation ball 1.8 times larger with red seams, a dark rim so it reads against sky and grass,
-// a trail behind it, a blob on the ground under it, and a ring where a ball in play will come down.
+// a soft glow around it on its way (warm once it is hit), a trail behind it, a blob on the ground under it, and a ring
+// where a ball in play will come down.
 
 /** A regulation ball 18 m away is a few pixels wide; drawn this much larger it still reads. */
 export const BALL_DISPLAY_SCALE = 1.8
@@ -31,6 +34,16 @@ export const TRAIL_LENGTH = 8
 export const MINIMUM_BALL_PIXELS = { pitched: 6, flying: 12 }
 /** The landing ring's outer diameter (m), and the fewest pixels across it may shrink to far out in the field. */
 export const LANDING_RING = { size: 2.2, pixels: 32 }
+
+/**
+ * The glow around a moving ball: its size (m), pale on a pitch and warm off the bat, and the fewest pixels across it may
+ * shrink to, so a ball far out in the field still reads.
+ */
+export const BALL_GLOW = {
+  size: DRAWN_BALL_RADIUS * 4,
+  pitched: { color: '#fff2d2', opacity: 0.8, pixels: 22 },
+  flying: { color: '#ffbe5c', opacity: 1, pixels: 40 },
+}
 
 /** A spin about `axis` (normalized when drawn). */
 export type BallSpin = { axis: Vec3; radiansPerSecond: number }
@@ -49,6 +62,7 @@ export type BallParts = {
   group: Group
   ball: Mesh<SphereGeometry, MeshStandardMaterial>
   rim: Mesh<SphereGeometry, MeshBasicMaterial>
+  glow: Sprite
   shadow: Mesh<CircleGeometry, MeshBasicMaterial>
   trail: Mesh<SphereGeometry, MeshBasicMaterial>[]
   ring: Mesh<RingGeometry, MeshBasicMaterial>
@@ -82,6 +96,27 @@ export function createSeamTexture() {
   return texture
 }
 
+/** A round light, bright in the middle and gone at the edge, for the ball's glow and the stage's flashes. */
+export function drawGlowGradient(context: CanvasRenderingContext2D, size: number) {
+  const gradient = context.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+  gradient.addColorStop(0, 'rgba(255, 255, 255, 1)')
+  gradient.addColorStop(0.3, 'rgba(255, 246, 222, 0.6)')
+  gradient.addColorStop(1, 'rgba(255, 240, 210, 0)')
+  context.fillStyle = gradient
+  context.fillRect(0, 0, size, size)
+}
+
+export function createGlowTexture() {
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 128
+  const context = canvas.getContext('2d')
+  if (context) drawGlowGradient(context, canvas.width)
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  return texture
+}
+
 export function createBallParts(): BallParts {
   const ball = new Mesh(
     new SphereGeometry(DRAWN_BALL_RADIUS, 24, 16),
@@ -98,6 +133,12 @@ export function createBallParts(): BallParts {
     new MeshBasicMaterial({ color: '#2a2420', side: BackSide, transparent: true, opacity: 0.6 }),
   )
   ball.add(rim)
+  // The glow never writes depth, and the rim draws after it, so the rim stays crisp over the halo.
+  const glow = new Sprite(
+    new SpriteMaterial({ map: createGlowTexture(), transparent: true, depthWrite: false, fog: false }),
+  )
+  glow.renderOrder = 1
+  rim.renderOrder = 2
   const shadow = new Mesh(
     new CircleGeometry(DRAWN_BALL_RADIUS * 1.6, 20),
     new MeshBasicMaterial({ color: '#1d1a17', transparent: true, opacity: 0.3, depthWrite: false }),
@@ -122,13 +163,15 @@ export function createBallParts(): BallParts {
   )
   ring.rotation.x = -Math.PI / 2
   const group = new Group()
-  group.add(ball, shadow, ring, ...trail)
-  return { group, ball, rim, shadow, trail, ring }
+  group.add(ball, glow, shadow, ring, ...trail)
+  return { group, ball, rim, glow, shadow, trail, ring }
 }
 
 export function disposeBallParts(parts: BallParts) {
   const meshes = [parts.ball, parts.rim, parts.shadow, parts.ring, ...parts.trail]
   parts.ball.material.map?.dispose()
+  parts.glow.material.map?.dispose()
+  parts.glow.material.dispose()
   meshes.forEach((mesh) => {
     mesh.geometry.dispose()
     mesh.material.dispose()
@@ -173,6 +216,7 @@ export function drawBall(
   // A ball drawn larger than life rests on the grass instead of sinking into it.
   ball.position.set(x, Math.max(y, DRAWN_BALL_RADIUS * scale), z)
   rim.material.opacity = view.flying ? 0.85 : 0.6
+  drawGlow(parts.glow, ball.position, view, camera, viewportHeight)
   // Above the dirt, chalk, and plate, so the shadow shows where the ball's height matters most.
   shadow.position.set(x, FIELD_LAYERS.chalk + 0.01, z)
   shadow.scale.setScalar(scale)
@@ -184,6 +228,22 @@ export function drawBall(
   const ringDistance = camera.position.distanceTo(ring.position)
   ring.scale.setScalar(
     minimumScreenScale(ringDistance, camera.fov, viewportHeight, LANDING_RING.pixels, LANDING_RING.size),
+  )
+}
+
+/**
+ * The glow on the ball drawn `at`, while it is on its way, pitched or hit; none while it rests in a hand, the mitt, or
+ * the grass.
+ */
+export function drawGlow(glow: Sprite, at: Vector3, view: BallView, camera: PerspectiveCamera, viewportHeight: number) {
+  glow.visible = view.spin !== null
+  const look = view.flying ? BALL_GLOW.flying : BALL_GLOW.pitched
+  glow.position.copy(at)
+  glow.material.color.set(look.color)
+  glow.material.opacity = look.opacity
+  const distance = camera.position.distanceTo(glow.position)
+  glow.scale.setScalar(
+    BALL_GLOW.size * minimumScreenScale(distance, camera.fov, viewportHeight, look.pixels, BALL_GLOW.size),
   )
 }
 

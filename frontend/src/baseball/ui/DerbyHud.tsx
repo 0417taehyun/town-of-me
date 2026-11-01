@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import {
   bannerResult,
@@ -5,15 +6,18 @@ import {
   captionId,
   type DerbyHudState,
   homeRunDistanceText,
+  outcomeTitle,
   pitchDots,
   scoreboardTotals,
+  textEms,
 } from './derbyCues'
 
 /**
  * The run as it plays, sized to read from a step back: the scoreboard (a dot per pitch, coloured by how it ended once
  * its ball is down, the one up next ringed; home runs, then their summed distance, the two things a run ranks by, each
- * counting a home run as its banner shows) and a two- or three-word caption in the top band, and once a result's ball
- * is down, its distance and details under the play. It knows only what the stage's events told it (derbyCues.ts),
+ * counting a home run as its banner shows) and a two- or three-word caption in the top band, a big title popping up
+ * and fading as a pitch's outcome is seen (outcomeTitle; the caption says it for a screen reader), and once a result's
+ * ball is down, its distance and details under the play. It knows only what the stage's events told it (derbyCues.ts),
  * never the pitches to come. The caption and banner are one live region, so a screen reader hears each cue and result;
  * `cameraState`, what the camera panel's chip shows, is another, heard only. While the run is `paused` for a visitor
  * out of the camera's view, the caption says so. Results show the outcome, the distance, and the pitch type, never how
@@ -36,6 +40,8 @@ export function DerbyHud({
   const score = scoreboardTotals(hud)
   const shown = bannerResult(hud)
   const banner = shown && bannerText(shown, language)
+  const title = outcomeTitle(hud)
+  const titleText = title && copy.titles[title]
   return (
     <div className="derby-hud">
       <div className="derby-scoreboard">
@@ -61,6 +67,17 @@ export function DerbyHud({
           </p>
         </div>
       </div>
+      {titleText && (
+        <p
+          key={hud.pitchIndex}
+          className="derby-outcome-title"
+          data-outcome={title}
+          style={{ '--title-ems': textEms(titleText) } as CSSProperties}
+          aria-hidden="true"
+        >
+          {titleText}
+        </p>
+      )}
       <div className="derby-callout" aria-live="polite" aria-atomic="true">
         <p className="derby-caption">{paused ? copy.paused : copy.captions[captionId(hud)]}</p>
         {banner && (

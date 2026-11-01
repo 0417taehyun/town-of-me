@@ -16,6 +16,7 @@ import {
   homeRunDistanceText,
   hudAfterEvent,
   NEW_RUN_HUD,
+  outcomeTitle,
   pitchDots,
   pitchInPlay,
   scoreboardTotals,
@@ -43,12 +44,13 @@ function swingDeadOn(derby: Derby) {
   return swingDerby(derby, { contactAtMs, startedAtMs: contactAtMs - 200, speed: 8, batHeight })
 }
 
-/** The stage events of a run swung dead on at every pitch. */
-function deadOnRun(plan: RunPlan) {
+/** The stage events of a run swung dead on at every pitch, or with `swings` false, of one letting every pitch go by. */
+function deadOnRun(plan: RunPlan, swings = true) {
   let derby = createDerby(plan, { side: 'right', practice: [] }, 0)
   const events: DerbyEvent[] = []
   while (derby.phase !== 'finished') {
-    const update = derby.phase === 'pitch' ? swingDeadOn(derby) : advanceDerby(derby, phaseEndMs(derby) ?? 0)
+    const swinging = swings && derby.phase === 'pitch'
+    const update = swinging ? swingDeadOn(derby) : advanceDerby(derby, phaseEndMs(derby) ?? 0)
     derby = update.derby
     events.push(...update.events)
   }
@@ -130,6 +132,40 @@ describe('the derby HUD', () => {
       settledPitch: -1,
     }
     expect(chasingHomeRun(hitInTheAir)).toBe(false)
+  })
+
+  it('pops up the outcome as the camera chases the ball or the mitt catches the pitch, never at its result', () => {
+    const plan = createRunPlan({ pitchCount: 3, difficulty: 'normal' }, 11)
+    let hud = NEW_RUN_HUD
+    const titles = (events: StageEvent[]) =>
+      events.map((event) => {
+        hud = hudAfterEvent(hud, event)
+        return [event.type, outcomeTitle(hud)]
+      })
+    expect(titles(deadOnRun(plan))).toEqual([
+      ...[0, 1, 2].flatMap(() => [
+        ['windup', null],
+        ['release', null],
+        ['result', null],
+        ['chase', 'homeRun'],
+        ['landed', 'homeRun'],
+      ]),
+      ['finished', null],
+    ])
+    hud = NEW_RUN_HUD
+    expect(titles(deadOnRun(plan, false))).toEqual([
+      ...[0, 1, 2].flatMap(() => [
+        ['windup', null],
+        ['release', null],
+        ['result', null],
+        ['caught', 'strike'],
+      ]),
+      ['finished', null],
+    ])
+    const swungAndMissed = { ...hud.results[0], timing: 'early' as const }
+    const caught: DerbyHudState = { ...hud, phase: 'result', results: [swungAndMissed], settledPitch: 0 }
+    expect(outcomeTitle(caught)).toBe('miss')
+    expect(outcomeTitle({ ...caught, settledPitch: -1 })).toBe(null)
   })
 
   it('is between pitches before the first windup and once a ball is down, never with one on its way or after the last', () => {

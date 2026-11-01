@@ -9,6 +9,7 @@ import { type BallParts, drawBall } from './ballMeshes'
 import { type BallplayerCast, posePitcherAt, posePlayers, settleBatter } from './ballplayerCast'
 import { Ballplayers } from './Ballplayers'
 import { aimCamera, centreInBand, createCameraRig, type FreeBand } from './cameraShots'
+import { createFlashes, disposeFlashes, drawFlashes, startFlash } from './flashes'
 import {
   createStageRun,
   directedShot,
@@ -25,8 +26,8 @@ import {
 import { createStrikeZoneOutline, disposeStrikeZoneOutline, drawStrikeZoneOutline } from './strikeZoneOutline'
 
 /**
- * Plays a run in one frame loop: the derby on its game clock, the players, the ball, the strike zone's box, and the
- * camera, all in refs. React hears only the events. The batter's swing is settled before anything is drawn: a hit
+ * Plays a run in one frame loop: the derby on its game clock, the players, the ball, the strike zone's box, the flashes
+ * at the release, the contact, and the catch (flashes.ts), and the camera, all in refs. React hears only the events. The batter's swing is settled before anything is drawn: a hit
  * waits, the clock still, while its aim is solved a slice a frame (ballplayerCast.ts settleBatter), so no frame solves
  * it at once. The pitcher is posed first, since the ball is in his hand until it is released. A new `run` starts over.
  * Swings pushed onto `swings` are taken every frame and played at the moment they report, after the cues of swings
@@ -66,6 +67,8 @@ export function DerbyDirector({
   const rig = useMemo(() => createCameraRig(), [])
   const outline = useMemo(() => createStrikeZoneOutline(), [])
   useEffect(() => () => disposeStrikeZoneOutline(outline), [outline])
+  const flashes = useMemo(() => createFlashes(), [])
+  useEffect(() => () => disposeFlashes(flashes), [flashes])
   useLayoutEffect(() => {
     listener.current = onEvent
   }, [onEvent])
@@ -94,19 +97,21 @@ export function DerbyDirector({
     const cues = swingCues.current.splice(0)
     const events = current ? playStageFrame(current, reported, realMs, reducedMotion, cues, true) : []
     events.forEach((event) => listener.current(event))
+    const camera = state.camera as PerspectiveCamera
+    if (current) events.forEach((event) => startFlash(flashes, event, current, camera, realMs))
     const cast = players.current
     const caughtUp = !cast || settleBatter(cast, current, realMs)
     if (current && caughtUp) resumeStageRun(current, realMs)
     const nowMs = current ? gameTime(current.clock, realMs) : 0
     const gameDelta = Math.max(0, nowMs - lastGameMs.current) / 1000
     lastGameMs.current = nowMs
-    const camera = state.camera as PerspectiveCamera
     const view = stageBallView(current, nowMs, cast && posePitcherAt(cast, current, nowMs))
     const { width, height } = state.size
     centreInBand(camera, rig, band, width, height, delta, reducedMotion)
     const aspect = band.width / Math.max(1, height)
     aimCamera(camera, rig, directedShot(current, nowMs, aspect, side, view.position), delta)
     if (ball.current) drawBall(ball.current, view, camera, state.size.height, gameDelta)
+    drawFlashes(flashes, camera, height, realMs)
     drawStrikeZoneOutline(outline, current?.derby.phase ?? null, delta, reducedMotion)
     if (cast) posePlayers(cast, current, nowMs, view, delta)
   })
@@ -116,6 +121,7 @@ export function DerbyDirector({
       <Ballplayers ref={players} profile={profile} side={side} />
       <Ball ref={ball} />
       <primitive object={outline} />
+      <primitive object={flashes.group} />
     </>
   )
 }

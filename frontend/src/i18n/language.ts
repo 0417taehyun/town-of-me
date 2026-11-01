@@ -610,6 +610,8 @@ export const languageCopy = {
           foul: 'Foul ball',
           miss: 'Swing and miss',
         },
+        /** The big word that pops up over the play as an outcome is seen (derbyCues.ts outcomeTitle). */
+        titles: { homeRun: 'HOME RUN!', hit: 'BASE HIT!', foul: 'FOUL', strike: 'STRIKE', miss: 'SWING AND MISS' },
         pitchWas: { fastball: 'It was a fastball', changeup: 'It was a changeup', curve: 'It was a curve' },
         paused: 'Paused · step in',
       },
@@ -1406,6 +1408,7 @@ export const languageCopy = {
           foul: '파울',
           miss: '헛스윙',
         },
+        titles: { homeRun: '홈런!', hit: '안타!', foul: '파울', strike: '스트라이크', miss: '헛스윙' },
         pitchWas: { fastball: '직구였어요', changeup: '체인지업이었어요', curve: '커브였어요' },
         paused: '멈춤 · 돌아와요',
       },
