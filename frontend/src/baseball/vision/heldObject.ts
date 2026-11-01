@@ -169,14 +169,18 @@ export function chooseHand(wrists: BodySample['wrists'], shoulderWidth: number, 
 }
 
 /** `detection` in image units, with its reach to the nearest visible wrist (Infinity when none is visible). */
-export function measureDetection(detection: Detection, view: HandsView, aspect: number): MeasuredDetection {
+export function measureDetection<Found extends Detection>(
+  detection: Found,
+  view: HandsView,
+  aspect: number,
+): Found & MeasuredDetection {
   const imageBox = toImageBox(detection.box, aspect)
   const reaches = visibleWrists(view.wrists).map((wrist) => boxDistance(imageBox, wrist) / view.width)
   return { ...detection, imageBox, reach: Math.min(...reaches) }
 }
 
 /** The detections sure enough and close enough to the hands to be what they hold, surest first. */
-export function lockCandidates(detections: readonly Detection[], view: HandsView, aspect: number) {
+export function lockCandidates<Found extends Detection>(detections: readonly Found[], view: HandsView, aspect: number) {
   const { candidateScore, candidateReach } = HELD_OBJECT_RULES
   return detections
     .map((detection) => measureDetection(detection, view, aspect))

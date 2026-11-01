@@ -145,9 +145,15 @@ export function savePanelSize(size: CameraPanelSize, store: SizeStore | null = b
   }
 }
 
-/** V on any keyboard layout (a Korean one types ㅍ there), unless a modifier makes it a shortcut such as paste. */
-export function isCameraPanelKey(event: Pick<KeyboardEvent, 'code' | 'repeat' | 'altKey' | 'ctrlKey' | 'metaKey'>) {
-  return event.code === 'KeyV' && !event.repeat && !event.altKey && !event.ctrlKey && !event.metaKey
+/**
+ * The key at `code` on any keyboard layout (a Korean one types ㅍ at V), unless it is held down or a modifier makes it
+ * a shortcut such as paste.
+ */
+export function isPlainKey(
+  event: Pick<KeyboardEvent, 'code' | 'repeat' | 'altKey' | 'ctrlKey' | 'metaKey'>,
+  code: string,
+) {
+  return event.code === code && !event.repeat && !event.altKey && !event.ctrlKey && !event.metaKey
 }
 
 export type DerbyKeyAction = 'leave' | 'cameraPanel'
@@ -162,5 +168,5 @@ export function derbyKeyAction(
   screen: CameraScreen | null,
 ): DerbyKeyAction | null {
   if (event.key === 'Escape') return 'leave'
-  return screen === 'play' && isCameraPanelKey(event) ? 'cameraPanel' : null
+  return screen === 'play' && isPlainKey(event, 'KeyV') ? 'cameraPanel' : null
 }

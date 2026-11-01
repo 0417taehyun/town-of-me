@@ -236,15 +236,20 @@ run until the camera turns off. Practice and a run stand still once the visitor 
 come), so a ball on its way plays out and no swing made meanwhile meets a pitch; the next pitch comes once they are
 back. A camera that turns off, as after two minutes without movement, takes the page back to the rules card. In a dev
 build, `devSeam.ts` lets an automated check stand in for a visitor the fake camera cannot show, and for their swings,
-which the camera's frames hand over like tracked ones; a production build leaves it out. `ui/cameraPanelLayout.ts`
+which the camera's frames hand over like tracked ones. In a dev build, D also shows `devDiagnostics.ts`'s panel
+(`ui/DiagnosticsPanel.tsx`) for tuning on a real webcam: the camera's and the vision tasks' timing, the tracker and the
+lock, each stance condition against its limit, and the last sweep from leaving the load to the stage's reaction against
+the swing rules; L saves the last minute of these numbers as a JSON file on this device, no picture. A production
+build leaves both out. `ui/cameraPanelLayout.ts`
 places the camera panel: the mirrored camera is the stage while it sets up, a column under the scoreboard on the side
 opposite the batter from practice on (medium, 29% of the width, by default; V or the camera button cycles medium, large,
 hidden, remembered in `localStorage`), a corner chip while the camera chases a home run, and hidden on the result screen
 (which can turn the camera off) or below a readable width, but never while the camera looks for the visitor. The stage
 centres the play and the HUD its caption and banner in the band the panel leaves free (`centreInBand` in
 `stage/cameraShots.ts`). No key swings and there is no swing button (keys only press the focused button, leave with
-Escape, or resize the camera panel with V): the swings are the camera's, which the stage takes before advancing the
-derby in the same frame, so a swing seen a little late is still judged at the moment its frame was taken.
+Escape, or resize the camera panel with V, and in a dev build show the diagnostics with D and save them with L): the
+swings are the camera's, which the stage takes before advancing the derby in the same frame, so a swing seen a little
+late is still judged at the moment its frame was taken.
 
 ## Backend (`backend/src`)
 

@@ -1,4 +1,4 @@
-import { distance, meanPoint, type Point } from '../vision/poseLandmarks'
+import { distance, meanPoint, type Point, type ShoulderLine } from '../vision/poseLandmarks'
 import type { SwingTracker } from '../vision/swingTracker'
 
 // The hands-free way on: holding the batting stance about three seconds starts practice, the run after it, and another
@@ -52,8 +52,23 @@ export function stanceFrame(tracker: SwingTracker, time: number): StanceFrame {
   const shoulders = tracker.frame.frontal
   const grip = view && view.source !== 'hold' ? view.grip : null
   if (!grip || !shoulders) return { time, inStance: false, grip: null, shoulderWidth: null }
-  const raised = (grip.y - shoulders.midY) / shoulders.width <= STANCE_HOLD_RULES.lowestGrip
+  const raised = gripRaised(gripDrop(grip, shoulders))
   return { time, inStance: tracker.state === 'loaded' && raised, grip, shoulderWidth: shoulders.width }
+}
+
+/** How far (shoulder widths) `grip` hangs below the shoulders. */
+export function gripDrop(grip: Point, shoulders: ShoulderLine) {
+  return (grip.y - shoulders.midY) / shoulders.width
+}
+
+/** Whether a grip `drop` shoulder widths below the shoulders is up in the stance rather than hanging at the hip. */
+export function gripRaised(drop: number) {
+  return drop <= STANCE_HOLD_RULES.lowestGrip
+}
+
+/** Whether the step that asked for `hold` has waited long enough, by `time`, for a stance to count. */
+export function stanceSettled(hold: Pick<StanceHold, 'since'>, time: number) {
+  return time - hold.since >= STANCE_HOLD_RULES.settleMs
 }
 
 export function startStanceHold(wait: string, since: number): StanceHold {
@@ -62,12 +77,12 @@ export function startStanceHold(wait: string, since: number): StanceHold {
 
 /** The hold after one more frame. */
 export function holdStance(hold: StanceHold, frame: StanceFrame): StanceHold {
-  const { dropoutMs, settleMs, stillWindowMs } = STANCE_HOLD_RULES
+  const { dropoutMs, stillWindowMs } = STANCE_HOLD_RULES
   const elapsed = Math.min(Math.max(0, frame.time - hold.lastTime), dropoutMs)
   const seen = frame.grip !== null && frame.shoulderWidth !== null
   const kept = hold.recent.filter((sample) => frame.time - sample.time <= stillWindowMs)
   const recent = frame.grip ? [...kept, { time: frame.time, grip: frame.grip }] : kept
-  const settled = frame.time - hold.since >= settleMs
+  const settled = stanceSettled(hold, frame.time)
   const holding = hold.armed && settled && frame.inStance && isStill(recent, frame.shoulderWidth)
   const lostBriefly = !seen && hold.lastSeen !== null && frame.time - hold.lastSeen <= dropoutMs
   return {
@@ -90,10 +105,15 @@ export function nextHeldMs(heldMs: number, elapsed: number, holding: boolean, lo
 
 /** Whether the grips in `recent` all stay near their middle, for a visitor `shoulderWidth` wide. */
 export function isStill(recent: readonly { grip: Point }[], shoulderWidth: number | null) {
-  if (shoulderWidth === null || recent.length === 0) return false
+  const spread = stillSpread(recent, shoulderWidth)
+  return spread !== null && spread <= STANCE_HOLD_RULES.stillShoulderWidths
+}
+
+/** The farthest any grip in `recent` strays from their middle (shoulder widths); null with no grip or no width. */
+export function stillSpread(recent: readonly { grip: Point }[], shoulderWidth: number | null) {
+  if (shoulderWidth === null || recent.length === 0) return null
   const middle = meanPoint(recent.map((sample) => sample.grip))
-  const reach = STANCE_HOLD_RULES.stillShoulderWidths * shoulderWidth
-  return recent.every((sample) => distance(sample.grip, middle) <= reach)
+  return Math.max(...recent.map((sample) => distance(sample.grip, middle))) / shoulderWidth
 }
 
 /** How full the gauge is, 0..1. */

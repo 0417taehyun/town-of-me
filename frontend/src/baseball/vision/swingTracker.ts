@@ -630,8 +630,12 @@ export function movedWithHands(sweep: Sweep) {
 }
 
 export function energyConfirmed(baseline: number | null, sweep: Sweep) {
-  const noise = Math.max(baseline ?? 0, SWING_RULES.energyFloor)
-  return sweep.energy >= noise * SWING_RULES.energyRatio && sweep.moving >= SWING_RULES.energyArea
+  return sweep.energy >= energyNeeded(baseline) && sweep.moving >= SWING_RULES.energyArea
+}
+
+/** The energy a sweep's band must reach: `energyRatio` times its resting noise, which is at least `energyFloor`. */
+export function energyNeeded(baseline: number | null) {
+  return Math.max(baseline ?? 0, SWING_RULES.energyFloor) * SWING_RULES.energyRatio
 }
 
 export function sweepIsLate(sweep: Sweep, time: number) {
@@ -654,7 +658,7 @@ export const SWEEP_FAILURE_REASONS = {
  * what to change, and goes on toward the far side like a swing.
  */
 export function abortSweep(tracker: SwingTracker, sweep: Sweep) {
-  if (sweep.minimumDepth >= SWING_RULES.loadOffset - SWING_RULES.leaveLoad) {
+  if (!leftLoadZone(sweep)) {
     Object.assign(sweep.arm, { depth: sweep.previousDepth, time: sweep.previousTime, grip: sweep.lastGrip })
     return rearm(tracker, sweep.arm)
   }
@@ -662,6 +666,11 @@ export function abortSweep(tracker: SwingTracker, sweep: Sweep) {
   if (sweep.arm.side !== tracker.side) return
   tracker.followingThrough = true
   notify(tracker, SWEEP_FAILURE_REASONS[sweepFailures(tracker, sweep)[0] ?? 'cross'])
+}
+
+/** Whether `sweep` left the load zone on its way, or was only wobble within it. */
+export function leftLoadZone(sweep: Sweep) {
+  return sweep.minimumDepth < SWING_RULES.loadOffset - SWING_RULES.leaveLoad
 }
 
 /**

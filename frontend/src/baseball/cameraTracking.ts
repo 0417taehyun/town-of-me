@@ -1,5 +1,6 @@
 import type { ObjectDetectorResult, PoseLandmarkerResult } from '@mediapipe/tasks-vision'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { diagnosedCameraParts, diagnoseFrame, forgetDiagnosedCamera } from './devDiagnostics'
 import { devSwingSeen, devVisitorFrame } from './devSeam'
 import { type CameraGameProblem, cameraProblem } from './deviceGate'
 import {
@@ -86,15 +87,19 @@ export function cameraStateId(status: CameraStatus, seen: boolean): CameraStateI
 
 export type ObjectDetector = VisionTask<ObjectDetectorResult>
 
+/** The pose loop's events: each status, and each tracked frame with how long (ms) the pose task took on it. */
 export type PoseEvents = {
   onStatus: (status: CameraStatus) => void
-  onFrame: (frame: PoseFrame) => void
+  onFrame: (frame: PoseFrame, poseMs: number) => void
 }
 
-/** The camera's events: each status, and each tracked frame with the object detector once it is ready (else null). */
+/**
+ * The camera's events: each status, and each tracked frame with the object detector once it is ready (else null) and
+ * how long (ms) the pose task took on it.
+ */
 export type CameraEvents = {
   onStatus: (status: CameraStatus) => void
-  onFrame: (frame: PoseFrame, objects: ObjectDetector | null) => void
+  onFrame: (frame: PoseFrame, objects: ObjectDetector | null, poseMs: number) => void
 }
 
 /** What tracking the camera starts: the browser's in the page, fakes in tests. */
@@ -144,7 +149,7 @@ export async function trackCamera(
   )
   if (!camera) return
   report({ kind: 'loading' })
-  const onPose = (frame: PoseFrame) => onFrame(frame, objects())
+  const onPose = (frame: PoseFrame, poseMs: number) => onFrame(frame, objects(), poseMs)
   try {
     followPose(video, camera, await tracker, signal, { onStatus: report, onFrame: onPose }, trackingFailed)
   } catch {
@@ -182,7 +187,7 @@ export function followPose(
   const handleFrame = createFrameHandler(camera, (tier) => onStatus({ kind: tier ? 'ready' : 'tooSlow' }))
   const onTracked = (frame: PoseFrame, timing: FrameTiming) => {
     handleFrame(frame, timing)
-    onFrame(frame)
+    onFrame(frame, timing.inferenceMs)
   }
   runPoseLoop(video, tracker, signal, onTracked, onError)
 }
@@ -254,6 +259,14 @@ export type CameraTrackingOptions = {
 const DEV_VISITOR = import.meta.env.DEV ? devVisitorFrame : null
 const DEV_SWING = import.meta.env.DEV ? devSwingSeen : null
 
+/**
+ * A dev build times the object detector and notes each frame for its diagnostics panel (devDiagnostics.ts), which
+ * forgets the sweep it followed when the camera turns off; production runs the browser's parts as they are.
+ */
+const CAMERA_PARTS = import.meta.env.DEV ? diagnosedCameraParts(BROWSER_CAMERA_PARTS) : BROWSER_CAMERA_PARTS
+const DEV_DIAGNOSE = import.meta.env.DEV ? diagnoseFrame : null
+const DEV_FORGET_DIAGNOSED = import.meta.env.DEV ? forgetDiagnosedCamera : null
+
 /** What the stance hold and the presence read of a frame: the dev stand-in's, if one stands in, else the camera's. */
 export function visitorFrame(frame: PoseFrame, tracker: SwingTracker): { seen: boolean; stance: StanceFrame } {
   const time = frame.capturedAt
@@ -306,13 +319,22 @@ export function useCameraTracking({ side, objectsPaused, onSwing, stance }: Came
       setStatus(next)
       if (!isCameraOn(next)) setRequest(null)
     }
-    const onFrame = (frame: PoseFrame, objects: ObjectDetector | null) => {
+    const onFrame = (frame: PoseFrame, objects: ObjectDetector | null, poseMs: number) => {
       const tracked = readSwingFrame(current, frame, feed, objects, !timed || page.current.objectsPaused)
       const swing = tracked ?? DEV_SWING?.(frame.capturedAt)
       if (swing) page.current.onSwing(swing)
       drawCameraView(picture, feed, frame.keypoints, heldObjectBox(current.tracker))
       const visitor = visitorFrame(frame, current.tracker)
       hold = watchStance(hold, timed, visitor.stance, page.current.stance, shownProgress)
+      DEV_DIAGNOSE?.({
+        frame,
+        poseMs,
+        video: feed,
+        tracker: current.tracker,
+        swing: swing ?? null,
+        stance: visitor.stance,
+        hold,
+      })
       shownProgress = stanceProgress(hold)
       const now = performance.now()
       const next = nextSight(sight, visitor.seen, now)
@@ -325,11 +347,12 @@ export function useCameraTracking({ side, objectsPaused, onSwing, stance }: Came
       if (held !== shownCaption) setCaption(held.caption)
       shownCaption = held
     }
-    void trackCamera(feed, controller.signal, { onStatus, onFrame })
+    void trackCamera(feed, controller.signal, { onStatus, onFrame }, CAMERA_PARTS)
     return () => {
       controller.abort()
       clearCameraView(picture)
       clearSwingReading(current)
+      DEV_FORGET_DIAGNOSED?.()
     }
   }, [request])
 

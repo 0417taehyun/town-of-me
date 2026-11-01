@@ -30,6 +30,7 @@ import { LanguageSelect } from '../ui/LanguageSelect'
 import { type BaseballExit, baseballExit, EXIT_PATHS, isNextRulesPreview } from './baseballRoute'
 import { needsCharacter, withVenueProfile } from './baseballSession'
 import { cameraStateId, isCameraOn, useCameraTracking } from './cameraTracking'
+import { diagnoseStageEvent } from './devDiagnostics'
 import { installDevSeam, queueDevSwing } from './devSeam'
 import { browserDeviceBlock, type DeviceBlock } from './deviceGate'
 import {
@@ -64,6 +65,7 @@ import {
   savePanelSize,
 } from './ui/cameraPanelLayout'
 import { DerbyHud } from './ui/DerbyHud'
+import { DiagnosticsPanel } from './ui/DiagnosticsPanel'
 import { betweenPitches, chasingHomeRun, derbySoundFor, hudAfterEvent, judgedResult, NEW_RUN_HUD } from './ui/derbyCues'
 import { DeviceBlocked } from './ui/DeviceBlocked'
 import { PracticeDoneView, PracticeView } from './ui/PracticeView'
@@ -196,9 +198,14 @@ export function BlockedPage({
   )
 }
 
-/** Dev builds only: the stand-in visitor and swings an automated check plays with (devSeam.ts); none in production. */
+/**
+ * Dev builds only: the stand-in visitor and swings an automated check plays with (devSeam.ts), and the diagnostics
+ * panel that D shows and L saves (devDiagnostics.ts), which hears when the stage judges a swing; none in production.
+ */
 const installDerbyDevSeam = import.meta.env.DEV ? installDevSeam : null
 const queueDerbyDevSwing = import.meta.env.DEV ? queueDevSwing : null
+const noteDerbyStageEvent = import.meta.env.DEV ? diagnoseStageEvent : null
+const DerbyDiagnostics = import.meta.env.DEV ? DiagnosticsPanel : null
 
 /**
  * The derby over its stadium, step by step (flow/derbyFlow.ts): the rules, then the camera's setup with its picture as
@@ -334,6 +341,7 @@ export function DerbyScreen({
       const sound = derbySoundFor(event)
       if (sound) sounds.play(sound)
       queueDerbyDevSwing?.(event)
+      noteDerbyStageEvent?.(event)
     },
     [sounds],
   )
@@ -347,7 +355,12 @@ export function DerbyScreen({
   }
 
   if (status.kind === 'tooSlow')
-    return <BlockedPage block="slow" exit={exit} language={language} onLanguageChange={onLanguageChange} />
+    return (
+      <>
+        <BlockedPage block="slow" exit={exit} language={language} onLanguageChange={onLanguageChange} />
+        {DerbyDiagnostics && <DerbyDiagnostics side={panel.side} />}
+      </>
+    )
 
   const month = rankingMonth(new Date())
   const rules = effectiveBallparkRules(ballpark, month)
@@ -493,6 +506,7 @@ export function DerbyScreen({
         )}
         {preview && <p className="derby-preview-badge">{venueCopy.previewBadge}</p>}
       </BaseballLinks>
+      {DerbyDiagnostics && <DerbyDiagnostics side={panel.side} />}
     </main>
   )
 }

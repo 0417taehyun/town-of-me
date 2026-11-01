@@ -89,6 +89,7 @@ npm run build
 | Go on hands-free (derby)    | Hold your batting stance 3 s, or the step button |
 | Leave the derby             | `Esc` (twice in full screen) or `Back to town`   |
 | Resize or hide derby camera | `V` or the on-screen `Camera view` button        |
+| Toggle derby diagnostics    | `D` (dev build); `L` saves 60 s as JSON          |
 
 The camera button tunes the follow camera live, and `?` reopens help. Turning off `Ambient motion` in help freezes
 clouds, birds, and water; the system's reduced-motion setting slows them instead.
