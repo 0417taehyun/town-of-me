@@ -4,7 +4,7 @@ import { CALIBRATION_RULES } from '../game/calibration'
 import { DERBY_PHASE_MS, LATE_SWING_MARGIN_MS, latestContactMs, RESULT_HOLD_MS } from '../game/derby'
 import { replayDerby } from '../game/derbyScore'
 import { DIFFICULTY_RULES } from '../game/difficulty'
-import { BATTER_REACH } from '../game/field'
+import { BATTER_REACH, CONTACT_DEPTH } from '../game/field'
 import { gameTime } from '../game/gameClock'
 import { contactHeight, contactSeconds, type PitchPlan, pitchPosition, secondsAtDepth } from '../game/pitch'
 import { createRunPlan, planRunPitch } from '../game/runPlan'
@@ -140,7 +140,44 @@ function distance(from: Vec3, to: Vec3) {
   return Math.hypot(to.x - from.x, to.y - from.y, to.z - from.z)
 }
 
+/**
+ * A one-pitch run after a practice whose swings all registered `offsetMs` late (minus: early), swung `errorMs` off
+ * PERFECT once the calibration takes that off: its result, where the ball in play starts, and the nearest the ball was
+ * drawn to the mitt from the frame that takes the swing until the bat meets it.
+ */
+function calibratedMeeting(offsetMs: number, errorMs: number) {
+  const practice = Array.from({ length: CALIBRATION_RULES.minimumValidSwings }, () => ({
+    errorMs: offsetMs,
+    speed: CALIBRATION_RULES.peakFloor,
+  }))
+  const setup: StageRunSetup = { ...runSetup('normal', 1, 7), log: { side: 'right', practice } }
+  const drawnDepths: number[] = []
+  let met = false
+  const { run } = play(
+    setup,
+    () => offsetMs + errorMs,
+    (playback, frameEvents) => {
+      if (met || playback.run.derby.results.length === 0) return
+      drawnDepths.push(-stageBallView(playback.run, gameTime(playback.run.clock, playback.realMs), null).position.z)
+      met = frameEvents.some((event) => event.type === 'contact')
+    },
+  )
+  return { result: run.derby.results[0], start: run.batted!.start, nearestDepth: Math.min(...drawnDepths) }
+}
+
 describe('stage run', () => {
+  it('draws the bat meeting the ball when the judge times the swing, whichever way practice calibrated it', () => {
+    // PERFECT from a visitor whose swings register late and from one who swings early, and the early one's late foul,
+    // which the ball waits for at the back of the reach.
+    const meetings = [calibratedMeeting(120, 0), calibratedMeeting(-120, 0), calibratedMeeting(-120, 100)]
+    const meetDepths = [CONTACT_DEPTH, CONTACT_DEPTH, BATTER_REACH.back]
+    expect(meetings.map(({ result }) => result.timing)).toEqual(['perfect', 'perfect', 'late'])
+    meetings.forEach(({ start, nearestDepth }, index) => {
+      expect(-start.z).toBeCloseTo(meetDepths[index], 6)
+      expect(nearestDepth).toBeGreaterThanOrEqual(meetDepths[index] - 1e-9)
+    })
+  })
+
   it('sends a ball in play from where the bat met it, early, on time, or late, even when the swing is handled late', () => {
     const offsetsMs = [0, -15, 20, 100]
     const starts: Vec3[] = []

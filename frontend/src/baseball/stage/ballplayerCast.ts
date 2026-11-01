@@ -19,7 +19,7 @@ import { createPitcher, disposePitcher, type Pitcher, posePitcher } from './acto
 import { CONTACT_DELAY_MS, FINISH_HOLD_MS, RETURN_MS, SWING_MS } from './actors/swingMotion'
 import type { BallView } from './ballMeshes'
 import { MITT_DEPTH } from './stageLayout'
-import { ballIsThePitchers, mittSeconds, type PitchOnStage, type StageRun } from './stageRun'
+import { ballIsThePitchers, judgedContactMs, mittSeconds, type PitchOnStage, type StageRun } from './stageRun'
 
 // The three players on the derby's clock: the pitcher throws on the derby's windup and release, the batter loads with
 // the windup and swings each judged swing so its bat meets the ball where and when the stage sends it off, and the
@@ -85,7 +85,12 @@ export function posePitcherAt(cast: BallplayerCast, run: StageRun | null, nowMs:
   return cast.pitcher.ballPoint
 }
 
-/** The swing the batter shows for the pitch on stage once the derby has judged one, or null. */
+/**
+ * The swing the batter shows for the pitch on stage once the derby has judged one, or null: onto the ball where the
+ * stage sends it off, or for a miss through the contact point at the swing's judged contact, though never before the
+ * camera reported it. Nothing steps the clock back for a miss, and a camera the calibration finds late reports the
+ * swing after its judged contact, so starting there would skip the swing and show the batter already in its finish.
+ */
 export function batterSwingCue(run: StageRun | null): BatterSwingCue | null {
   if (!run?.pitch) return null
   const { pitch, batted } = run
@@ -93,7 +98,8 @@ export function batterSwingCue(run: StageRun | null): BatterSwingCue | null {
   if (!swing) return null
   if (batted?.pitchIndex === pitch.index)
     return { pitch, startMs: batted.meetMs - CONTACT_DELAY_MS, point: batted.start }
-  return { pitch, startMs: pitch.releasedMs + swing.contactMs - CONTACT_DELAY_MS, point: null }
+  const contactMs = Math.max(swing.contactMs, judgedContactMs(run.derby, swing))
+  return { pitch, startMs: pitch.releasedMs + contactMs - CONTACT_DELAY_MS, point: null }
 }
 
 /** The batter's load `ms` (game ms) into a pitch: the toe lifted at the release, the front foot down before contact. */

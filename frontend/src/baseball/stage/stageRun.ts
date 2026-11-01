@@ -12,7 +12,7 @@ import {
   type DerbyUpdate,
   swingDerby,
 } from '../game/derby'
-import type { DerbyInputLog } from '../game/derbyScore'
+import type { DerbyInputLog, SwingEvent } from '../game/derbyScore'
 import { BATTER_REACH, type BattingSide } from '../game/field'
 import { type BallFlight, createFlight, launchForLanding, predictLanding, sprayPoint, stepFlight } from '../game/flight'
 import { createGameClock, gameTime, type GameClock, holdClock, setClockRate } from '../game/gameClock'
@@ -174,35 +174,47 @@ export function stageDerbyEvent(run: StageRun, event: DerbyEvent, nowMs: number)
   }
   if (event.type !== 'result') return
   run.batted = battedBallFor(run, event)
-  endHold(run.pitch, event, nowMs)
+  endHold(run, event, nowMs)
+}
+
+/**
+ * When, after its pitch's release (ms), the judge has a swing's bat at the contact point: the moment the camera
+ * reported less the visitor's calibrated offset (judging.ts timingErrorMs). The stage draws the bat there then, so a
+ * PERFECT swing meets the ball at the contact point whichever way the calibration leans.
+ */
+export function judgedContactMs(derby: Derby, swing: SwingEvent) {
+  return swing.contactMs - derby.calibration.offsetMs
 }
 
 /**
  * A judged swing ends the pitch's wait at the back of the reach: no later swing can touch the ball. The wait ends no
- * sooner than `nowMs` (game ms), when the stage takes the result, so a pitch that a swing reported late missed goes on
- * from where it is drawn.
+ * sooner than the swing's judged contact, when the bat gets there, nor than `nowMs` (game ms), when the stage takes the
+ * result, so a pitch that a swing reported late missed goes on from where it is drawn.
  */
-export function endHold(pitch: PitchOnStage | null, event: ResultEvent, nowMs: number) {
+export function endHold(run: StageRun, event: ResultEvent, nowMs: number) {
+  const { pitch } = run
   if (!pitch || !event.swing) return
   const reachBack = secondsAtDepth(pitch.plan, BATTER_REACH.back)
+  const swingSeconds = judgedContactMs(run.derby, event.swing) / 1000
   const takenSeconds = (nowMs - pitch.releasedMs) / 1000
-  pitch.holdSeconds = Math.min(pitch.holdSeconds, Math.max(reachBack, event.swing.contactMs / 1000, takenSeconds))
+  pitch.holdSeconds = Math.min(pitch.holdSeconds, Math.max(reachBack, swingSeconds, takenSeconds))
 }
 
 /**
- * The batted ball for a result, or null when the ball was not hit. It leaves from where the bat met it: a swing
- * reported a frame late still sends the ball from the bat, and a late one meets the ball waiting at the back of the
- * reach when the swing gets there.
+ * The batted ball for a result, or null when the ball was not hit. It leaves from where the bat met it at the swing's
+ * judged contact: a swing reported a frame late still sends the ball from the bat, and a late one meets the ball
+ * waiting at the back of the reach when the swing gets there.
  */
 export function battedBallFor(run: StageRun, event: ResultEvent): BattedBall | null {
   const { pitch } = run
   const { pitchIndex, result, swing } = event
   if (!pitch || !swing || result.outcome === 'miss') return null
-  const swingSeconds = swing.contactMs / 1000
+  const swingSeconds = judgedContactMs(run.derby, swing) / 1000
   const meet = meetSeconds(pitch.plan, swingSeconds)
   const start = pitchPosition(pitch.plan, meet)
   const velocity = launchForLanding(result, start)
   const meetMs = pitch.releasedMs + Math.max(meet, swingSeconds) * 1000
+  // The derby's result runs from the swing's contact as the camera reported it (swingDerby).
   const resultEndsMs = pitch.releasedMs + swing.contactMs + RESULT_HOLD_MS[result.outcome]
   return {
     pitchIndex,

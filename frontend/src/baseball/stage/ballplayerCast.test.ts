@@ -2,6 +2,7 @@ import { Quaternion, Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
 import type { Vec3 } from '../../data/models'
 import { DEFAULT_PLAYER_PROFILE, type PlayerProfile } from '../../data/playerProfile'
+import { CALIBRATION_RULES } from '../game/calibration'
 import { DERBY_PHASE_MS } from '../game/derby'
 import type { BattingSide } from '../game/field'
 import { gameTime } from '../game/gameClock'
@@ -39,10 +40,18 @@ function levelSwing(pitch: PitchPlan, contactAtRealMs: number): RealTimeSwing {
   return { contactAtRealMs, startedAtRealMs: contactAtRealMs - 200, speed: 8, batHeight: contactHeight(pitch) }
 }
 
-/** A one-pitch run on `side` with a swing `offsetMs` off PERFECT, handed in a frame after it was made. */
-function swungRun(side: BattingSide, offsetMs: number) {
+/**
+ * A one-pitch run on `side` with a swing the camera reports `offsetMs` after the ball reaches the contact point, handed
+ * in a frame after it was made, after a practice whose swings all registered `practiceOffsetMs` late, which the
+ * calibration takes off.
+ */
+function swungRun(side: BattingSide, offsetMs: number, practiceOffsetMs = 0) {
   const plan = createRunPlan({ pitchCount: 1, difficulty: 'normal' }, 7)
-  const run = createStageRun({ plan, log: { side, practice: [] } }, 0)
+  const practice = Array.from({ length: CALIBRATION_RULES.minimumValidSwings }, () => ({
+    errorMs: practiceOffsetMs,
+    speed: CALIBRATION_RULES.peakFloor,
+  }))
+  const run = createStageRun({ plan, log: { side, practice } }, 0)
   const release = advanceStageRun(run, DERBY_PHASE_MS.ready + DERBY_PHASE_MS.windup, false).at(-1)
   if (release?.type !== 'release') throw new Error('expected the release')
   // No hit-stop or slow motion has changed the clock yet, so game time is real time.
@@ -132,13 +141,25 @@ describe('ballplayer cast', () => {
     expect(Math.max(...misses)).toBeLessThan(0.002)
   })
 
-  it('swings the batter through the contact point at the moment of a swing that misses', () => {
-    const cast = createCast(createBatter(DEFAULT_PLAYER_PROFILE, 'right'), createFielders())
-    const { run, contactAtMs } = swungRun('right', 200)
-    cueBatter(cast, run)
-    expect(run.derby.results[0].outcome).toBe('miss')
+  it('swings the batter through the contact point at a miss’s judged moment, never before the camera reported it', () => {
     const contactPoint = new Vector3(CONTACT_POINT.x, CONTACT_POINT.y, CONTACT_POINT.z)
-    expect(sweetSpotAt(cast, run, contactAtMs).distanceTo(contactPoint)).toBeLessThan(0.002)
+    // Uncalibrated; an early swinger's, judged 150 ms after the report, still to come when the stage takes it; and a
+    // late camera's, judged 300 ms before its report, which the stage takes only a frame after the report.
+    const misses = [
+      { practiceOffsetMs: 0, afterReportMs: 0 },
+      { practiceOffsetMs: -150, afterReportMs: 150 },
+      { practiceOffsetMs: 300, afterReportMs: 0 },
+    ].map(({ practiceOffsetMs, afterReportMs }) => {
+      const cast = createCast(createBatter(DEFAULT_PLAYER_PROFILE, 'right'), createFielders())
+      const { run, contactAtMs } = swungRun('right', practiceOffsetMs + 200, practiceOffsetMs)
+      cueBatter(cast, run)
+      return {
+        outcome: run.derby.results[0].outcome,
+        offPoint: sweetSpotAt(cast, run, contactAtMs + afterReportMs).distanceTo(contactPoint),
+      }
+    })
+    expect(misses.map(({ outcome }) => outcome)).toEqual(['miss', 'miss', 'miss'])
+    expect(Math.max(...misses.map(({ offPoint }) => offPoint))).toBeLessThan(0.002)
   })
 
   it('holds the ball in the pitcher’s hand up to the release point as the derby releases it', () => {
