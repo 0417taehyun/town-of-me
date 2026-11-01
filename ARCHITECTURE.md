@@ -190,17 +190,18 @@ the held object is locked, loaded behind the body on the batting side, and swept
 things a visitor might hold, never a person) once enough sightings agree, or one they tap on the camera picture, and
 lets a detected one go after enough misses while they stand still. When nothing has locked after about three seconds of
 the detector looking, and nothing is by the hands, `swingTracker.ts` plays free mode from the next moment the hands are
-still. On every step a real object that locks later still takes over, and one lost hands back to free mode at once,
-its caption saying so, so play goes on with the hands: the design doc has a lost lock search again, which waits those
-three seconds of looking while the detector rests through every pitch, so a pitch or two could not be swung at. Free
-mode follows where the wrists meet, so a visitor who held the object in one hand swings (and holds a stance) with the
-hands together until it locks again. The detector waits until the computer is timed, then runs about 9 times a second
-while looking for an object (searching, in free mode on the setup step, or from a sighting by the hands until a lock
-window passes without another, so a detector that misses now and then still locks it), 4 to keep a detected one fresh,
-once a second in free mode otherwise, since each run holds up the pose frames for some 40–60 ms, and never for a tapped
-one (the design doc has only the 9 and the 4). It rests from each windup until the pitch's ball is down (the cadence is
-the tracker's, `objectDetectionInterval`, the pause the page's, since both follow the tracker and the derby rather than
-the camera).
+still. On every step a real object that locks later still takes over, and one lost hands back to free mode at once, its
+caption saying so, so play goes on with the hands: the design doc has a lost lock search again, which waits those three
+seconds of looking while the detector rests through every pitch, so a pitch or two could not be swung at. While
+searching, the caption says it looks for what the visitor swings and that the hands will do without one, and free mode's
+asks for both hands together. Free mode follows where the wrists meet, so a visitor who held the object in one hand
+swings (and holds a stance) with the hands together until it locks again. The detector waits until the computer is
+timed, then runs about 9 times a second while looking for an object (searching, in free mode on the setup step, or from
+a sighting by the hands until a lock window passes without another, so a detector that misses now and then still locks
+it), 4 to keep a detected one fresh, once a second in free mode otherwise, since each run holds up the pose frames for
+some 40–60 ms, and never for a tapped one (the design doc has only the 9 and the 4). It rests from each windup until the
+pitch's ball is down (the cadence is the tracker's, `objectDetectionInterval`, the pause the page's, since both follow
+the tracker and the derby rather than the camera).
 `swingTracker.ts` follows the grip against the shoulders of frontal frames only (a turned torso narrows them), arms on a
 load, and fires at the interpolated midline crossing once the sweep is fast and long enough, the head
 stayed (a visitor walking by moves both), and `motionEnergy.ts` saw the band it swept through change; a swing whose
@@ -221,10 +222,12 @@ detector while the browser asks for the camera, and draws each frame mirrored wi
 canvas (`ui/cameraOverlay.ts`) with the object it marks: a found one's box, name, and lock progress (while searching,
 or in free mode on the setup step; in play a glimpse by empty hands would only flash), or a locked one's box. It reads
 swings and their cues on the same frames and hands each to the page the moment it is seen, so React hears only
-status changes, whether the camera sees the visitor, and the tracker's two- or three-word caption: where the tracker
-is, held at least 0.7 s so it never flickers, or at once what just happened (a lock, a lost object, a swing, a sweep
-that was not one). Once the camera is off, the motion sampler's last picture and the tracked body are wiped along with
-the panel's.
+status changes, whether the camera sees the visitor, and the tracker's short caption: where the tracker is, held at
+least 0.7 s so it never flickers, or at once what just happened (a lock, a lost object, a swing, a sweep that was not
+one). The design doc asks for two- or three-word captions; the search caption is longer on purpose, so it also tells a
+visitor with nothing to hold that the hands will do, and the panel's chip wraps within the picture for it and for what a
+step waits for, which the chip shows in its place. Once the camera is off, the motion sampler's last picture and the
+tracked body are wiped along with the panel's.
 
 ### The `/baseball` page
 
@@ -255,30 +258,36 @@ shows it. Nothing counts in a step's first second; on the setup a stance the vis
 after practice or a run one kept from the last swing counts only once they have been seen moving or lowering their
 hands for over 300 ms, so a glitch of the pose task is no fresh stance. A break or a tracking loss under 300 ms neither
 fills nor drains the ring, and a longer one drains it as fast as holding fills it. The vision loop follows the hold and
-fills `ui/StanceGauge.tsx` straight on its element; the line under the ring says what the hold waits for (the upper
-body in view, the lock, hands together, raised by the back shoulder, a fresh stance, held still), so React renders only
-when a step or the line changes, and while a step waits the camera panel's chip says the same in place of the swing
-tracker's directions to swing (`ui/derbyCues.ts seenCameraState`). Practice pitches the game core's practice schedule at
-the practice pace as a derby of its own, and it takes swings as late as the calibration still counts one past the
-contact point, so a slow camera's late swings still teach it; each pitch waits at the back of the reach until then, as
-any of them may be on time. It judges each swing against the visitor's own usual timing (`game/calibration.ts
-practiceTimingOffset`, `game/derbyScore.ts practiceCalibration`): from the third valid swing on, the offset a run's
-calibration takes off, the median error of the valid swings so far against the contact point, this one included.
-Before that there is no usual timing yet, so a valid swing is judged against its own error and is on time: the first
-two say good, however far apart (against their midpoint, a second swing far from the first would be early or late).
-The usual timing keeps to the range a run's offset keeps (−150 to +300 ms), so a first swing further off than any run
-takes off is told early or late, as a run would tell it. The pitch on the field and the word under it come from that one
-judgement, so they always agree: it tells each swing only a bit early, good, or a bit late (`shownPracticeFeedback`),
-its judged error within the difficulty's GOOD window or not. Against the contact point alone, as the drafts' design
-first had it (8.3 (c)), a webcam's steady delay would call nearly every swing late. Its swings calibrate every run until
-the camera turns off, with their raw errors; a run takes the usual timing off only from three valid swings
-(`findsUsualTiming`), so a practice that ends with fewer says so on its last card rather than that the timing is set.
-Practice and a run stand still once the visitor has been out of the camera's view
-1.5 s, but only between pitches (before the first windup, or once a result's ball is down and another pitch is to
-come), so a ball on its way plays out and no swing made meanwhile meets a pitch; the next pitch comes once they are
-back. A camera that turns off, as after two minutes without movement, takes the page back to the rules card. In a dev
-build, `devSeam.ts` lets an automated check stand in for a visitor the fake camera cannot show, and for their swings,
-which the camera's frames hand over like tracked ones. In a dev build, D also shows `devDiagnostics.ts`'s panel
+fills `ui/StanceGauge.tsx` straight on its element; the line under the ring says what the hold waits for, the first
+unmet first: the upper body in view, the hands inside the picture (a followed wrist within 5% of its edge, or past it
+where the pose task only guesses it, as the drafts' log had the hands at the bottom, so that comes before any height or
+place), the lock, both hands together as if gripping a bat in free mode, raised by the back shoulder, a fresh stance,
+held still, and in a step's first second, while the ring cannot fill, that the stance is being checked rather than to
+keep holding. Right after swings, hands at the picture's edge are taken for lowered ones, so the line asks for a fresh
+stance and then for the hands raised rather than to step back. React renders only when a step or the line changes, and
+while a step waits the camera panel's chip says the same in place of the swing tracker's directions to swing
+(`ui/derbyCues.ts seenCameraState`). A lock that lands mid-hold leaves the ring filling: the grip moves to one hand only
+when the wrists are too far apart to hold a stance in free mode, or the other is hidden and the grip was that hand
+already. Practice pitches the game core's practice schedule at the practice pace as a derby of its own, and it takes
+swings as late as the calibration still counts one past the contact point, so a slow camera's late swings still teach
+it; each pitch waits at the back of the reach until then, as any of them may be on time. It judges each swing against
+the visitor's own usual timing (`game/calibration.ts practiceTimingOffset`, `game/derbyScore.ts practiceCalibration`):
+from the third valid swing on, the offset a run's calibration takes off, the median error of the valid swings so far
+against the contact point, this one included. Before that there is no usual timing yet, so a valid swing is judged
+against its own error and is on time: the first two say good, however far apart (against their midpoint, a second swing
+far from the first would be early or late). The usual timing keeps to the range a run's offset keeps (−150 to +300 ms),
+so a first swing further off than any run takes off is told early or late, as a run would tell it. The pitch on the
+field and the word under it come from that one judgement, so they always agree: it tells each swing only a bit early,
+good, or a bit late (`shownPracticeFeedback`), its judged error within the difficulty's GOOD window or not. Against the
+contact point alone, as the drafts' design first had it (8.3 (c)), a webcam's steady delay would call nearly every swing
+late. Its swings calibrate every run until the camera turns off, with their raw errors; a run takes the usual timing off
+only from three valid swings (`findsUsualTiming`), so a practice that ends with fewer says so on its last card rather
+than that the timing is set. Practice and a run stand still once the visitor has been out of the camera's view 1.5 s,
+but only between pitches (before the first windup, or once a result's ball is down and another pitch is to come), so a
+ball on its way plays out and no swing made meanwhile meets a pitch; the next pitch comes once they are back. A camera
+that turns off, as after two minutes without movement, takes the page back to the rules card. In a dev build,
+`devSeam.ts` lets an automated check stand in for a visitor the fake camera cannot show, and for their swings, which the
+camera's frames hand over like tracked ones. In a dev build, D also shows `devDiagnostics.ts`'s panel
 (`ui/DiagnosticsPanel.tsx`) for tuning on a real webcam: the camera's and the vision tasks' timing, the tracker and the
 lock, each stance condition against its limit, and the last sweep from leaving the load to the stage's reaction against
 the swing rules, with the judged swing's raw error against the contact point beside its judged one, since practice's and

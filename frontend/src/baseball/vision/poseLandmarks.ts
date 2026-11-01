@@ -142,6 +142,18 @@ export function visibleWrists(wrists: BodySample['wrists']) {
   return [wrists.left, wrists.right].filter((wrist): wrist is Point => wrist !== null)
 }
 
+/** The wrists the grip is made of (gripOf): both that show, or the holding hand's. */
+export function followedWrists(wrists: BodySample['wrists'], hand: Hand): Point[] {
+  if (hand === 'both') return visibleWrists(wrists)
+  const wrist = wrists[hand]
+  return wrist ? [wrist] : []
+}
+
+/** How far (image heights) `point` is inside the edge of a picture `aspect` wide, or (minus) past it. */
+export function pictureEdgeDistance({ x, y }: Point, aspect: number) {
+  return Math.min(x, y, aspect - x, 1 - y)
+}
+
 /**
  * The grip followed: the holding hand's wrist, or for both hands the visible wrists averaged. Averaging a holding hand
  * with a free hand at the hip would halve every distance and speed, so a one-handed hold follows that hand alone. The

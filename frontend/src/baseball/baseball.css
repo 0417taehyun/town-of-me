@@ -419,10 +419,13 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   /* A tap on the picture locks the object there: a quiet correction for a wrong lock. */
   cursor: crosshair;
 }
+/* The chip keeps to one line while it fits, and wraps within the picture when a caption or a step's need is longer. */
 .camera-state {
   position: absolute;
   top: 1.2vh;
   left: 50%;
+  width: max-content;
+  max-width: calc(100% - 2.4vh);
   margin: 0;
   padding: 0.6vh 1.8vh;
   border-radius: 999px;
@@ -430,7 +433,8 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   background: rgba(31, 42, 38, 0.75);
   font-size: clamp(14px, 3vh, 36px);
   font-weight: 800;
-  white-space: nowrap;
+  text-align: center;
+  text-wrap: balance;
   transform: translateX(-50%);
 }
 .camera-panel[data-seen='true'] .camera-state {

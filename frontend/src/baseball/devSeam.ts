@@ -1,19 +1,29 @@
-import type { StanceFrame } from './flow/stanceHold'
+import type { PoseNeed, StanceFrame } from './flow/stanceHold'
 import { contactHeight, contactSeconds } from './game/pitch'
 import type { RealTimeSwing, StageEvent } from './stage/stageRun'
 import type { SwingCue } from './vision/swingTracker'
 
 // Dev builds only. The fake camera an automated check uses in headless Chrome shows no person, so nobody could hold the
 // stance, stay in view, or swing; this seam stands in for one. In the page's console,
-// `townOfMeDerbyDev.visitor('stance')` has the camera see a visitor in the batting stance (`'standing'` in view out of
-// it, `'away'` out of view, `null` the camera's own picture again), and `townOfMeDerbyDev.swing(-150, 0, 120)` swings
-// at each of the next pitches that many ms after (minus: before) the ball reaches the contact point;
-// `townOfMeDerbyDev.check(0)` begins one at the next pitch and checks it. A stand-in swing is a camera swing: the
-// camera's frames cue its start a little before its contact moment and report it a little late, through the same
-// hand-over as a tracked one (cameraTracking.ts). BaseballApp.tsx and cameraTracking.ts reach this module only behind
-// `import.meta.env.DEV`, so a production build leaves it out: its `dist/` holds no "townOfMeDerbyDev".
+// `townOfMeDerbyDev.visitor('stance')` has the camera see a visitor in the batting stance (`'standing'` in view with
+// the hands low, `'apart'` with them apart, `'edge'` at the picture's edge, `'searching'` before the lock, `'away'` out
+// of view, `null` the camera's own picture again), and `townOfMeDerbyDev.swing(-150, 0, 120)` swings at each of the
+// next pitches that many ms after (minus: before) the ball reaches the contact point; `townOfMeDerbyDev.check(0)`
+// begins one at the next pitch and checks it. A stand-in swing is a camera swing: the camera's frames cue its start a
+// little before its contact moment and report it a little late, through the same hand-over as a tracked one
+// (cameraTracking.ts). BaseballApp.tsx and cameraTracking.ts reach this module only behind `import.meta.env.DEV`, so a
+// production build leaves it out: its `dist/` holds no "townOfMeDerbyDev".
 
-export type DevVisitor = 'stance' | 'standing' | 'away'
+export type DevVisitor = 'stance' | 'standing' | 'apart' | 'edge' | 'searching' | 'away'
+
+/** What each stand-in visitor in view lacks of the stance. */
+export const DEV_VISITOR_POSES: Record<Exclude<DevVisitor, 'away'>, PoseNeed | null> = {
+  stance: null,
+  standing: 'raise',
+  apart: 'together',
+  edge: 'handsInView',
+  searching: 'lock',
+}
 
 /** A stand-in swing asked for the next pitch: how many ms off its contact moment, and whether it is checked. */
 export type DevSwing = { errorMs: number; checked: boolean }
@@ -56,14 +66,14 @@ export function installDevSeam() {
 }
 
 /**
- * What the camera sees of the stand-in visitor at `time`: whether they are in view, and their stance, held still; one
- * `standing` holds the bat low, so the stance waits for it to be raised.
+ * What the camera sees of the stand-in visitor at `time`: whether they are in view, and their stance, held still, with
+ * what it lacks (DEV_VISITOR_POSES).
  */
 export function devVisitorFrame(time: number): { seen: boolean; stance: StanceFrame } | null {
   const { visitor } = DEV_SEAM
   if (visitor === null) return null
   if (visitor === 'away') return { seen: false, stance: { time, pose: 'show', grip: null, shoulderWidth: null } }
-  const pose = visitor === 'stance' ? null : 'raise'
+  const pose = DEV_VISITOR_POSES[visitor]
   return { seen: true, stance: { time, pose, grip: { x: 0.45, y: 0.55 }, shoulderWidth: 0.2 } }
 }
 

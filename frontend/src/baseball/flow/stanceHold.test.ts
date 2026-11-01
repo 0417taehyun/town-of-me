@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createSeededRandom } from '../game/seededRandom'
+import type { Detection } from '../vision/heldObject'
+import { NO_ENERGY } from '../vision/motionEnergy'
 import type { BodySample, Hand, Point } from '../vision/poseLandmarks'
 import {
   CAPTION_HOLD_MS,
@@ -7,6 +9,7 @@ import {
   stepTracking,
   type SwingTracker,
   type TrackerState,
+  updateSwingTracker,
 } from '../vision/swingTracker'
 import {
   followStance,
@@ -116,6 +119,21 @@ describe('the stance hold', () => {
     expect(stanceHeld(moved)).toBe(true)
   })
 
+  it("right after swings, asks hands lowered to the picture's edge for the stance again, not to step back", () => {
+    // A webcam framed from the head down sees lowered hands at its bottom edge, as the retake line asks for them.
+    const atTheEdge: Scene = { pose: 'handsInView' }
+    const kept = watch(startStanceHold(PRACTICE_DONE, 0), [frames(0, 2000)])
+    const lowering = frames(2000, 3000, atTheEdge).reduce<StanceHold[]>(
+      (holds, frame) => [...holds, holdStance(holds.at(-1) ?? kept, frame)],
+      [],
+    )
+    const needs = [...new Set(lowering.map((hold) => hold.need))]
+    expect(needs).toEqual(['retake', 'raise'])
+    expect(stanceHeld(watch(lowering.at(-1) ?? kept, [frames(3000, 3100 + holdMs)]))).toBe(true)
+    // On the setup the same hands are asked into the picture.
+    expect(watch(startStanceHold(SETUP, 0), [frames(0, 2000, atTheEdge)]).need).toBe('handsInView')
+  })
+
   it('neither fills nor drains through a break or a loss under 300 ms, and drains as fast as it fills after', () => {
     const twoSeconds = watch(startStanceHold(SETUP, 0), [frames(0, settleMs + 2000)])
     expect(twoSeconds.heldMs).toBeCloseTo(2000, -2)
@@ -148,8 +166,11 @@ describe('the stance hold', () => {
     expect(needAfter({ pose: 'together' })).toBe('together')
     expect(needAfter(handsDown)).toBe('raise')
     expect(needAfter({ grip: swaying(0.06), shoulderWidth: 0.1 })).toBe('still')
-    // Still settling, and holding: keep holding.
-    expect(watch(startStanceHold(SETUP, 0), [frames(0, 500)]).need).toBe('hold')
+    // In the step's first second the gauge does not move, so the line says it is getting ready, not to keep holding,
+    // unless something else is missing.
+    const settling = watch(startStanceHold(SETUP, 0), [frames(0, 500)])
+    expect([settling.need, stanceProgress(settling)]).toEqual(['settle', 0])
+    expect(watch(startStanceHold(SETUP, 0), [frames(0, 500, handsDown)]).need).toBe('raise')
     const holding = watch(startStanceHold(SETUP, 0), [frames(0, 2000)])
     expect(holding.need).toBe('hold')
     expect(watch(holding, [frames(2000, 2000 + graceMs - 50, handsDown)]).need).toBe('hold')
@@ -246,6 +267,57 @@ describe('the batting stance', () => {
     // One wrist hidden behind the other is still a grip.
     const oneHidden = { left: null, right: byTheBackShoulder }
     expect(stanceFrame(trackerAt(byTheBackShoulder, { wrists: oneHidden }), 0).pose).toBe(null)
+  })
+
+  it('asks for the hands inside the picture before anything else it reads from them', () => {
+    // The pose task guesses a wrist below the picture's bottom edge: hands low and apart, before the lock.
+    const belowPicture = { left: { x: 0.75, y: 1.08 }, right: { x: 0.45, y: 0.97 } }
+    const guessed = { x: 0.6, y: 1.02 }
+    expect(stanceFrame(trackerAt(guessed, { wrists: belowPicture, state: 'searching' }), 0).pose).toBe('handsInView')
+    expect(stanceFrame(trackerAt(guessed, { wrists: belowPicture }), 0).pose).toBe('handsInView')
+    // By the picture's left or right edge too; the same hands well inside it are told what else they lack.
+    const byTheEdge = { left: { x: 0.03, y: 0.45 }, right: { x: 0.05, y: 0.45 } }
+    expect(stanceFrame(trackerAt({ x: 0.04, y: 0.45 }, { wrists: byTheEdge }), 0).pose).toBe('handsInView')
+    // The right edge is the picture's width away (x is scaled by the 4:3 aspect), and the top edge counts too.
+    const byTheRightEdge = { x: 4 / 3 - 0.03, y: 0.45 }
+    expect(stanceFrame(trackerAt(byTheRightEdge, { side: 'left' }), 0).pose).toBe('handsInView')
+    const leftBackShoulder = { x: 1, y: 0.45 }
+    expect(stanceFrame(trackerAt(leftBackShoulder, { side: 'left' }), 0).pose).toBe(null)
+    expect(stanceFrame(trackerAt({ x: 0.5, y: 0.02 }), 0).pose).toBe('handsInView')
+    const hanging = { left: { x: 0.75, y: 0.8 }, right: { x: 0.45, y: 0.8 } }
+    expect(stanceFrame(trackerAt({ x: 0.6, y: 0.8 }, { wrists: hanging }), 0).pose).toBe('together')
+    // Only the hands the grip follows: a free hand hanging out of the picture does not hold up a one-handed stance.
+    const freeHandOut = { left: { x: 0.75, y: 1.05 }, right: byTheBackShoulder }
+    expect(stanceFrame(trackerAt(byTheBackShoulder, { wrists: freeHandOut, hand: 'right' }), 0).pose).toBe(null)
+  })
+
+  it('keeps filling through a lock that lands mid-hold, though the grip then follows the hand that holds it', () => {
+    // On the setup step, the left hand by the back shoulder and the right hidden behind it, so the hands play free;
+    // a second into the hold, the detector finds a bottle in the left hand, which the grip follows from then on.
+    const tracker = createSwingTracker('right')
+    tracker.settingUp = true
+    const body: BodySample = {
+      wrists: { left: byTheBackShoulder, right: null },
+      shoulders: SHOULDERS,
+      head: null,
+      aspect: 4 / 3,
+    }
+    const bottle: Detection = { label: 'bottle', score: 0.8, box: { x: 0.36, y: 0.17, width: 0.03, height: 0.28 } }
+    const times = Array.from({ length: Math.round(6000 / FRAME_MS) }, (_, index) => index * FRAME_MS)
+    const seen = times.reduce<{ hold: StanceHold; hand: Hand }[]>((frames, time, index) => {
+      const holdingSince = frames.findIndex(({ hold }) => hold.need === 'hold')
+      const found = holdingSince >= 0 && time - times[holdingSince] > 1000 ? [bottle] : []
+      updateSwingTracker(tracker, { time, body, detections: index % 3 === 0 ? found : null, energy: NO_ENERGY })
+      const hold = holdStance(frames.at(-1)?.hold ?? startStanceHold(SETUP, 0), stanceFrame(tracker, time))
+      return [...frames, { hold, hand: tracker.hand }]
+    }, [])
+    expect(tracker.lock?.kind).toBe('detected')
+    const relocked = seen.find(({ hand }) => hand === 'left')?.hold
+    expect(stanceProgress(relocked ?? null)).toBeGreaterThan(0.3)
+    expect(stanceHeld(relocked ?? null)).toBe(false)
+    const held = seen.map(({ hold }) => hold.heldMs)
+    expect(held.every((heldMs, index) => heldMs >= (held[index - 1] ?? 0))).toBe(true)
+    expect(stanceHeld(seen.at(-1)?.hold ?? null)).toBe(true)
   })
 
   it('waits for the upper body while the tracker has no grip, or only holds the last one it saw', () => {

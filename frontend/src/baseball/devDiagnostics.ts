@@ -4,6 +4,7 @@ import {
   gripDepth,
   gripDrop,
   gripRaised,
+  handsEdgeDistance,
   isStill,
   STANCE_HOLD_RULES,
   type StanceFrame,
@@ -75,14 +76,17 @@ export type GripNote = { depth: number; drop: number | null; source: GripSource 
 
 /**
  * Each thing the stance hold needs on a frame, judged by the hold's own rules (flow/stanceHold.ts): what it waits for,
- * the pose as the hold reads it (seen, the tracker locked, the hands together, the grip raised) with how far apart the
- * wrists are, behind the midline, and below the shoulders (SW; the wrists' distance null unless both hold the object
- * and show), the smoothed grip's spread over the stillness window (SW), whether the hold is armed, how long since the
- * step asked (ms) and whether that is settled, and the gauge (ms).
+ * the pose as the hold reads it (seen, the hands inside the picture, the tracker locked, the hands together, the grip
+ * raised) with how far inside the picture's edge the followed wrist nearest it is (image heights, minus past it; null
+ * with none showing), how far apart the wrists are, behind the midline, and below the shoulders (SW; the wrists'
+ * distance null unless both hold the object and show), the smoothed grip's spread over the stillness window (SW),
+ * whether the hold is armed, how long since the step asked (ms) and whether that is settled, and the gauge (ms).
  */
 export type StanceNote = {
   need: StanceNeed
   seen: boolean
+  inView: boolean
+  edge: number | null
   locked: boolean
   together: boolean
   apart: number | null
@@ -347,9 +351,12 @@ export function stanceNote(hold: StanceHold | null, stance: StanceFrame, tracker
   const { grip } = stance
   const shoulders = tracker.frame.frontal
   const apart = wristsApart(tracker)
+  const edge = tracker.view && handsEdgeDistance(tracker.view.wrists, tracker.hand, tracker.aspect)
   return {
     need: hold.need,
     seen: stance.pose !== 'show',
+    inView: stance.pose !== 'show' && stance.pose !== 'handsInView',
+    edge,
     locked: tracker.state !== 'searching',
     together: stance.pose !== 'show' && (apart === null || apart <= HELD_OBJECT_RULES.twoHands),
     apart,
@@ -507,13 +514,15 @@ export function candidateLine(candidate: Diagnostics['candidate'], now: number) 
 
 export function stanceLines(stance: StanceNote | null) {
   if (!stance) return ['stance  not watched (no step waits, or not timed yet)']
-  const { holdMs, settleMs, behindMidline, lowestGrip, stillShoulderWidths, stillWindowMs } = STANCE_HOLD_RULES
+  const { holdMs, settleMs, edgeMargin, behindMidline, lowestGrip, stillShoulderWidths, stillWindowMs } =
+    STANCE_HOLD_RULES
   const { twoHands } = HELD_OBJECT_RULES
   const apart =
     stance.apart === null ? 'one hand holds it, or one is hidden' : `${numberText(stance.apart, 2)} SW apart`
   return [
     `stance  waits for ${stance.need} · gauge ${numberText(stance.heldMs / 1000, 2)} / ${holdMs / 1000} s`,
     `  ${passMark(stance.seen)} seen (shoulders and the grip)`,
+    `  ${passMark(stance.inView)} hands ${numberText(stance.edge, 2)} inside the picture's edge (≥${edgeMargin})`,
     `  ${passMark(stance.locked)} locked (an object, or the hands)`,
     `  ${passMark(stance.together)} hands together: ${apart} (≤${twoHands})`,
     `  ${passMark(stance.raised)} grip ${numberText(stance.depth, 2)} SW behind the midline (≥${behindMidline}) · ${numberText(stance.drop, 2)} SW below shoulders (≤${lowestGrip})`,

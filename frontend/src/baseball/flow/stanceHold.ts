@@ -1,16 +1,28 @@
 import { damp } from '../../motionMath'
 import { HELD_OBJECT_RULES } from '../vision/heldObject'
-import { type BodySample, distance, type Hand, meanPoint, type Point, type ShoulderLine } from '../vision/poseLandmarks'
+import {
+  type BodySample,
+  distance,
+  followedWrists,
+  type Hand,
+  meanPoint,
+  pictureEdgeDistance,
+  type Point,
+  type ShoulderLine,
+} from '../vision/poseLandmarks'
 import { CAPTION_HOLD_MS, type Side, SWING_RULES, type SwingTracker, type TrackerView } from '../vision/swingTracker'
 
 // The hands-free way on: holding the batting stance about three seconds starts practice, the run after it, and another
 // run, the way camera games start on a held pose. The stance is read straight from the pose, not from the swing
 // tracker's states, once it has locked what the visitor swings (an object, or the hands): the grip it follows (both
-// hands together, or the one hand that holds the object) behind the body's midline on the batting side as far as the
-// tracker loads, up by the chest or shoulders, and held still. Hands-only mode follows both wrists, as its swings do,
-// so it wants both hands together. Stillness is the grip, smoothed, staying near its middle, so the pose task's jitter
-// on a still visitor does not count as moving. Lengths are the visitor's own shoulder widths (SW), so they mean the
-// same near the camera and far from it. None counts in a step's first second. On the setup a visitor already in the
+// hands together, or the one hand that holds the object) inside the picture, behind the body's midline on the batting
+// side as far as the tracker loads, up by the chest or shoulders, and held still. A wrist at the picture's edge or past
+// it is one the pose task only guesses, so the hands in view come before any height or place (right after swings,
+// hands at the edge are lowered ones, so the line asks for them raised). Hands-only mode follows both wrists, as its
+// swings do, so it wants both hands together. Stillness is the grip, smoothed, staying near its middle, so the pose
+// task's jitter on a still visitor does not count as moving. Lengths are the visitor's own shoulder widths (SW), so
+// they mean the same near the camera and far from it. None counts in a step's first second, whose line says the stance
+// is being checked rather than to keep holding a gauge that does not move. On the setup a visitor already in the
 // stance fills the gauge; right after swings, a stance kept from the last one counts only once the visitor has been
 // seen out of it (moving, or lowering their hands) for longer than `graceMs`, so a glitch of the pose task does not
 // count as a fresh stance. A break or a tracking loss that short neither fills nor drains the gauge; a longer one
@@ -25,6 +37,8 @@ export const STANCE_HOLD_RULES = {
   holdMs: 3000,
   /** How long after a step asks for the stance that none counts. */
   settleMs: 1000,
+  /** A followed wrist nearer the picture's edge than this (image heights), or past it, is not in view. */
+  edgeMargin: 0.05,
   /** A break in the stance, or a tracking loss, this short (ms) neither fills nor drains the gauge. */
   graceMs: 300,
   /**
@@ -41,14 +55,14 @@ export const STANCE_HOLD_RULES = {
 }
 
 /**
- * What the hold waits for, first unmet first (i18n `baseball.flow.needs`): the upper body in view, the swing tracker's
- * lock on what the visitor swings, the hands together, the grip raised by the back shoulder, a stance taken afresh
- * after swings, a still one; `hold` once it holds.
+ * What the hold waits for, first unmet first (i18n `baseball.flow.needs`): the upper body in view, the hands inside
+ * the picture, the swing tracker's lock on what the visitor swings, the hands together, the grip raised by the back
+ * shoulder, a stance taken afresh after swings, a still one, the step's first second (`settle`); `hold` once it holds.
  */
-export type StanceNeed = 'show' | 'lock' | 'together' | 'raise' | 'retake' | 'still' | 'hold'
+export type StanceNeed = 'show' | 'handsInView' | 'lock' | 'together' | 'raise' | 'retake' | 'still' | 'settle' | 'hold'
 
 /** What a pose by itself lacks of the stance. */
-export type PoseNeed = Extract<StanceNeed, 'show' | 'lock' | 'together' | 'raise'>
+export type PoseNeed = Extract<StanceNeed, 'show' | 'handsInView' | 'lock' | 'together' | 'raise'>
 
 /**
  * One camera frame as the hold reads it: what the pose lacks of the stance (null for nothing), and the grip and the
@@ -65,13 +79,15 @@ export type StanceWait = { key: string; afterSwings: boolean }
 export type GripSample = { time: number; grip: Point }
 
 /**
- * A hold for the step `key` names, asked for at `since`: whether a stance counts yet (`armed`), since when the visitor
- * has been seen out of the stance (null while in it or unseen), how long it has been held, the grip's recent smoothed
- * samples that tell stillness, when the last frame came and when it last held, and what it waits for as of that frame.
+ * A hold for the step `key` names, asked for at `since`, right after swings or not: whether a stance counts yet
+ * (`armed`), since when the visitor has been seen out of the stance (null while in it or unseen), how long it has been
+ * held, the grip's recent smoothed samples that tell stillness, when the last frame came and when it last held, and
+ * what it waits for as of that frame.
  */
 export type StanceHold = {
   key: string
   since: number
+  afterSwings: boolean
   armed: boolean
   outSince: number | null
   heldMs: number
@@ -83,15 +99,36 @@ export type StanceHold = {
 
 /**
  * The frame's stance as the pose shows it, against the shoulders the swing tracker measured from frontal frames: the
- * grip the tracker follows, which is lost (`show`) while the tracker only holds it where it was last seen. Until the
- * tracker has locked what the visitor swings it could not follow a swing, so no stance counts (`lock`).
+ * grip the tracker follows, which is lost (`show`) while the tracker only holds it where it was last seen.
  */
 export function stanceFrame(tracker: SwingTracker, time: number): StanceFrame {
-  const { view, side, hand } = tracker
+  const { view } = tracker
   const shoulders = tracker.frame.frontal
   if (!view || view.source === 'hold' || !shoulders) return { time, pose: 'show', grip: null, shoulderWidth: null }
-  const pose = tracker.state === 'searching' ? 'lock' : poseNeed(view, shoulders, side, hand)
-  return { time, pose, grip: view.grip, shoulderWidth: shoulders.width }
+  return { time, pose: trackedPoseNeed(tracker, view, shoulders), grip: view.grip, shoulderWidth: shoulders.width }
+}
+
+/**
+ * What the tracked pose lacks of the stance: the hands the grip follows inside the picture first, since every other
+ * reading of a guessed wrist is a guess too; then, until the tracker has locked what the visitor swings, the lock, as
+ * it could not follow a swing yet; then the stance itself.
+ */
+export function trackedPoseNeed(tracker: SwingTracker, view: TrackerView, shoulders: ShoulderLine): PoseNeed | null {
+  if (handsAtEdge(view.wrists, tracker.hand, tracker.aspect)) return 'handsInView'
+  if (tracker.state === 'searching') return 'lock'
+  return poseNeed(view, shoulders, tracker.side, tracker.hand)
+}
+
+/** How far inside the picture's edge the followed wrist nearest it is (image heights); null with none showing. */
+export function handsEdgeDistance(wrists: BodySample['wrists'], hand: Hand, aspect: number) {
+  const distances = followedWrists(wrists, hand).map((wrist) => pictureEdgeDistance(wrist, aspect))
+  return distances.length > 0 ? Math.min(...distances) : null
+}
+
+/** Whether a followed wrist is near the picture's edge or past it, where the pose task only guesses where it is. */
+export function handsAtEdge(wrists: BodySample['wrists'], hand: Hand, aspect: number) {
+  const edge = handsEdgeDistance(wrists, hand, aspect)
+  return edge !== null && edge < STANCE_HOLD_RULES.edgeMargin
 }
 
 /**
@@ -139,6 +176,7 @@ export function startStanceHold(wait: StanceWait, since: number): StanceHold {
   return {
     key: wait.key,
     since,
+    afterSwings: wait.afterSwings,
     armed: !wait.afterSwings,
     outSince: null,
     heldMs: 0,
@@ -169,7 +207,7 @@ export function holdStance(hold: StanceHold, frame: StanceFrame): StanceHold {
     recent,
     lastTime: frame.time,
     lastHeldAt: holding ? frame.time : hold.lastHeldAt,
-    need: holding || graced ? 'hold' : unmetNeed(frame.pose, armed, still),
+    need: holding || graced ? 'hold' : unmetNeed(frame.pose, { afterSwings: hold.afterSwings, armed }, still),
   }
 }
 
@@ -190,11 +228,21 @@ export function outOfStance(frame: StanceFrame, still: boolean) {
   return frame.pose !== 'show' && (frame.pose !== null || !still)
 }
 
-/** The first thing a frame that does not hold lacks: from the pose, a fresh stance, then stillness. */
-export function unmetNeed(pose: PoseNeed | null, armed: boolean, still: boolean): StanceNeed {
+/**
+ * The first thing a frame that does not hold lacks: from the pose, a fresh stance, stillness, and with all of them,
+ * only the step's first second to pass. Right after swings the visitor was just seen swinging, so hands at the
+ * picture's edge are most likely the lowered ones a fresh stance starts from (a webcam framed from the head down sees
+ * lowered hands at its bottom edge): the line asks for the fresh stance and then for the hands raised, not to step back.
+ */
+export function unmetNeed(
+  pose: PoseNeed | null,
+  { afterSwings, armed }: Pick<StanceHold, 'afterSwings' | 'armed'>,
+  still: boolean,
+): StanceNeed {
+  if (pose === 'handsInView' && afterSwings) return armed ? 'raise' : 'retake'
   if (pose) return pose
   if (!armed) return 'retake'
-  return still ? 'hold' : 'still'
+  return still ? 'settle' : 'still'
 }
 
 /** The held time after `elapsed` ms more: up while holding, kept through a brief break, else down; full stays. */
