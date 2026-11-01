@@ -50,16 +50,18 @@ export function PracticeView({
 
 /**
  * The step after practice: practice is done, and holding the batting stance fills `gauge` and plays ball, as the
- * button does, which has focus so Enter or Space presses it. `cameraState` is the camera panel chip's words, heard
- * only.
+ * button does, which has focus so Enter or Space presses it; `stanceNeed` says what the hold waits for. `cameraState`
+ * is the camera panel chip's words, heard only.
  */
 export function PracticeDoneView({
   gauge,
+  stanceNeed,
   language,
   cameraState,
   onPlay,
 }: {
   gauge: Ref<HTMLDivElement>
+  stanceNeed: string | null
   language: AppLanguage
   cameraState: string | null
   onPlay: () => void
@@ -69,7 +71,7 @@ export function PracticeDoneView({
     <section className="baseball-card derby-practice-done" aria-labelledby="derby-practice-done-title">
       <h1 id="derby-practice-done-title">{copy.practice.doneTitle}</h1>
       <p className="baseball-note">{copy.practice.doneNote}</p>
-      <StanceGauge ref={gauge} label={copy.flow.stance} hint={copy.flow.toPlay} />
+      <StanceGauge ref={gauge} label={copy.flow.stance} hint={copy.flow.toPlay} need={stanceNeed} />
       <div className="derby-actions">
         <button className="primary-button" type="button" autoFocus onClick={onPlay}>
           {copy.flow.playBall}

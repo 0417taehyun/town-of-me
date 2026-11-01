@@ -4,9 +4,12 @@ import { diagnosedCameraParts, diagnoseFrame, forgetDiagnosedCamera } from './de
 import { devSwingSeen, devVisitorFrame } from './devSeam'
 import { type CameraGameProblem, cameraProblem } from './deviceGate'
 import {
+  nextShownNeed,
+  type ShownNeed,
   type StanceFrame,
   stanceFrame,
   type StanceHold,
+  type StanceNeed,
   stanceProgress,
   type StanceWatch,
   watchStance,
@@ -49,8 +52,8 @@ import { createObjectDetector, createPoseTracker, type VisionTask } from './visi
 // camera frame, and from there this page reads swings and draws the camera panel's canvas: the object detector every
 // so often (vision/heldObject.ts), the motion where a swing goes (vision/motionEnergy.ts), and the swing tracker
 // (vision/swingTracker.ts), whose swings go straight to the page's callback, as does the held stance's progress
-// (flow/stanceHold.ts). React hears only when the camera's status changes, the visitor comes into or out of view, or
-// the tracker's caption changes.
+// (flow/stanceHold.ts). React hears only when the camera's status changes, the visitor comes into or out of view, the
+// tracker's caption changes, or what the stance hold waits for does.
 
 /**
  * `starting` waits for the browser's permission, `loading` for the pose task, and `measuring` times it on this
@@ -287,10 +290,11 @@ export function visitorFrame(frame: PoseFrame, tracker: SwingTracker): { seen: b
  * draws on the panel's `canvas` (with the object it marks, named by `objectNames`), locks the held object by itself,
  * reads swings for `onSwing`, and follows the stance hold `stance` waits for. `seen` says whether the camera sees the
  * visitor, held through brief flickers (vision/poseLoop.ts), and `present` the same held longer, as long as practice
- * and a run wait before they pause (AWAY_HOLD_MS); `caption` is what the swing tracker says (nextCaption). `lockAt`
- * locks what the visitor tapped on the camera picture (a point in the raw image). The camera turns off on `turnOff`,
- * when its status leaves it off, and when the page's component unmounts; its last picture, the motion sampler's copy,
- * and the tracked body are wiped each time.
+ * and a run wait before they pause (AWAY_HOLD_MS); `caption` is what the swing tracker says (nextCaption), and
+ * `stanceNeed` what the stance hold waits for (nextShownNeed), null while none runs. `lockAt` locks what the visitor
+ * tapped on the camera picture (a point in the raw image). The camera turns off on `turnOff`, when its status leaves it
+ * off, and when the page's component unmounts; its last picture, the motion sampler's copy, and the tracked body are
+ * wiped each time.
  */
 export function useCameraTracking({
   side,
@@ -309,6 +313,7 @@ export function useCameraTracking({
   const [seen, setSeen] = useState(false)
   const [present, setPresent] = useState(false)
   const [caption, setCaption] = useState<TrackerReason | null>(null)
+  const [stanceNeed, setStanceNeed] = useState<StanceNeed | null>(null)
 
   useLayoutEffect(() => {
     page.current = { objectsPaused, onSwing, stance, settingUp, objectNames }
@@ -326,6 +331,7 @@ export function useCameraTracking({
     let hold: StanceHold | null = null
     let shownProgress = 0
     let shownCaption: HeldCaption | null = null
+    let shownNeed: ShownNeed | null = null
     // The object detector waits until this computer has been timed: the timing is of what a pitch sees, the pose task
     // and the frames the page draws, and the detector rests during a pitch.
     let timed = false
@@ -353,6 +359,9 @@ export function useCameraTracking({
         hold,
       })
       shownProgress = stanceProgress(hold)
+      const need = nextShownNeed(shownNeed, hold?.need ?? null, frame.capturedAt)
+      if (need?.need !== shownNeed?.need) setStanceNeed(need?.need ?? null)
+      shownNeed = need
       const now = performance.now()
       const next = nextSight(sight, visitor.seen, now)
       if (next.seen !== sight.seen) setSeen(next.seen)
@@ -378,6 +387,7 @@ export function useCameraTracking({
     setSeen(false)
     setPresent(false)
     setCaption(null)
+    setStanceNeed(null)
     setStatus({ kind: 'starting' })
     setRequest(Symbol('camera'))
   }, [side])
@@ -388,5 +398,5 @@ export function useCameraTracking({
   const lockAt = useCallback((point: Point) => {
     if (reading.current) lockByHand(reading.current.tracker, point)
   }, [])
-  return { video, canvas, status, seen, present, caption, turnOn, turnOff, lockAt }
+  return { video, canvas, status, seen, present, caption, stanceNeed, turnOn, turnOff, lockAt }
 }

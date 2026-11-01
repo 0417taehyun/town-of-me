@@ -1,12 +1,14 @@
 import type { ObjectDetectorResult } from '@mediapipe/tasks-vision'
 import type { CameraTrackingParts } from './cameraTracking'
 import {
+  gripDepth,
   gripDrop,
   gripRaised,
   isStill,
   STANCE_HOLD_RULES,
   type StanceFrame,
   type StanceHold,
+  type StanceNeed,
   stanceSettled,
   stillSpread,
 } from './flow/stanceHold'
@@ -26,6 +28,7 @@ import {
   objectDetections,
   toImageBox,
 } from './vision/heldObject'
+import { distance } from './vision/poseLandmarks'
 import type { PoseFrame } from './vision/poseLoop'
 import {
   energyNeeded,
@@ -69,22 +72,26 @@ export type LockNote = { kind: HeldObjectLock['kind']; label: string | null; sco
 export type GripNote = { depth: number; drop: number | null; source: GripSource }
 
 /**
- * Each thing the stance hold needs on a frame, judged by the hold's own rules (flow/stanceHold.ts): the stance as the
- * hold reads it, the grip and shoulders seen, the hold armed, how long since the step asked (ms) and whether that is
- * settled, the tracker loaded on the batting side, the grip's drop below the shoulders and its spread over the
- * stillness window (SW) with whether each passes, and the gauge (ms).
+ * Each thing the stance hold needs on a frame, judged by the hold's own rules (flow/stanceHold.ts): what it waits for,
+ * the pose as the hold reads it (seen, the tracker locked, the hands together, the grip raised) with how far apart the
+ * wrists are, behind the midline, and below the shoulders (SW; the wrists' distance null unless both hold the object
+ * and show), the smoothed grip's spread over the stillness window (SW), whether the hold is armed, how long since the
+ * step asked (ms) and whether that is settled, and the gauge (ms).
  */
 export type StanceNote = {
-  inStance: boolean
+  need: StanceNeed
   seen: boolean
+  locked: boolean
+  together: boolean
+  apart: number | null
+  raised: boolean
+  depth: number | null
+  drop: number | null
+  spread: number | null
+  still: boolean
   armed: boolean
   askedMs: number
   settled: boolean
-  loaded: boolean
-  drop: number | null
-  raised: boolean
-  spread: number | null
-  still: boolean
   heldMs: number
 }
 
@@ -328,21 +335,33 @@ export function gripNote({ view, side, frame }: SwingTracker): GripNote | null {
 /** What the stance hold made of a frame, measured as it measures; null while no step waits. */
 export function stanceNote(hold: StanceHold | null, stance: StanceFrame, tracker: SwingTracker): StanceNote | null {
   if (!hold) return null
+  const { grip } = stance
   const shoulders = tracker.frame.frontal
-  const drop = stance.grip && shoulders ? gripDrop(stance.grip, shoulders) : null
+  const apart = wristsApart(tracker)
   return {
-    inStance: stance.inStance,
-    seen: stance.grip !== null && stance.shoulderWidth !== null,
+    need: hold.need,
+    seen: stance.pose !== 'show',
+    locked: tracker.state !== 'searching',
+    together: stance.pose !== 'show' && (apart === null || apart <= HELD_OBJECT_RULES.twoHands),
+    apart,
+    raised: grip !== null && shoulders !== null && gripRaised(grip, shoulders, tracker.side),
+    depth: grip && shoulders ? gripDepth(grip, shoulders, tracker.side) : null,
+    drop: grip && shoulders ? gripDrop(grip, shoulders) : null,
+    spread: stillSpread(hold.recent, stance.shoulderWidth),
+    still: isStill(hold.recent, stance.shoulderWidth),
     armed: hold.armed,
     askedMs: stance.time - hold.since,
     settled: stanceSettled(hold, stance.time),
-    loaded: tracker.state === 'loaded',
-    drop,
-    raised: drop !== null && gripRaised(drop),
-    spread: stillSpread(hold.recent, stance.shoulderWidth),
-    still: isStill(hold.recent, stance.shoulderWidth),
     heldMs: hold.heldMs,
   }
+}
+
+/** How far apart (SW) the wrists are when both hold the object and show; null otherwise. */
+export function wristsApart({ hand, view }: SwingTracker) {
+  const left = view?.wrists.left
+  const right = view?.wrists.right
+  if (hand !== 'both' || !view || !left || !right) return null
+  return distance(left, right) / view.width
 }
 
 /** The sweep the tracker was on until this frame, as it ended (the tracker leaves it as it was then), if it ended. */
@@ -479,15 +498,19 @@ export function candidateLine(candidate: Diagnostics['candidate'], now: number) 
 
 export function stanceLines(stance: StanceNote | null) {
   if (!stance) return ['stance  not watched (no step waits, or not timed yet)']
-  const { holdMs, settleMs, lowestGrip, stillShoulderWidths, stillWindowMs } = STANCE_HOLD_RULES
+  const { holdMs, settleMs, behindMidline, lowestGrip, stillShoulderWidths, stillWindowMs } = STANCE_HOLD_RULES
+  const { twoHands } = HELD_OBJECT_RULES
+  const apart =
+    stance.apart === null ? 'one hand holds it, or one is hidden' : `${numberText(stance.apart, 2)} SW apart`
   return [
-    `stance  ${stance.inStance ? 'in' : 'out'} · gauge ${numberText(stance.heldMs / 1000, 2)} / ${holdMs / 1000} s`,
-    `  ${passMark(stance.seen)} seen (grip and shoulders)`,
-    `  ${passMark(stance.armed)} armed (out of the stance since asked)`,
+    `stance  waits for ${stance.need} · gauge ${numberText(stance.heldMs / 1000, 2)} / ${holdMs / 1000} s`,
+    `  ${passMark(stance.seen)} seen (shoulders and the grip)`,
+    `  ${passMark(stance.locked)} locked (an object, or the hands)`,
+    `  ${passMark(stance.together)} hands together: ${apart} (≤${twoHands})`,
+    `  ${passMark(stance.raised)} grip ${numberText(stance.depth, 2)} SW behind the midline (≥${behindMidline}) · ${numberText(stance.drop, 2)} SW below shoulders (≤${lowestGrip})`,
+    `  ${passMark(stance.still)} still ${numberText(stance.spread, 2)} SW smoothed over ${stillWindowMs} ms (≤${stillShoulderWidths})`,
+    `  ${passMark(stance.armed)} armed (a fresh stance after swings)`,
     `  ${passMark(stance.settled)} settled ${numberText(stance.askedMs / 1000, 1)} s since asked (≥${settleMs / 1000})`,
-    `  ${passMark(stance.loaded)} batting side (tracker loaded)`,
-    `  ${passMark(stance.raised)} grip raised ${numberText(stance.drop, 2)} SW below shoulders (≤${lowestGrip})`,
-    `  ${passMark(stance.still)} still ${numberText(stance.spread, 2)} SW over ${stillWindowMs} ms (≤${stillShoulderWidths})`,
   ]
 }
 

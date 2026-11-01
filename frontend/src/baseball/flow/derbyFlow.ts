@@ -7,6 +7,7 @@ import type { DerbyInputLog, DerbyResult, PitchResult } from '../game/derbyScore
 import type { BattingSide } from '../game/field'
 import { createPracticePlan, createRunPlan } from '../game/runPlan'
 import type { StageEvent, StageRunSetup } from '../stage/stageRun'
+import type { StanceWait } from './stanceHold'
 
 // The derby's steps: the rules card, the camera's setup, practice, the step after it, the run, and its result. Only the
 // first click is needed: it turns the camera on and asks for everything else a click must (BaseballApp.tsx). From there
@@ -57,12 +58,14 @@ export function shownRun(flow: DerbyFlow, step: DerbyStep) {
 }
 
 /**
- * What the stance hold waits for, as a key that is new for each step that waits, so a hold never carries over from
- * one to the next; null during practice and a run, where a stance is a swing about to come. The hold runs only while
+ * What the stance hold waits for: a key that is new for each step that waits, so a hold never carries over from one to
+ * the next, and whether the step comes right after swings (all but the setup), where a stance kept from the last swing
+ * must not count; null during practice and a run, where a stance is a swing about to come. The hold runs only while
  * the camera is ready (cameraTracking.ts).
  */
-export function stanceWait(flow: DerbyFlow): string | null {
-  return WAITING_STEPS.includes(flow.step) ? `${flow.step}@${flow.since}` : null
+export function stanceWait(flow: DerbyFlow): StanceWait | null {
+  if (!WAITING_STEPS.includes(flow.step)) return null
+  return { key: `${flow.step}@${flow.since}`, afterSwings: flow.step !== 'setup' }
 }
 
 /** What a go can start: the practice, and a run calibrated by `practice`. */

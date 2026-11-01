@@ -149,8 +149,9 @@ describe('the derby flow', () => {
     expect(started.map((flow) => flow.since)).toEqual([2000, 2000, 2000])
     const swinging = steps.filter((step) => !waiting.includes(step)).map((step) => flowAt(step))
     expect(swinging.map((flow) => startedFlow(flow, 2000, plays))).toEqual(swinging)
-    // A hold never carries over: the next step that waits waits for a new one.
-    expect(stanceWait(flowAt('result'))).not.toBe(stanceWait({ ...flowAt('result'), since: 5000 }))
+    // A hold never carries over: the next step that waits waits for a new one. Only the setup comes before any swing.
+    expect(stanceWait(flowAt('result'))?.key).not.toBe(stanceWait({ ...flowAt('result'), since: 5000 })?.key)
+    expect(waiting.map((step) => stanceWait(flowAt(step))?.afterSwings)).toEqual([false, true, true])
   })
 
   it('practices at its own pace, times each swing against the contact point, and calibrates the runs after', () => {

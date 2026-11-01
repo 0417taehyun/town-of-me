@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { languageCopy } from '../../i18n/language'
 import { advanceDerby, createDerby, type Derby, type DerbyEvent, phaseEndMs, swingDerby } from '../game/derby'
 import { contactHeight, contactSeconds, type PitchTypeId } from '../game/pitch'
 import type { PitchResult } from '../game/derbyScore'
@@ -15,6 +16,8 @@ import {
   hudAfterEvent,
   NEW_RUN_HUD,
   scoreboardTotals,
+  seenCameraState,
+  stanceNeedText,
 } from './derbyCues'
 
 /**
@@ -156,5 +159,19 @@ describe('the derby HUD', () => {
   it('shows distances in whole meters, spaced in English and not in Korean, and a total to the decimeter', () => {
     expect([distanceText(1324, 'en'), distanceText(1324, 'ko')]).toEqual(['132 m', '132m'])
     expect([homeRunDistanceText(2170, 'en', 1), homeRunDistanceText(2174, 'en', 1)]).toEqual(['217 m', '217.4 m'])
+  })
+})
+
+describe('the camera chip', () => {
+  it('never tells a visitor to swing while a step waits for the stance, but still says how the lock goes', () => {
+    const tracker = languageCopy.en.baseball.camera.tracker
+    const waiting = stanceNeedText('hold', 'right', 'en')
+    const swingWords = (['loaded', 'swing', 'pullBack', 'faster'] as const).map((caption) =>
+      seenCameraState(caption, waiting, 'en'),
+    )
+    expect(swingWords).toEqual([waiting, waiting, waiting, waiting])
+    expect(seenCameraState('locking', waiting, 'en')).toBe(tracker.locking)
+    // In practice and a run, where no step waits, the tracker says when to swing.
+    expect(seenCameraState('loaded', null, 'en')).toBe(tracker.loaded)
   })
 })

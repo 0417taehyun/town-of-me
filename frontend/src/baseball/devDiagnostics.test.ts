@@ -35,7 +35,7 @@ function noteFrame(
   capturedAt: number,
   swing: RealTimeSwing | null = null,
 ) {
-  const stance = { time: capturedAt, inStance: false, grip: null, shoulderWidth: null }
+  const stance = { time: capturedAt, pose: 'show' as const, grip: null, shoulderWidth: null }
   const frame = { keypoints: null, body: null, capturedAt }
   diagnoseFrame({ frame, poseMs: 12, video, tracker, swing, stance, hold: null }, diagnostics, capturedAt + HANDLING_MS)
 }

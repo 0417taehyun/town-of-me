@@ -40,13 +40,16 @@ export function installDevSeam() {
   }
 }
 
-/** What the camera sees of the stand-in visitor at `time`: whether they are in view, and their stance, if any. */
+/**
+ * What the camera sees of the stand-in visitor at `time`: whether they are in view, and their stance, held still; one
+ * `standing` holds the bat low, so the stance waits for it to be raised.
+ */
 export function devVisitorFrame(time: number): { seen: boolean; stance: StanceFrame } | null {
   const { visitor } = DEV_SEAM
   if (visitor === null) return null
-  if (visitor === 'away') return { seen: false, stance: { time, inStance: false, grip: null, shoulderWidth: null } }
-  const stance = { time, inStance: visitor === 'stance', grip: { x: 0.45, y: 0.55 }, shoulderWidth: 0.2 }
-  return { seen: true, stance }
+  if (visitor === 'away') return { seen: false, stance: { time, pose: 'show', grip: null, shoulderWidth: null } }
+  const pose = visitor === 'stance' ? null : 'raise'
+  return { seen: true, stance: { time, pose, grip: { x: 0.45, y: 0.55 }, shoulderWidth: 0.2 } }
 }
 
 /** On a pitch's release, the stand-in swing asked for it, if any, on its way for the camera's frames to report. */

@@ -1,69 +1,132 @@
-import { distance, meanPoint, type Point, type ShoulderLine } from '../vision/poseLandmarks'
-import type { SwingTracker } from '../vision/swingTracker'
+import { damp } from '../../motionMath'
+import { HELD_OBJECT_RULES } from '../vision/heldObject'
+import { type BodySample, distance, type Hand, meanPoint, type Point, type ShoulderLine } from '../vision/poseLandmarks'
+import { CAPTION_HOLD_MS, type Side, SWING_RULES, type SwingTracker, type TrackerView } from '../vision/swingTracker'
 
 // The hands-free way on: holding the batting stance about three seconds starts practice, the run after it, and another
-// run, the way camera games start on a held pose. Only a stance taken after the step asked for it counts, and none in
-// the step's first moments, so a stance kept from the last swing, or a celebration, starts nothing. Moving drains the
-// gauge rather than emptying it, a brief tracking dropout neither fills nor drains it, and a full gauge stays full.
-// Stillness is measured in the visitor's own shoulder widths, so it means the same near the camera and far from it.
-// Times are the camera frames' capture times (ms).
+// run, the way camera games start on a held pose. The stance is read straight from the pose, not from the swing
+// tracker's states, once it has locked what the visitor swings (an object, or the hands): the grip it follows (both
+// hands together, or the one hand that holds the object) behind the body's midline on the batting side as far as the
+// tracker loads, up by the chest or shoulders, and held still. Hands-only mode follows both wrists, as its swings do,
+// so it wants both hands together. Stillness is the grip, smoothed, staying near its middle, so the pose task's jitter
+// on a still visitor does not count as moving. Lengths are the visitor's own shoulder widths (SW), so they mean the
+// same near the camera and far from it. None counts in a step's first second. On the setup a visitor already in the
+// stance fills the gauge; right after swings, a stance kept from the last one counts only once the visitor has been
+// seen out of it (moving, or lowering their hands) for longer than `graceMs`, so a glitch of the pose task does not
+// count as a fresh stance. A break or a tracking loss that short neither fills nor drains the gauge; a longer one
+// drains it as fast as holding fills it, and a full gauge stays full. Times are the camera frames' capture times (ms).
 
+/**
+ * Checked against the drafts' one real webcam log (2026-10-31-real-webcam-1.json): over 500 ms of a visitor holding
+ * still, the raw grip strays up to 0.31 SW from its middle, smoothed over 150 ms up to 0.18 SW; raising or lowering the
+ * hands moves it a shoulder width or more.
+ */
 export const STANCE_HOLD_RULES = {
   holdMs: 3000,
-  /** A broken stance drains the gauge this many times as fast as holding fills it. */
-  drainRate: 2,
   /** How long after a step asks for the stance that none counts. */
-  settleMs: 2000,
-  /** The grip is still while every grip of the last `stillWindowMs` stays this near their middle (shoulder widths). */
-  stillShoulderWidths: 0.15,
-  stillWindowMs: 500,
-  /** Tracking may lose the visitor this long without the gauge filling or draining. */
-  dropoutMs: 200,
-  /** The grip is up in the stance when it is no lower than this below the shoulders (shoulder widths). */
+  settleMs: 1000,
+  /** A break in the stance, or a tracking loss, this short (ms) neither fills nor drains the gauge. */
+  graceMs: 300,
+  /**
+   * The grip is up by the back shoulder this far behind the midline at least, where the swing tracker loads, so a
+   * stance that counts is one it swings from, and at most `lowestGrip` below it.
+   */
+  behindMidline: SWING_RULES.loadOffset,
   lowestGrip: 1,
+  /** The grip is smoothed with this time constant (ms) before stillness is measured. */
+  smoothingMs: 150,
+  /** The grip is still while every smoothed grip of the last `stillWindowMs` stays this near their middle. */
+  stillShoulderWidths: 0.3,
+  stillWindowMs: 500,
 }
 
 /**
- * One camera frame as the hold reads it: whether the visitor stands in the batting stance, where the grip is, and their
- * shoulder width (image units); the grip and the width are null when the camera lost them.
+ * What the hold waits for, first unmet first (i18n `baseball.flow.needs`): the upper body in view, the swing tracker's
+ * lock on what the visitor swings, the hands together, the grip raised by the back shoulder, a stance taken afresh
+ * after swings, a still one; `hold` once it holds.
  */
-export type StanceFrame = { time: number; inStance: boolean; grip: Point | null; shoulderWidth: number | null }
+export type StanceNeed = 'show' | 'lock' | 'together' | 'raise' | 'retake' | 'still' | 'hold'
+
+/** What a pose by itself lacks of the stance. */
+export type PoseNeed = Extract<StanceNeed, 'show' | 'lock' | 'together' | 'raise'>
 
 /**
- * A hold for the step `wait` names, asked for at `since`: whether the visitor has been seen out of the stance since
- * (only then is a stance a new one), how long it has been held, and the recent grips that tell stillness.
+ * One camera frame as the hold reads it: what the pose lacks of the stance (null for nothing), and the grip and the
+ * visitor's shoulder width (image units) that tell stillness, both null when the camera lost them.
+ */
+export type StanceFrame = { time: number; pose: PoseNeed | null; grip: Point | null; shoulderWidth: number | null }
+
+/**
+ * What the page waits for (derbyFlow.ts stanceWait): a key that is new for each step that waits, and whether the step
+ * comes right after swings, where the visitor may still stand in the stance of the last one.
+ */
+export type StanceWait = { key: string; afterSwings: boolean }
+
+export type GripSample = { time: number; grip: Point }
+
+/**
+ * A hold for the step `key` names, asked for at `since`: whether a stance counts yet (`armed`), since when the visitor
+ * has been seen out of the stance (null while in it or unseen), how long it has been held, the grip's recent smoothed
+ * samples that tell stillness, when the last frame came and when it last held, and what it waits for as of that frame.
  */
 export type StanceHold = {
-  wait: string
+  key: string
   since: number
   armed: boolean
+  outSince: number | null
   heldMs: number
-  recent: { time: number; grip: Point }[]
+  recent: GripSample[]
   lastTime: number
-  lastSeen: number | null
+  lastHeldAt: number | null
+  need: StanceNeed
 }
 
 /**
- * The frame's stance as the swing tracker sees it: loaded on the batting side with the object locked (or none in free
- * mode), and the grip up by the shoulders rather than hanging at the hip.
+ * The frame's stance as the pose shows it, against the shoulders the swing tracker measured from frontal frames: the
+ * grip the tracker follows, which is lost (`show`) while the tracker only holds it where it was last seen. Until the
+ * tracker has locked what the visitor swings it could not follow a swing, so no stance counts (`lock`).
  */
 export function stanceFrame(tracker: SwingTracker, time: number): StanceFrame {
-  const { view } = tracker
+  const { view, side, hand } = tracker
   const shoulders = tracker.frame.frontal
-  const grip = view && view.source !== 'hold' ? view.grip : null
-  if (!grip || !shoulders) return { time, inStance: false, grip: null, shoulderWidth: null }
-  const raised = gripRaised(gripDrop(grip, shoulders))
-  return { time, inStance: tracker.state === 'loaded' && raised, grip, shoulderWidth: shoulders.width }
+  if (!view || view.source === 'hold' || !shoulders) return { time, pose: 'show', grip: null, shoulderWidth: null }
+  const pose = tracker.state === 'searching' ? 'lock' : poseNeed(view, shoulders, side, hand)
+  return { time, pose, grip: view.grip, shoulderWidth: shoulders.width }
 }
 
-/** How far (shoulder widths) `grip` hangs below the shoulders. */
+/**
+ * What the pose lacks of the stance, batting on `side` with the object in `hand`: both hands together when both hold
+ * it (a hidden one is taken to be on the other), then the grip up by the back shoulder.
+ */
+export function poseNeed(
+  view: Pick<TrackerView, 'wrists' | 'grip'>,
+  shoulders: ShoulderLine,
+  side: Side,
+  hand: Hand,
+): PoseNeed | null {
+  if (hand === 'both' && handsApart(view.wrists, shoulders.width)) return 'together'
+  return gripRaised(view.grip, shoulders, side) ? null : 'raise'
+}
+
+/** Whether both wrists show, farther apart than two hands holding one thing. */
+export function handsApart({ left, right }: BodySample['wrists'], shoulderWidth: number) {
+  return left !== null && right !== null && distance(left, right) > HELD_OBJECT_RULES.twoHands * shoulderWidth
+}
+
+/** How far (SW) `grip` is behind the midline toward the shoulder on the batting `side`. */
+export function gripDepth(grip: Point, shoulders: ShoulderLine, side: Side) {
+  return ((grip.x - shoulders.midX) / shoulders.width) * side
+}
+
+/** How far (SW) `grip` hangs below the shoulders. */
 export function gripDrop(grip: Point, shoulders: ShoulderLine) {
   return (grip.y - shoulders.midY) / shoulders.width
 }
 
-/** Whether a grip `drop` shoulder widths below the shoulders is up in the stance rather than hanging at the hip. */
-export function gripRaised(drop: number) {
-  return drop <= STANCE_HOLD_RULES.lowestGrip
+/** Whether `grip` is up by the back shoulder: behind the midline on the batting side, and no lower than the chest. */
+export function gripRaised(grip: Point, shoulders: ShoulderLine, side: Side) {
+  const { behindMidline, lowestGrip } = STANCE_HOLD_RULES
+  return gripDepth(grip, shoulders, side) >= behindMidline && gripDrop(grip, shoulders) <= lowestGrip
 }
 
 /** Whether the step that asked for `hold` has waited long enough, by `time`, for a stance to count. */
@@ -71,46 +134,85 @@ export function stanceSettled(hold: Pick<StanceHold, 'since'>, time: number) {
   return time - hold.since >= STANCE_HOLD_RULES.settleMs
 }
 
-export function startStanceHold(wait: string, since: number): StanceHold {
-  return { wait, since, armed: false, heldMs: 0, recent: [], lastTime: since, lastSeen: null }
+/** A hold for `wait`, asked for at `since`: armed at once, unless the step comes right after swings. */
+export function startStanceHold(wait: StanceWait, since: number): StanceHold {
+  return {
+    key: wait.key,
+    since,
+    armed: !wait.afterSwings,
+    outSince: null,
+    heldMs: 0,
+    recent: [],
+    lastTime: since,
+    lastHeldAt: null,
+    need: 'show',
+  }
 }
 
 /** The hold after one more frame. */
 export function holdStance(hold: StanceHold, frame: StanceFrame): StanceHold {
-  const { dropoutMs, stillWindowMs } = STANCE_HOLD_RULES
-  const elapsed = Math.min(Math.max(0, frame.time - hold.lastTime), dropoutMs)
-  const seen = frame.grip !== null && frame.shoulderWidth !== null
+  const { graceMs, stillWindowMs } = STANCE_HOLD_RULES
+  const elapsed = Math.min(Math.max(0, frame.time - hold.lastTime), graceMs)
+  const smoothed = frame.grip && smoothGrip(hold.recent.at(-1) ?? null, { time: frame.time, grip: frame.grip })
   const kept = hold.recent.filter((sample) => frame.time - sample.time <= stillWindowMs)
-  const recent = frame.grip ? [...kept, { time: frame.time, grip: frame.grip }] : kept
-  const settled = stanceSettled(hold, frame.time)
-  const holding = hold.armed && settled && frame.inStance && isStill(recent, frame.shoulderWidth)
-  const lostBriefly = !seen && hold.lastSeen !== null && frame.time - hold.lastSeen <= dropoutMs
+  const recent = smoothed ? [...kept, smoothed] : kept
+  const still = isStill(recent, frame.shoulderWidth)
+  const outSince = outOfStance(frame, still) ? (hold.outSince ?? frame.time) : null
+  const armed = hold.armed || (outSince !== null && frame.time - outSince > graceMs)
+  const holding = armed && stanceSettled(hold, frame.time) && frame.pose === null && still
+  const graced = !holding && hold.lastHeldAt !== null && frame.time - hold.lastHeldAt <= graceMs
   return {
     ...hold,
-    armed: hold.armed || (seen && !frame.inStance),
-    heldMs: nextHeldMs(hold.heldMs, elapsed, holding, lostBriefly),
+    armed,
+    outSince,
+    heldMs: nextHeldMs(hold.heldMs, elapsed, holding, graced),
     recent,
     lastTime: frame.time,
-    lastSeen: seen ? frame.time : hold.lastSeen,
+    lastHeldAt: holding ? frame.time : hold.lastHeldAt,
+    need: holding || graced ? 'hold' : unmetNeed(frame.pose, armed, still),
   }
 }
 
-/** The held time after `elapsed` ms more: up while holding, kept through a brief dropout, else down; full stays. */
-export function nextHeldMs(heldMs: number, elapsed: number, holding: boolean, lostBriefly: boolean) {
-  const { holdMs, drainRate } = STANCE_HOLD_RULES
-  if (heldMs >= holdMs || lostBriefly) return heldMs
+/** `sample` smoothed after `previous`, by how long (ms) has passed since it, so it is the same at any frame rate. */
+export function smoothGrip(previous: GripSample | null, sample: GripSample): GripSample {
+  if (!previous) return sample
+  const rate = 1 / STANCE_HOLD_RULES.smoothingMs
+  const elapsed = Math.max(0, sample.time - previous.time)
+  const grip = {
+    x: damp(previous.grip.x, sample.grip.x, rate, elapsed),
+    y: damp(previous.grip.y, sample.grip.y, rate, elapsed),
+  }
+  return { time: sample.time, grip }
+}
+
+/** Whether a frame shows the visitor out of the stance: hands apart or down, or on the move. */
+export function outOfStance(frame: StanceFrame, still: boolean) {
+  return frame.pose !== 'show' && (frame.pose !== null || !still)
+}
+
+/** The first thing a frame that does not hold lacks: from the pose, a fresh stance, then stillness. */
+export function unmetNeed(pose: PoseNeed | null, armed: boolean, still: boolean): StanceNeed {
+  if (pose) return pose
+  if (!armed) return 'retake'
+  return still ? 'hold' : 'still'
+}
+
+/** The held time after `elapsed` ms more: up while holding, kept through a brief break, else down; full stays. */
+export function nextHeldMs(heldMs: number, elapsed: number, holding: boolean, graced: boolean) {
+  const { holdMs } = STANCE_HOLD_RULES
+  if (heldMs >= holdMs || graced) return heldMs
   if (holding) return Math.min(holdMs, heldMs + elapsed)
-  return Math.max(0, heldMs - elapsed * drainRate)
+  return Math.max(0, heldMs - elapsed)
 }
 
 /** Whether the grips in `recent` all stay near their middle, for a visitor `shoulderWidth` wide. */
-export function isStill(recent: readonly { grip: Point }[], shoulderWidth: number | null) {
+export function isStill(recent: readonly GripSample[], shoulderWidth: number | null) {
   const spread = stillSpread(recent, shoulderWidth)
   return spread !== null && spread <= STANCE_HOLD_RULES.stillShoulderWidths
 }
 
-/** The farthest any grip in `recent` strays from their middle (shoulder widths); null with no grip or no width. */
-export function stillSpread(recent: readonly { grip: Point }[], shoulderWidth: number | null) {
+/** The farthest any grip in `recent` strays from their middle (SW); null with no grip or no width. */
+export function stillSpread(recent: readonly GripSample[], shoulderWidth: number | null) {
   if (shoulderWidth === null || recent.length === 0) return null
   const middle = meanPoint(recent.map((sample) => sample.grip))
   return Math.max(...recent.map((sample) => distance(sample.grip, middle))) / shoulderWidth
@@ -129,17 +231,17 @@ export function stanceHeld(hold: StanceHold | null) {
  * The hold after `frame`: none while no step waits (`wait` null), a new one from this frame when the step that waits
  * is a new one, otherwise this one, followed.
  */
-export function followStance(hold: StanceHold | null, wait: string | null, frame: StanceFrame): StanceHold | null {
+export function followStance(hold: StanceHold | null, wait: StanceWait | null, frame: StanceFrame) {
   if (wait === null) return null
-  const current = hold?.wait === wait ? hold : startStanceHold(wait, frame.time)
+  const current = hold?.key === wait.key ? hold : startStanceHold(wait, frame.time)
   return holdStance(current, frame)
 }
 
 /**
- * The stance hold the page waits for: `wait` names the step that waits (derbyFlow.ts stanceWait), or is null while
- * none does; `onProgress` hears how full the gauge is (0..1) whenever that changes, and `onHeld` once when it fills.
+ * The stance hold the page waits for: `wait` says what the step that waits wants, or is null while none does;
+ * `onProgress` hears how full the gauge is (0..1) whenever that changes, and `onHeld` once when it fills.
  */
-export type StanceWatch = { wait: string | null; onProgress: (progress: number) => void; onHeld: () => void }
+export type StanceWatch = { wait: StanceWait | null; onProgress: (progress: number) => void; onHeld: () => void }
 
 /**
  * The hold after one more frame, reported to `stance`: its progress when that changed from `shownProgress`, and the
@@ -156,7 +258,20 @@ export function watchStance(
   const next = followStance(hold, timed ? stance.wait : null, frame)
   const progress = stanceProgress(next)
   if (progress !== shownProgress) stance.onProgress(progress)
-  const heldAlready = stanceHeld(hold) && hold?.wait === next?.wait
+  const heldAlready = stanceHeld(hold) && hold?.key === next?.key
   if (stanceHeld(next) && !heldAlready) stance.onHeld()
   return next
+}
+
+/** What the gauge's line says the hold waits for, and since when (ms). */
+export type ShownNeed = { need: StanceNeed; since: number }
+
+/**
+ * The line after a frame at `time` whose hold waits for `wanted` (null while no hold runs): another need replaces the
+ * one shown only once that has stood CAPTION_HOLD_MS, as the camera's caption does, so the line never flickers.
+ */
+export function nextShownNeed(shown: ShownNeed | null, wanted: StanceNeed | null, time: number): ShownNeed | null {
+  if (wanted === null) return null
+  if (shown && (shown.need === wanted || time - shown.since < CAPTION_HOLD_MS)) return shown
+  return { need: wanted, since: time }
 }

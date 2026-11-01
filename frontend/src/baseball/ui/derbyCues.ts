@@ -1,9 +1,12 @@
 import type { DerbySound } from '../../audio/derbySounds'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import type { PracticeFeedback } from '../flow/derbyFlow'
+import type { StanceNeed } from '../flow/stanceHold'
 import type { DerbyPhase } from '../game/derby'
 import { homeRunTotals, type PitchResult } from '../game/derbyScore'
+import type { BattingSide } from '../game/field'
 import type { StageEvent } from '../stage/stageRun'
+import type { TrackerReason } from '../vision/swingTracker'
 
 // The derby's cues, made from the stage's events: what the HUD shows and what the speakers play. The HUD keeps only the
 // phase, which pitch, the results so far, and which pitch's ball the camera last chased and which last came down; a
@@ -124,6 +127,35 @@ export function bannerText(result: PitchResult, language: AppLanguage) {
     distance: inPlay ? distanceText(result.distanceDecimetres, language) : null,
     detail: copy.pitchWas[result.pitchType],
   }
+}
+
+/** What the stance gauge's line says the hold waits for, naming the back shoulder of a visitor batting on `side`. */
+export function stanceNeedText(need: StanceNeed, side: BattingSide, language: AppLanguage) {
+  const words = languageCopy[language].baseball.flow.needs[need]
+  return typeof words === 'string' ? words : words[side]
+}
+
+/** The swing tracker's captions that direct a swing: where the grip loads, a swing seen, what a sweep lacked. */
+export const SWING_DIRECTIONS: ReadonlySet<TrackerReason> = new Set<TrackerReason>([
+  'pullBack',
+  'otherSide',
+  'loaded',
+  'swing',
+  'swingThrough',
+  'faster',
+  'bigger',
+  'unclear',
+  'stayPut',
+])
+
+/**
+ * The camera panel chip's words once the camera sees the visitor: the swing tracker's `caption`, except while a step
+ * waits for the stance, whose `stanceNeed` (null while none waits) stands in for a swing's directions, so the chip
+ * never tells a visitor holding the stance to swing; the lock's captions still show.
+ */
+export function seenCameraState(caption: TrackerReason | null, stanceNeed: string | null, language: AppLanguage) {
+  if (stanceNeed !== null && (caption === null || SWING_DIRECTIONS.has(caption))) return stanceNeed
+  return caption && languageCopy[language].baseball.camera.tracker[caption]
 }
 
 /** The sound a stage event makes: the bat at contact, the mitt at a catch, and the crowd for a home run. */

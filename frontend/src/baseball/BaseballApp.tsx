@@ -66,7 +66,16 @@ import {
 } from './ui/cameraPanelLayout'
 import { DerbyHud } from './ui/DerbyHud'
 import { DiagnosticsPanel } from './ui/DiagnosticsPanel'
-import { betweenPitches, chasingHomeRun, derbySoundFor, hudAfterEvent, judgedResult, NEW_RUN_HUD } from './ui/derbyCues'
+import {
+  betweenPitches,
+  chasingHomeRun,
+  derbySoundFor,
+  hudAfterEvent,
+  judgedResult,
+  NEW_RUN_HUD,
+  seenCameraState,
+  stanceNeedText,
+} from './ui/derbyCues'
 import { DeviceBlocked } from './ui/DeviceBlocked'
 import { PracticeDoneView, PracticeView } from './ui/PracticeView'
 import { ResultView } from './ui/ResultView'
@@ -304,9 +313,12 @@ export function DerbyScreen({
   const paused = pausedForAway(step, camera.present, betweenPitches(hud, pitchCount))
   const searching = cameraOn && !camera.seen
   const panel = cameraPanelLayout({ screen, chasing: chasingHomeRun(hud), searching, size: panelSize }, viewport, side)
+  // A step that waits for the stance says so in a screen reader's ear, as practice and the run do in their captions.
+  const waitsForStance = status.kind === 'ready' && step === flow.step && stanceWait(flow) !== null
+  const stanceNeed = waitsForStance && camera.stanceNeed ? stanceNeedText(camera.stanceNeed, side, language) : null
   const stateId = cameraStateId(status, camera.seen)
-  // Once the camera sees the visitor, the swing tracker says what to do next.
-  const trackerState = stateId === 'seen' && camera.caption ? cameraCopy.tracker[camera.caption] : null
+  // Once the camera sees the visitor, the swing tracker says what to do next, or the stance a step waits for does.
+  const trackerState = stateId === 'seen' ? seenCameraState(camera.caption, stanceNeed, language) : null
   const cameraState = trackerState ?? (stateId && cameraCopy.states[stateId])
   const panelShown = panel.placement !== 'hidden'
   // A panel the visitor hid that is back while the camera looks for them says so, or V would seem to do nothing.
@@ -314,8 +326,6 @@ export function DerbyScreen({
     panelSize === 'off' && panelShown ? cameraCopy.hiddenWhileSearching : cameraCopy.panelSizes[panelSize]
   const feedback =
     step === 'practice' && run ? shownPracticeFeedback(judgedResult(hud), run.plan.rules.difficulty) : null
-  // A step that waits for the stance says so in a screen reader's ear, as practice and the run do in their captions.
-  const waitsForStance = status.kind === 'ready' && step === flow.step && stanceWait(flow) !== null
 
   useEffect(() => () => sounds.dispose(), [sounds])
   useEffect(() => (cameraOn ? keepScreenOn() : undefined), [cameraOn])
@@ -418,7 +428,13 @@ export function DerbyScreen({
         />
       )}
       {step === 'practiceDone' && (
-        <PracticeDoneView gauge={gauge} language={language} cameraState={cameraState} onPlay={start} />
+        <PracticeDoneView
+          gauge={gauge}
+          stanceNeed={stanceNeed}
+          language={language}
+          cameraState={cameraState}
+          onPlay={start}
+        />
       )}
       {(step === 'play' || step === 'result') && run && (
         <DerbyHud hud={hud} pitchCount={pitchCount} paused={paused} language={language} cameraState={cameraState} />
@@ -430,6 +446,7 @@ export function DerbyScreen({
           panelSide={panel.side}
           side={side}
           gauge={gauge}
+          stanceNeed={stanceNeed}
           language={language}
           onSideChange={setChosenSide}
           onStart={start}
@@ -476,7 +493,14 @@ export function DerbyScreen({
         </section>
       )}
       {step === 'result' && flow.result && (
-        <ResultView result={flow.result} exit={exit} gauge={gauge} language={language} onPlayAgain={start} />
+        <ResultView
+          result={flow.result}
+          exit={exit}
+          gauge={gauge}
+          stanceNeed={stanceNeed}
+          language={language}
+          onPlayAgain={start}
+        />
       )}
       <BaseballLinks
         className="baseball-header derby-links"

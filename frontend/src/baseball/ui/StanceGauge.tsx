@@ -1,11 +1,23 @@
 import type { Ref } from 'react'
 
 /**
- * The ring that fills while the visitor holds the batting stance, with what holding it starts beside it. The vision
- * loop fills it straight on the element (`--stance-progress`, 0..1, and `aria-valuenow`) whenever the hold changes, so
- * React never renders for it (BaseballApp.tsx). Holding is one way on; the step's button beside it is the other.
+ * The ring that fills while the visitor holds the batting stance, with what holding it starts beside it, and under it
+ * one line of what the hold waits for (`need`: the first thing the stance lacks, or to keep holding). The vision loop
+ * fills the ring straight on the element (`--stance-progress`, 0..1, and `aria-valuenow`) whenever the hold changes,
+ * so React never renders for it (BaseballApp.tsx), only when the line changes. Holding is one way on; the step's
+ * button beside it is the other.
  */
-export function StanceGauge({ ref, label, hint }: { ref: Ref<HTMLDivElement>; label: string; hint: string }) {
+export function StanceGauge({
+  ref,
+  label,
+  hint,
+  need,
+}: {
+  ref: Ref<HTMLDivElement>
+  label: string
+  hint: string
+  need: string | null
+}) {
   return (
     <div className="stance-gauge">
       <div
@@ -25,6 +37,9 @@ export function StanceGauge({ ref, label, hint }: { ref: Ref<HTMLDivElement>; la
       <p>
         <strong>{label}</strong>
         <span>{hint}</span>
+      </p>
+      <p className="stance-gauge-need" role="status">
+        {need}
       </p>
     </div>
   )

@@ -226,11 +226,18 @@ screen; the screen stays awake while the camera is on, asked again each time the
 (`flow/screenRequests.ts`). `flow/derbyFlow.ts` holds the steps after it: the setup, where the visitor picks the
 batting side (which the batter, the camera panel, and the swing tracker follow), then practice, the step after it, the
 run, and its result. Each step that waits goes on by its focused button (Enter and Space press it, as on any page) or by
-holding the batting stance about three seconds (`flow/stanceHold.ts`): the swing tracker loaded on the batting side
-with the grip up by the shoulders and still, measured in shoulder widths. A stance kept from before the step asked, or
-in its first two seconds, counts for nothing, moving drains the ring at twice its pace, and a brief dropout holds it.
-The vision loop follows the hold and fills `ui/StanceGauge.tsx` straight on its element, so React renders only when a
-step changes. Practice pitches the game core's practice schedule at the practice pace as a derby of its own, with no
+holding the batting stance about three seconds (`flow/stanceHold.ts`), read from the pose rather than the swing
+tracker's states once it has locked what the visitor swings: the grip (both hands together, or the one that holds the
+object) behind the body's midline on the batting side as far as the tracker loads, up by the chest or shoulders, and
+still, its smoothed path measured in shoulder widths against the pose task's jitter as the drafts' real webcam log
+shows it. Nothing counts in a step's first second; on the setup a stance the visitor already stands in counts, while
+after practice or a run one kept from the last swing counts only once they have been seen moving or lowering their
+hands for over 300 ms, so a glitch of the pose task is no fresh stance. A break or a tracking loss under 300 ms neither
+fills nor drains the ring, and a longer one drains it as fast as holding fills it. The vision loop follows the hold and
+fills `ui/StanceGauge.tsx` straight on its element; the line under the ring says what the hold waits for (the upper
+body in view, the lock, hands together, raised by the back shoulder, a fresh stance, held still), so React renders only
+when a step or the line changes, and while a step waits the camera panel's chip says the same in place of the swing
+tracker's directions to swing (`ui/derbyCues.ts seenCameraState`). Practice pitches the game core's practice schedule at the practice pace as a derby of its own, with no
 calibration, so its swings' errors are against the contact point, and it takes swings as late as the calibration still
 counts one, so a slow camera's late swings still teach it. It tells each swing only a bit early, good, or a bit late
 (its own error against the contact point, within the difficulty's GOOD window or not), and its swings calibrate every

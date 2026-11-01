@@ -292,14 +292,14 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
  * on the ring whenever the hold changes; a path length of 1 makes it the share of the circle drawn.
  */
 .stance-gauge {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr;
   align-items: center;
-  gap: 16px;
+  gap: 10px 16px;
   margin-top: 22px;
 }
 .stance-gauge-ring {
   --stance-progress: 0;
-  flex: none;
   width: clamp(64px, 12vh, 140px);
   aspect-ratio: 1;
 }
@@ -335,6 +335,19 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
 .stance-gauge span {
   color: var(--muted);
   line-height: 1.45;
+}
+/*
+ * Under the ring, what the hold waits for, sized to be read from where the visitor bats; two lines are kept for it, so
+ * the card does not shift as the line changes.
+ */
+.stance-gauge .stance-gauge-need {
+  display: block;
+  grid-column: 1 / -1;
+  min-height: 2.6em;
+  color: var(--leaf-dark);
+  font-size: clamp(1rem, 2.8vh, 1.7rem);
+  font-weight: 700;
+  line-height: 1.3;
 }
 
 /* After practice, the card that waits for the run stands in the band the camera panel leaves the play. */

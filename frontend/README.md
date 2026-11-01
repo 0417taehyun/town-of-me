@@ -60,10 +60,11 @@ npm run build
   locked after about three seconds of looking, it lets you play with empty hands from the next moment yours are still (a
   real object it finds while you set up still takes over; a tap on the camera picture corrects a wrong lock). Choose to
   bat right- or left-handed on the setup card. The one click on `Start with the camera` is the only one needed: from
-  there you go on hands-free by holding your batting stance for about three seconds (or with the step's button): to five
-  practice pitches, which tell each swing only `A bit early`, `Good`, or `A bit late` and set your timing for the runs
-  after them, then to the run, and to another after its result. Practice and a run pause between pitches while you are
-  out of the camera's view. The camera picture is processed in the browser only and never leaves the device; the camera
+  there you go on hands-free, once the camera has locked what you swing, by holding your batting stance (hands raised
+  by your back shoulder) still for about three seconds, or with the step's button; the line under the ring says what
+  it still waits for. That takes you to five practice pitches, which tell each swing only `A bit early`, `Good`, or
+  `A bit late` and set your timing for the runs after them, then to the run, and to another after its result.
+  Practice and a run pause between pitches while you are out of the camera's view. The camera picture is processed in the browser only and never leaves the device; the camera
   turns off when you leave the page or after two minutes without movement, and a camera that is refused, missing, or
   busy shows why with another try. A computer too slow to follow a swing is told so, like a phone.
 
