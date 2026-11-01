@@ -6,23 +6,28 @@ import { homeRunTotals, type PitchResult } from '../game/derbyScore'
 import type { StageEvent } from '../stage/stageRun'
 
 // The derby's cues, made from the stage's events: what the HUD shows and what the speakers play. The HUD keeps only the
-// phase, which pitch, the results so far, and which pitch's ball last came down; a release tells it nothing about the
-// pitch, so the pitch type can reach the screen only in a result, after the pitch.
+// phase, which pitch, the results so far, and which pitch's ball the camera last chased and which last came down; a
+// release tells it nothing about the pitch, so the pitch type can reach the screen only in a result, after the pitch.
 
-/** `phase` is null before the first pitch's windup; `settledPitch` is the last pitch whose ball has come down. */
+/**
+ * `phase` is null before the first pitch's windup; `chasedPitch` is the last pitch whose ball in play the camera has
+ * started chasing, and `settledPitch` the last whose ball has come down.
+ */
 export type DerbyHudState = {
   phase: DerbyPhase | null
   pitchIndex: number
   results: PitchResult[]
+  chasedPitch: number
   settledPitch: number
 }
 
-export const NEW_RUN_HUD: DerbyHudState = { phase: null, pitchIndex: 0, results: [], settledPitch: -1 }
+export const NEW_RUN_HUD: DerbyHudState = { phase: null, pitchIndex: 0, results: [], chasedPitch: -1, settledPitch: -1 }
 
 export function hudAfterEvent(hud: DerbyHudState, event: StageEvent): DerbyHudState {
   if (event.type === 'windup') return { ...hud, phase: 'windup', pitchIndex: event.pitchIndex }
   if (event.type === 'release') return { ...hud, phase: 'pitch' }
   if (event.type === 'result') return { ...hud, phase: 'result', results: [...hud.results, event.result] }
+  if (event.type === 'chase') return { ...hud, chasedPitch: event.pitchIndex }
   if (event.type === 'caught' || event.type === 'landed') return { ...hud, settledPitch: event.pitchIndex }
   if (event.type === 'finished') return { ...hud, phase: 'finished' }
   return hud
@@ -54,10 +59,14 @@ export function betweenPitches(hud: DerbyHudState, pitchCount: number) {
   return bannerResult(hud) !== null && hud.results.length < pitchCount
 }
 
-/** A home run's ball still in the air, which the camera chases: the camera panel steps aside to a corner meanwhile. */
+/**
+ * A home run's ball still in the air, once the camera chases it: the camera panel steps aside to a corner meanwhile.
+ * Not sooner, so the play does not slide aside while the hit-stop holds the bat on the ball.
+ */
 export function chasingHomeRun(hud: DerbyHudState) {
-  const latest = hud.results.at(-1)
-  return hud.phase === 'result' && latest?.outcome === 'homeRun' && hud.settledPitch !== hud.results.length - 1
+  const latest = hud.results.length - 1
+  const homeRun = hud.results[latest]?.outcome === 'homeRun'
+  return hud.phase === 'result' && homeRun && hud.chasedPitch === latest && hud.settledPitch !== latest
 }
 
 /** A pitch let go by is a strike; one swung at and missed is a miss. */

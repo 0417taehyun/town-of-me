@@ -9,9 +9,11 @@ import { gameTime } from '../game/gameClock'
 import { contactHeight, contactSeconds, type PitchPlan, pitchPosition, secondsAtDepth } from '../game/pitch'
 import { createRunPlan, planRunPitch } from '../game/runPlan'
 import { SWING_RULES } from '../vision/swingTracker'
+import type { ShotKind } from './cameraShots'
 import {
   advanceStageRun,
   createStageRun,
+  directedShot,
   playStageFrame,
   type RealTimeSwing,
   setStageRunPaused,
@@ -276,6 +278,32 @@ describe('stage run', () => {
       expect(handedIn).toEqual(run.batted!.start)
       expect(gameTime(run.clock, run.clock.realMs - 1)).toBe(run.batted!.meetMs)
     })
+  })
+
+  it('cues the chase on the frame the camera starts chasing each ball in play, after the hit-stop holds the bat on it', () => {
+    const shotStartsMs: number[] = []
+    const cuesMs: number[] = []
+    const sinceContactMs: number[] = []
+    let shot: ShotKind = 'batting'
+    let contactMs = 0
+    play(
+      runSetup('normal', 3, 7),
+      () => 0,
+      ({ run, realMs }, frameEvents) => {
+        const nowMs = gameTime(run.clock, realMs)
+        const kind = directedShot(run, nowMs, 1, 'right', stageBallView(run, nowMs, null).position).kind
+        if (shot === 'batting' && kind !== 'batting') shotStartsMs.push(realMs)
+        shot = kind
+        const types = frameEvents.map((event) => event.type)
+        if (types.includes('contact')) contactMs = realMs
+        if (!types.includes('chase')) return
+        cuesMs.push(realMs)
+        sinceContactMs.push(realMs - contactMs)
+      },
+    )
+    expect(cuesMs).toHaveLength(3)
+    expect(cuesMs).toEqual(shotStartsMs)
+    sinceContactMs.forEach((ms) => expect(ms).toBeGreaterThan(STAGE_TIMING.hitStopMs))
   })
 
   it('brings every ball in play down before its result ends, however high it was hit', () => {

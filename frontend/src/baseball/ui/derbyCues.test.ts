@@ -9,6 +9,7 @@ import {
   bannerText,
   betweenPitches,
   chasingHomeRun,
+  type DerbyHudState,
   distanceText,
   homeRunDistanceText,
   hudAfterEvent,
@@ -16,11 +17,15 @@ import {
   scoreboardTotals,
 } from './derbyCues'
 
-/** What the stage reports for a derby event: a result, then the ball coming down, into the mitt or onto the grass. */
+/**
+ * What the stage reports for a derby event: a result, then the ball coming down, into the mitt, or onto the grass once
+ * the camera has started chasing it.
+ */
 function stageEventsFor(event: DerbyEvent): StageEvent[] {
   if (event.type !== 'result') return [event]
-  const settled = event.result.outcome === 'miss' ? 'caught' : 'landed'
-  return [event, { type: settled, pitchIndex: event.pitchIndex }]
+  const { pitchIndex } = event
+  if (event.result.outcome === 'miss') return [event, { type: 'caught', pitchIndex }]
+  return [event, { type: 'chase', pitchIndex }, { type: 'landed', pitchIndex }]
 }
 
 /** A swing with the bat level with the ball the moment the pitch on its way reaches the contact point. */
@@ -81,6 +86,7 @@ describe('the derby HUD', () => {
         ['windup', before],
         ['release', before],
         ['result', before],
+        ['chase', before],
         ['landed', before + 1],
       ]),
       ['finished', 3],
@@ -92,7 +98,7 @@ describe('the derby HUD', () => {
     )
   })
 
-  it('chases a home run from its result until its ball is down, and no other ball in play', () => {
+  it('chases a home run once the camera does, not from its result, until its ball is down, and no other ball', () => {
     let hud = NEW_RUN_HUD
     const chased = deadOnRun(createRunPlan({ pitchCount: 3, difficulty: 'normal' }, 11)).map((event) => {
       hud = hudAfterEvent(hud, event)
@@ -102,13 +108,21 @@ describe('the derby HUD', () => {
       ...[0, 1, 2].flatMap(() => [
         ['windup', false],
         ['release', false],
-        ['result', true],
+        ['result', false],
+        ['chase', true],
         ['landed', false],
       ]),
       ['finished', false],
     ])
     const hit = { ...hud.results[0], outcome: 'hit' as const }
-    expect(chasingHomeRun({ phase: 'result', pitchIndex: 0, results: [hit], settledPitch: -1 })).toBe(false)
+    const hitInTheAir: DerbyHudState = {
+      phase: 'result',
+      pitchIndex: 0,
+      results: [hit],
+      chasedPitch: 0,
+      settledPitch: -1,
+    }
+    expect(chasingHomeRun(hitInTheAir)).toBe(false)
   })
 
   it('is between pitches before the first windup and once a ball is down, never with one on its way or after the last', () => {
@@ -123,6 +137,7 @@ describe('the derby HUD', () => {
         ['windup', false],
         ['release', false],
         ['result', false],
+        ['chase', false],
         ['landed', another],
       ]),
       ['finished', false],

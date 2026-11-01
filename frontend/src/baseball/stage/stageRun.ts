@@ -44,10 +44,14 @@ export type RealTimeSwing = Omit<DerbySwing, 'contactAtMs' | 'startedAtMs'> & {
   startedAtRealMs: number
 }
 
-/** The derby's events, and the moments only the stage knows: the bat meeting the ball, it coming down, the catch. */
+/**
+ * The derby's events, and the moments only the stage knows: the bat meeting the ball, the camera starting to chase it,
+ * it coming down, the catch.
+ */
 export type StageEvent =
   | DerbyEvent
   | { type: 'contact'; pitchIndex: number }
+  | { type: 'chase'; pitchIndex: number }
   | { type: 'landed'; pitchIndex: number }
   | { type: 'caught'; pitchIndex: number }
 
@@ -88,7 +92,7 @@ export type TrailSample = { seconds: number; position: Vec3 }
 
 /**
  * A ball in play: where and when (game ms) the bat met it, how much faster than real time it flies, its flight once
- * the bat has met it, and its recent path (newest first).
+ * the bat has met it, whether the camera has started chasing it, and its recent path (newest first).
  */
 export type BattedBall = {
   pitchIndex: number
@@ -100,6 +104,7 @@ export type BattedBall = {
   flight: BallFlight | null
   steppedToMs: number
   showcase: boolean
+  chased: boolean
   peaked: boolean
   trail: TrailSample[]
 }
@@ -135,12 +140,19 @@ export function swingStageRun(run: StageRun, swing: RealTimeSwing, realMs: numbe
   return takeDerbyUpdate(run, update, gameTime(run.clock, realMs))
 }
 
-/** Everything due by `realMs`: the derby's phase changes, then the catch, the contact, and the batted ball's flight. */
+/**
+ * Everything due by `realMs`: the derby's phase changes, then the catch, the contact, the chase (on the clock as the
+ * contact's hit-stop left it), and the batted ball's flight.
+ */
 export function advanceStageRun(run: StageRun, realMs: number, reducedMotion: boolean): StageEvent[] {
   endSlowMotion(run, realMs)
   const nowMs = gameTime(run.clock, realMs)
   const derbyEvents = takeDerbyUpdate(run, advanceDerby(run.derby, nowMs), nowMs)
-  const cues = [...catchCue(run, nowMs), ...contactCue(run, nowMs, realMs)]
+  const cues = [
+    ...catchCue(run, nowMs),
+    ...contactCue(run, nowMs, realMs),
+    ...chaseCue(run, gameTime(run.clock, realMs)),
+  ]
   return [...derbyEvents, ...cues, ...flyBall(run, realMs, reducedMotion)]
 }
 
@@ -226,6 +238,7 @@ export function battedBallFor(run: StageRun, event: ResultEvent): BattedBall | n
     flight: null,
     steppedToMs: 0,
     showcase: isShowcaseHomeRun(run.derby.results.slice(0, pitchIndex), result),
+    chased: false,
     peaked: false,
     trail: [],
   }
@@ -280,6 +293,24 @@ export function contactCue(run: StageRun, nowMs: number, realMs: number): StageE
   batted.trail = [{ seconds: 0, position: { ...batted.start } }]
   run.clock = holdClock(run.clock, realMs, STAGE_TIMING.hitStopMs, batted.meetMs)
   return [{ type: 'contact', pitchIndex: batted.pitchIndex }]
+}
+
+/**
+ * Whether the camera chases the ball in play at game time `nowMs`: once the batting shot has watched it leave the bat a
+ * moment, which the hit-stop holds back, until the next pitch.
+ */
+export function chasingBall(run: StageRun | null, nowMs: number) {
+  const batted = run?.batted
+  if (run?.derby.phase !== 'result' || !batted?.flight) return false
+  return nowMs - batted.meetMs >= STAGE_TIMING.launchHoldMs
+}
+
+/** The camera starts chasing the ball in play, on the frame its shot does (directedShot). */
+export function chaseCue(run: StageRun, nowMs: number): StageEvent[] {
+  const { batted } = run
+  if (!batted || batted.chased || !chasingBall(run, nowMs)) return []
+  batted.chased = true
+  return [{ type: 'chase', pitchIndex: batted.pitchIndex }]
 }
 
 /** Steps the batted ball to now and keeps its recent path; reports the step it comes down on. */
@@ -426,8 +457,7 @@ export function directedShot(
   ball: Vec3,
 ): CameraShot {
   const batted = run?.batted
-  const watching = run?.derby.phase === 'result' && batted?.flight && nowMs - batted.meetMs >= STAGE_TIMING.launchHoldMs
-  if (!batted || !watching) return battingShot(aspect, side)
+  if (!batted || !chasingBall(run, nowMs)) return battingShot(aspect, side)
   if (batted.showcase && batted.peaked) return wideShot(batted.landing.spray, batted.landing.distanceDecimetres / 10)
   return chaseShot(ball)
 }

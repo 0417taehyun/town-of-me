@@ -535,6 +535,10 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   font-weight: 800;
   line-height: 1;
   white-space: nowrap;
+  /* The band changes under a shown caption as a home run's chase starts and ends, so it glides with the panel. */
+  transition:
+    left var(--ease),
+    font-size var(--ease);
 }
 .derby-banner {
   position: absolute;
@@ -546,6 +550,7 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   padding: 2vh 4vh;
   transform: translateX(-50%);
   white-space: nowrap;
+  transition: left var(--ease);
 }
 .derby-banner strong {
   font-size: clamp(64px, 16vh, 240px);
