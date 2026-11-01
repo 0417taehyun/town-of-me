@@ -244,9 +244,9 @@ describe('the camera diagnostics', () => {
       box: { x, y: 0.3, width: 0.06, height: 0.3 },
     })
     const inHands = foundAt('bottle', 0.5, 0.39)
-    const byHands = foundAt('cell phone', 0.9, 0.45)
+    const byHands = foundAt('cup', 0.9, 0.45)
     const farAway = foundAt('umbrella', 0.95, 0.05)
-    expect(bestCandidate([inHands, byHands, farAway], hands, 4 / 3)?.label).toBe('cell phone')
-    expect(bestCandidate([farAway, { ...byHands, score: 0.2 }], hands, 4 / 3)?.label).toBe('cell phone')
+    expect(bestCandidate([inHands, byHands, farAway], hands, 4 / 3)?.label).toBe('cup')
+    expect(bestCandidate([farAway, { ...byHands, score: 0.2 }], hands, 4 / 3)?.label).toBe('cup')
   })
 })

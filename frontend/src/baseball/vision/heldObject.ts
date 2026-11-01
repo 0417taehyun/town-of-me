@@ -18,7 +18,12 @@ import {
 // mode takes over until a real object locks again. Everything is in the raw, unmirrored image with x scaled by its
 // aspect ratio (poseLandmarks.ts); lengths are in the body's shoulder widths.
 
-/** COCO labels a visitor might plausibly swing or hold. A person is never the held object. */
+/**
+ * COCO labels a visitor might plausibly swing or hold. A person is never the held object, and neither is a remote: in
+ * the drafts' real webcam log the detector boxed the visitor's empty hands as one through the minute (57 sightings sure
+ * enough and within reach of a wrist, 21 of them before the bottle first showed), which would have locked in place of
+ * the hands. A phone and a mouse are left out with it, as the same kind of small thing nobody swings.
+ */
 export const HELD_OBJECT_LABELS = [
   'baseball bat',
   'baseball glove',
@@ -28,8 +33,6 @@ export const HELD_OBJECT_LABELS = [
   'cup',
   'wine glass',
   'umbrella',
-  'cell phone',
-  'remote',
   'banana',
   'toothbrush',
   'scissors',
@@ -40,7 +43,6 @@ export const HELD_OBJECT_LABELS = [
   'frisbee',
   'hair drier',
   'vase',
-  'mouse',
 ] as const
 
 export type HeldObjectLabel = (typeof HELD_OBJECT_LABELS)[number]
@@ -52,12 +54,14 @@ export function isHeldObjectLabel(label: string): label is HeldObjectLabel {
 /**
  * Checked against the drafts' one real webcam log (2026-10-31-real-webcam-1.json): a held bottle locked within 0.3 s
  * of coming within `candidateReach` of a wrist, and a lower `candidateScore` would have locked a 0.27 "cup" by the
- * wrists in its place. A visitor whose object the detector cannot find (it seldom finds a bat) plays in free mode.
+ * wrists in its place. The detector boxes a held bottle above the fist, so its box keeps some way off the wrist: 39 of
+ * the log's 41 sightings sure enough were within 1 SW of one, only 17 within 0.6. A visitor whose object the detector
+ * cannot find (it seldom finds a bat) plays in free mode.
  */
 export const HELD_OBJECT_RULES = {
   /** A detection less sure than this, or farther than `candidateReach` from a wrist, is not what the hands hold. */
   candidateScore: 0.35,
-  candidateReach: 0.6,
+  candidateReach: 1,
   /** A lock takes `lockHits` sightings of one place, overlapping by `lockOverlap` (IoU), within `lockWindowMs`. */
   lockHits: 3,
   lockWindowMs: 1000,

@@ -77,8 +77,14 @@ describe('the held object', () => {
 
   it('never takes a person, or anything a visitor would not swing, for the held object', () => {
     const imageBottle = imageBox(bottle)
+    // The empty hands the detector takes for a remote are no object to lock either.
     const found = objectDetections(
-      detected(['person', 0.99, imageBottle], ['bottle', 0.8, imageBottle], ['car', 0.9, imageBottle]),
+      detected(
+        ['person', 0.99, imageBottle],
+        ['bottle', 0.8, imageBottle],
+        ['car', 0.9, imageBottle],
+        ['remote', 0.55, imageBottle],
+      ),
       640,
       480,
     )
@@ -89,6 +95,13 @@ describe('the held object', () => {
     expect(candidates.map((candidate) => candidate.imageBox.x)).toEqual([expect.closeTo(bottle.x, 9)])
     const farAway = lockCandidates([{ ...found[0], box: { ...found[0].box, x: 0.05 } }], hands, ASPECT)
     expect(farAway).toEqual([])
+  })
+
+  it('takes a bottle boxed above the fist for the one in the hands, as the detector boxed the webcam log’s', () => {
+    // The box ends 0.8 SW above the wrists, where the fist holds the bottle's foot.
+    const aboveFist = { ...bottle, y: hands.grip.y - 0.8 * hands.width - bottle.height }
+    const [found] = objectDetections(detected(['bottle', 0.8, imageBox(aboveFist)]), 640, 480)
+    expect(lockCandidates([found], hands, ASPECT).map((candidate) => candidate.reach)).toEqual([expect.closeTo(0.8, 9)])
   })
 
   it('lets a detected object go only after it is missed enough times for long enough while the visitor is still', () => {

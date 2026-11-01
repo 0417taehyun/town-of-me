@@ -727,8 +727,6 @@ export const languageCopy = {
           cup: 'Cup',
           'wine glass': 'Glass',
           umbrella: 'Umbrella',
-          'cell phone': 'Phone',
-          remote: 'Remote',
           banana: 'Banana',
           toothbrush: 'Toothbrush',
           scissors: 'Scissors',
@@ -739,7 +737,6 @@ export const languageCopy = {
           frisbee: 'Frisbee',
           'hair drier': 'Hair dryer',
           vase: 'Vase',
-          mouse: 'Mouse',
         },
         states: {
           starting: 'Camera starting',
@@ -1515,8 +1512,6 @@ export const languageCopy = {
           cup: '컵',
           'wine glass': '와인잔',
           umbrella: '우산',
-          'cell phone': '휴대폰',
-          remote: '리모컨',
           banana: '바나나',
           toothbrush: '칫솔',
           scissors: '가위',
@@ -1527,7 +1522,6 @@ export const languageCopy = {
           frisbee: '원반',
           'hair drier': '드라이기',
           vase: '꽃병',
-          mouse: '마우스',
         },
         states: { starting: '카메라 켜는 중', searching: '찾는 중', seen: '보여요', stopped: '카메라 꺼짐' },
         stopped: {
