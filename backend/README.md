@@ -47,8 +47,14 @@ transaction.
 - **Movement:** `movement.gait` and `movement.skid` match the same identifier pattern as types; an omitted setting or
   field defaults to `{ gait: 'plantedFeet', skid: 'long' }`.
 - **Venues:** the large venues at the town's edge, keyed by id. Only `ballpark` exists; unknown ids are dropped. An
-  omitted venue or field takes its default, so a town saved before venues existed plays
-  `{ theme: 'garden', colors: {}, rules: { pitchCount: 5, difficulty: 'normal' } }`.
+  omitted venue or field takes its default, so a town saved before venues existed reads
+  `{ visible: false, theme: 'garden', colors: {}, rules: { pitchCount: 5, difficulty: 'normal' } }`.
+  - `visible` is the admin's switch for showing a venue to visitors: a boolean (anything else returns `400`) that
+    defaults to `false`, so a venue stays hidden until the admin shows it, also in a town saved before the switch
+    existed. Like the look, it applies as soon as it is saved, never on the rules' monthly schedule. The public town
+    still carries a hidden venue's other settings, since the editor loads the town from the same `GET` and saves them
+    back; the frontend decides what a hidden venue shows. The leaderboard's run endpoints, still to come (PR 13), must
+    refuse to start or record a run while the ballpark is hidden.
   - The look applies as soon as it is saved. The frontend owns the themes and color roles, so only the shape is checked:
     `theme` matches the type pattern, and `colors` maps up to 12 role names (the same pattern) to `#rrggbb` colors,
     stored in lowercase. A role left out keeps the theme's color.

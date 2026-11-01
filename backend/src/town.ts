@@ -110,8 +110,13 @@ export interface TownPet {
   route: readonly TownPoint[] | null
 }
 
-/** A venue's look. The frontend owns the themes and their color roles, so only the shape is checked here. */
+/**
+ * What every venue has: whether visitors see it, and its look. The frontend owns the themes and their color roles, so
+ * only the shape is checked here.
+ */
 export interface VenueLook {
+  /** The admin's switch; like the look, it applies as soon as the town is saved. */
+  visible: boolean
   /** A theme id such as `garden`. */
   theme: string
   /** Only the roles the admin overrides, such as `roof`; every other role keeps the theme's color. */
@@ -282,7 +287,11 @@ export function parseBallparkSettings(value: unknown): BallparkSettings {
 }
 
 export function parseVenueLook(input: Record<string, unknown>, field: string, defaultTheme: string): VenueLook {
+  // A venue stays hidden until the admin shows it, also in towns saved before the switch existed.
+  const visible = input.visible ?? false
+  if (typeof visible !== 'boolean') throw invalidInput(`${field}.visible must be a boolean`)
   return {
+    visible,
     theme: kindName(input.theme ?? defaultTheme, `${field}.theme`),
     colors: venueColors(input.colors ?? {}, `${field}.colors`),
   }
@@ -344,7 +353,8 @@ export function effectiveBallparkRules(ballpark: BallparkSettings, month: string
 /**
  * The server owns the rules in effect, so within one KST month they never change: a save keeps the stored rules for
  * `month`, promoting a schedule whose month has come, and ignores the submitted ones, so a stale editor tab neither
- * fails nor changes them. A town saved for the first time starts with the default rules. The look applies at once.
+ * fails nor changes them. A town saved for the first time starts with the default rules. Visibility and the look apply
+ * at once.
  */
 export function settleBallparkSettings(
   submitted: BallparkSettings,
@@ -353,7 +363,13 @@ export function settleBallparkSettings(
 ): BallparkSettings {
   const rules = stored ? effectiveBallparkRules(stored, month) : defaultBallparkRules
   const scheduledRules = settleScheduledRules(submitted.scheduledRules, stored?.scheduledRules, month)
-  return { theme: submitted.theme, colors: submitted.colors, rules, ...(scheduledRules ? { scheduledRules } : {}) }
+  return {
+    visible: submitted.visible,
+    theme: submitted.theme,
+    colors: submitted.colors,
+    rules,
+    ...(scheduledRules ? { scheduledRules } : {}),
+  }
 }
 
 /**

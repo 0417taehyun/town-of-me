@@ -32,6 +32,7 @@ async function checkTownStore(store: Store, assert: Assert): Promise<void> {
   const lantern = { id: 'lantern-0', type: 'paperLantern', variant: 'tall-red', position: { x: 4, y: 3, z: 4 } }
   const venues = {
     ballpark: {
+      visible: true,
       theme: 'garden',
       colors: { roof: '#e8735a' },
       // A month that has passed: a save could no longer schedule it, but a stored schedule always reads.
@@ -54,8 +55,10 @@ async function checkTownStore(store: Store, assert: Assert): Promise<void> {
     'the first save stores the movement setting, even an unknown style, and the owner and pet names',
   )
   assert(
-    isDeepStrictEqual(firstLoaded?.venues, layout.venues) && firstLoaded?.venues.ballpark.scheduledRules,
-    'the first save stores the venues, with a color override and a schedule whose month has passed',
+    isDeepStrictEqual(firstLoaded?.venues, layout.venues) &&
+      firstLoaded?.venues.ballpark.visible === true &&
+      firstLoaded.venues.ballpark.scheduledRules,
+    'the first save stores the venues: the ballpark shown, with a color override and a schedule whose month has passed',
   )
   assert(
     firstLoaded?.owner.introduction === null &&
@@ -115,7 +118,10 @@ async function checkTownStore(store: Store, assert: Assert): Promise<void> {
       isDeepStrictEqual(loaded.pet, edited.pet),
     "a later save replaces the movement setting, the owner's introduction, contact email, resident, and questions, and the pet's route",
   )
-  assert(isDeepStrictEqual(loaded.venues, edited.venues), 'a later save replaces the venues and may drop the schedule')
+  assert(
+    isDeepStrictEqual(loaded.venues, edited.venues) && !loaded.venues.ballpark.visible,
+    'a later save replaces the venues: it may hide the ballpark again and drop the schedule',
+  )
   const loadedHouse = loaded.objects[0]
   assert(
     loadedHouse?.id === house.id &&
@@ -401,9 +407,9 @@ export async function checkPostgresStoreContract(connectionString: string | unde
     )
     assert(
       isDeepStrictEqual(earlier.venues, {
-        ballpark: { theme: 'garden', colors: {}, rules: { pitchCount: 5, difficulty: 'normal' } },
+        ballpark: { visible: false, theme: 'garden', colors: {}, rules: { pitchCount: 5, difficulty: 'normal' } },
       }),
-      'a town saved before venues existed plays the default ballpark',
+      'a town saved before venues existed keeps the ballpark hidden, with the default look and rules',
     )
   } finally {
     await pool.end()

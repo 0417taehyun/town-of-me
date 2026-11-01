@@ -258,6 +258,7 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
     ['a ballpark color that is not #rrggbb', withBallpark({ colors: { roof: 'coral' } })],
     ['more than twelve ballpark colors', withBallpark({ colors: thirteenColors })],
     ['a ballpark color role that is not a style name', withBallpark({ colors: { 'Bad Role': '#e8735a' } })],
+    ['a ballpark visibility sent as text', withBallpark({ visible: 'true' })],
     ['venues sent as a list', { ...firstSave, venues: [] }],
   ]
   for (const [label, body] of invalidCases) {
@@ -285,8 +286,8 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
     'a town saved without a movement setting walks the original way',
   )
   assert(
-    isDeepStrictEqual(town.venues, { ballpark: { theme: 'garden', colors: {}, rules: defaultRules } }),
-    'a town saved without venues plays the default ballpark',
+    isDeepStrictEqual(town.venues, { ballpark: { visible: false, theme: 'garden', colors: {}, rules: defaultRules } }),
+    'a town saved without venues keeps the ballpark hidden, with the default look and rules',
   )
   assert(
     town.owner.introduction === null &&
@@ -336,7 +337,7 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
       },
       pet: { ...firstSave.pet, route: petRoute },
       movement: { skid: 'off' },
-      venues: { ballpark: { theme: 'garden', colors: { roof: '#E8735A' } }, harbor: { theme: 'pier' } },
+      venues: { ballpark: { visible: true, theme: 'garden', colors: { roof: '#E8735A' } }, harbor: { theme: 'pier' } },
       baseRevision: 1,
     },
     admin.cookie,
@@ -349,9 +350,9 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
   )
   assert(
     isDeepStrictEqual(secondTown.venues, {
-      ballpark: { theme: 'garden', colors: { roof: '#e8735a' }, rules: defaultRules },
+      ballpark: { visible: true, theme: 'garden', colors: { roof: '#e8735a' }, rules: defaultRules },
     }),
-    'a ballpark may leave out its rules, its colors apply in lowercase in the same save, and unknown venues are dropped',
+    'a ballpark may leave out its rules, the admin shows it and its colors apply (in lowercase) in the same save, and unknown venues are dropped',
   )
   assert(
     isDeepStrictEqual(secondTown.owner, {
@@ -472,6 +473,7 @@ async function checkBallparkRuleSchedule(store: MemoryStore, assert: Assert): Pr
   const read = await api(new Request(`${origin}/v1/towns/rulebook`))
   assert(
     isDeepStrictEqual(((await read.json()) as { town: { venues: { ballpark: unknown } } }).town.venues.ballpark, {
+      visible: false,
       theme: 'garden',
       colors: {},
       rules: defaultRules,
