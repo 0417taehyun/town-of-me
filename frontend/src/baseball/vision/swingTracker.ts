@@ -965,6 +965,22 @@ export function swingBand(tracker: SwingTracker, view: TrackerView | null): Box 
 }
 
 /**
+ * What the camera picture teaches of a swing, in image units: the frozen midline the grip must cross (`midX`), the edge
+ * of the load zone behind the batting `side`'s shoulder (`loadX`), whether the grip is loaded there (or sweeping out of
+ * it), and the band a swing sweeps through (`band`, shares of the raw image, once an object or the hands are locked).
+ * Null while the tracker follows no grip.
+ */
+export type SwingGuide = { side: Side; midX: number; loadX: number; loaded: boolean; band: Box | null }
+
+export function swingGuide(tracker: SwingTracker): SwingGuide | null {
+  const { view, side, state } = tracker
+  if (!view) return null
+  const loaded = state === 'loaded' || (state === 'sweeping' && tracker.sweep?.arm.side === side)
+  const loadX = view.midX + side * SWING_RULES.loadOffset * view.width
+  return { side, midX: view.midX, loadX, loaded, band: tracker.band }
+}
+
+/**
  * What the camera panel marks of the held object (image units): a locked object's box (with what the detector took it
  * for), or while the tracker marks what it looks for (marksCandidate), the best candidate the detector lately found
  * next to the hands and how far its lock has come by `time` (0..1). Both move with the hands between detector runs.

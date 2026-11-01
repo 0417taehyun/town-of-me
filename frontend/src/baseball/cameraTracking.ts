@@ -43,6 +43,7 @@ import {
   setTrackerSide,
   type SwingCue,
   type SwingTracker,
+  swingGuide,
   type TrackedSwing,
   type TrackerReason,
   updateSwingTracker,
@@ -367,7 +368,8 @@ export function useCameraTracking({
       const swing = read.swing ?? DEV_SWING?.(frame.capturedAt)
       if (swing) page.current.onSwing(swing)
       const mark = objectMark(current.tracker, frame.capturedAt)
-      drawCameraView(picture, feed, frame.keypoints, mark, page.current.objectNames)
+      const guide = swingGuide(current.tracker)
+      drawCameraView(picture, feed, frame.keypoints, mark, page.current.objectNames, guide)
       const visitor = visitorFrame(frame, current.tracker)
       hold = watchStance(hold, timed, visitor.stance, page.current.stance, shownProgress)
       DEV_DIAGNOSE?.({

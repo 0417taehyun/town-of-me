@@ -17,6 +17,7 @@ import {
   SWEEP_FAILURE_REASONS,
   SWING_RULES,
   type SwingCue,
+  swingGuide,
   type SwingTracker,
   type TrackedSwing,
   type TrackerReason,
@@ -668,6 +669,20 @@ describe('the camera swing tracker', () => {
       expect.objectContaining({ kind: 'started' }),
       oneWrist.swings[0],
     ])
+  })
+
+  it('shows the load zone behind the batting side’s shoulder, lit only while the grip is loaded there', () => {
+    const zone = (run: Run) => {
+      const guide = swingGuide(run.tracker)
+      return guide && { loaded: guide.loaded, side: Math.sign(guide.loadX - guide.midX) }
+    }
+    const right = camera()
+    lockAndLoad(right)
+    expect(zone(right)).toEqual({ loaded: true, side: -1 })
+    // A left-handed batter's hands pulled to the picture's left are on the far side: their zone stays dim on the right.
+    const left = camera('left')
+    lockAndLoad(left)
+    expect(zone(left)).toEqual({ loaded: false, side: 1 })
   })
 
   it('loads a left-handed batter on the picture’s right and takes only their swing toward the left', () => {

@@ -8,10 +8,12 @@ import {
   type Keypoints,
   type Point,
 } from '../vision/poseLandmarks'
-import type { ObjectMark } from '../vision/swingTracker'
+import type { ObjectMark, SwingGuide } from '../vision/swingTracker'
 
 // The camera panel's picture, drawn on its canvas by the vision loop for every camera frame, never through React: the
-// frame mirrored, as a visitor expects to see themselves, with the upper body the pose task found on it and the object
+// frame mirrored, as a visitor expects to see themselves, with a dashed box where to stand and, once the swing tracker
+// follows a grip, how to swing: the load zone behind the back shoulder shaded (brighter once loaded), the midline the
+// grip must cross, and the band the swing sweeps through. Over them the upper body the pose task found, and the object
 // the swing tracker marks: the box of what the detector found by the hands, dashed, with its name and a bar that fills
 // as the lock comes, or solid once locked. The marks are placed mirrored like the picture but drawn unmirrored, so the
 // name reads the right way round; the panel's other words are its DOM (CameraPanel.tsx).
@@ -40,7 +42,17 @@ export const OVERLAY_STYLE = {
   captionBand: 0.18,
   /** The canvas width that draws lines at their nominal width; a wider frame draws them wider. */
   referenceWidth: 320,
+  /** Where to stand, before and once the tracker follows a grip, and the band a swing sweeps through. */
+  framing: 'rgba(255, 254, 249, 0.8)',
+  framed: '#9fe0bd',
+  loadZone: 'rgba(242, 181, 68, 0.18)',
+  loadZoneLoaded: 'rgba(242, 181, 68, 0.42)',
+  midline: '#fffef9',
+  band: '#9fe0bd',
 }
+
+/** Where the visitor stands in the picture, as shares of it: head to waist inside the dashed box. */
+export const FRAMING_BOX: Box = { x: 0.2, y: 0.05, width: 0.6, height: 0.9 }
 
 /** The bones whose ends the pose task sees as well as a swing needs a wrist: a bone to a guessed joint points anywhere. */
 export function bonesInView(keypoints: Keypoints): [Keypoint, Keypoint][] {
@@ -66,8 +78,9 @@ export function clearCameraView(canvas: HTMLCanvasElement) {
 }
 
 /**
- * Draws `video`'s current frame mirrored on `canvas`, with `keypoints` (in the raw, unmirrored image) and the object
- * `mark` (in its image units) over it, the mark named by `names`.
+ * Draws `video`'s current frame mirrored on `canvas`, with the framing box and the swing `guide` (null while the tracker
+ * follows no grip), `keypoints` (in the raw, unmirrored image), and the object `mark` (in its image units) over it, the
+ * mark named by `names`.
  */
 export function drawCameraView(
   canvas: HTMLCanvasElement,
@@ -75,6 +88,7 @@ export function drawCameraView(
   keypoints: Keypoints | null,
   mark: ObjectMark | null,
   names: Record<HeldObjectLabel, string>,
+  guide: SwingGuide | null,
 ) {
   const context = canvas.getContext('2d')
   if (!context || !video.videoWidth) return
@@ -85,9 +99,61 @@ export function drawCameraView(
   context.drawImage(video, 0, 0, width, height)
   context.fillStyle = OVERLAY_STYLE.shade
   context.fillRect(0, 0, width, height)
+  drawSwingGuide(context, guide, width, height)
   if (keypoints) drawUpperBody(context, keypoints, width, height)
   context.restore()
   if (mark) drawObjectMark(context, mark, mark.label && names[mark.label], width, height)
+}
+
+/**
+ * The dashed box where to stand, mint once the tracker follows a grip, and then the swing `guide` in the raw image's
+ * place (the caller mirrors it): the load zone shaded, the midline dashed, and the swing's band outlined.
+ */
+export function drawSwingGuide(
+  context: CanvasRenderingContext2D,
+  guide: SwingGuide | null,
+  width: number,
+  height: number,
+) {
+  const unit = width / OVERLAY_STYLE.referenceWidth
+  const { x, y, width: boxWidth, height: boxHeight } = FRAMING_BOX
+  context.beginPath()
+  context.roundRect(x * width, y * height, boxWidth * width, boxHeight * height, 12 * unit)
+  strokeOutlined(context, guide ? OVERLAY_STYLE.framed : OVERLAY_STYLE.framing, 2 * unit, [10 * unit, 8 * unit])
+  if (!guide) return
+  const zone = loadZoneSpan(guide, width, height)
+  context.fillStyle = guide.loaded ? OVERLAY_STYLE.loadZoneLoaded : OVERLAY_STYLE.loadZone
+  context.fillRect(zone.x, 0, zone.width, height)
+  context.beginPath()
+  context.moveTo(guide.midX * height, 0)
+  context.lineTo(guide.midX * height, height)
+  strokeOutlined(context, OVERLAY_STYLE.midline, 2.5 * unit, [6 * unit, 6 * unit])
+  const band = guide.band
+  if (!band) return
+  context.beginPath()
+  context.rect(band.x * width, band.y * height, band.width * width, band.height * height)
+  strokeOutlined(context, OVERLAY_STYLE.band, 2.5 * unit, [12 * unit, 6 * unit])
+}
+
+/**
+ * The load zone across a `width` by `height` canvas of the raw image (px): from the `guide`'s load edge out to the
+ * picture's edge on the batting side, the raw image's left for a right-handed batter.
+ */
+export function loadZoneSpan({ side, loadX }: SwingGuide, width: number, height: number) {
+  const edge = Math.min(Math.max(loadX * height, 0), width)
+  return side < 0 ? { x: 0, width: edge } : { x: edge, width: width - edge }
+}
+
+/** Strokes the current path dark and wide, then in `colour` at `lineWidth` (canvas px), dashed by `dash`. */
+export function strokeOutlined(context: CanvasRenderingContext2D, colour: string, lineWidth: number, dash: number[]) {
+  context.setLineDash(dash)
+  context.strokeStyle = OVERLAY_STYLE.outline
+  context.lineWidth = lineWidth * 2.2
+  context.stroke()
+  context.strokeStyle = colour
+  context.lineWidth = lineWidth
+  context.stroke()
+  context.setLineDash([])
 }
 
 /**

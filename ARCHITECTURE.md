@@ -251,7 +251,9 @@ frame rate; nothing is stored). `deviceGate.ts` names why the camera game cannot
 or failed; tracking could not start), which the page shows with another try; a computer too slow
 to track is blocked like a phone. `cameraTracking.ts` runs the camera for the page, loading the pose task and the object
 detector while the browser asks for the camera, and draws each frame mirrored with the upper body on the camera panel's
-canvas (`ui/cameraOverlay.ts`) with the object it marks: a found one's box, name, and lock progress (while searching,
+canvas (`ui/cameraOverlay.ts`), over a dashed box where to stand and, once the tracker follows a grip, how to swing (the
+load zone behind the back shoulder, brighter once loaded, the midline the grip must cross, and the swing's band:
+`vision/swingTracker.ts swingGuide`), with the object it marks: a found one's box, name, and lock progress (while searching,
 or in free mode on the setup step; in play a glimpse by empty hands would only flash), or a locked one's box. It reads
 swings and their cues on the same frames and hands each to the page the moment it is seen, so React hears only
 status changes, whether the camera sees the visitor, and the tracker's short caption: where the tracker is, held at
