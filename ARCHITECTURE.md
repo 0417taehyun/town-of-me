@@ -192,21 +192,24 @@ on the camera picture, and lets a detected one go after enough misses while they
 allow list says a visitor might hold: never a person, nor a remote, which the log's detector took the empty hands for
 through most of the minute, nor a phone or a mouse, the same kind of small thing nobody swings. When nothing has locked
 about two seconds after the hands came into view, `swingTracker.ts` plays free mode on the detector's next run that
-finds nothing by the still hands. That time runs while the detector still rests for the speed check, so a visitor with
-nothing to hold waits out the check, not the check and then a search, and free mode never starts before the detector has
-looked. On every step a real object that locks later still takes over, and one lost hands back to free mode at once, its
-caption saying so, so play goes on with the hands: the design doc has a lost lock search again, which waits for the
-detector while it rests through every pitch, so a pitch or two could not be swung at. While searching, the caption says
-it looks for what the visitor swings and that the hands will do without one, and free mode's asks for both hands
-together. Free mode follows where the wrists meet, but one that takes over from an object lost from one hand goes on
-following that hand, for its swings and its stance alike, its caption saying to carry on as before (a loss lands while
-the visitor keeps still, mostly mid-stance, so it never says to swing): in the drafts' real webcam log the free hand
-hung 1.5 shoulder widths off, so the wrists' middle halved the next one-handed swing, which then fell short. It turns
-two-hand, without a caption, once the hands have held a still load together for 300 ms (not hands that only look
-together for a frame or in a swing's turned finish) with their middle loaded too, so that the switch never un-counts a
-stance the one hand held, or follows another hand once an object locks in it. A lock or a loss that
-keeps the hand followed keeps the load too, so the detector locking and losing the log's bottle three times in 15 s on
-the setup step never makes the visitor load again. The detector waits until the computer is timed, then runs 4 times a
+finds nothing by the still hands. That time runs while the detector still rests for the speed check, whose line asks for
+the upper body and the hands in view, so a visitor with nothing to hold waits out the check, not the check and then a
+search, and free mode never starts before the detector has looked. On every step a real object that locks later still
+takes over, and one lost hands back to free mode at once, its caption saying so, so play goes on with the hands: the
+design doc has a lost lock search again, which waits for the detector while it rests through every pitch, so a pitch or
+two could not be swung at. While searching, the caption says it looks for what the visitor swings and that without one
+both hands together will do, as on a bat, while the stance's line asks for the object or both hands held still. It never
+says to swing: the search runs only on the setup step, where a swing meets no pitch and keeps free mode from starting.
+Free mode's caption asks to bring the hands together, never to swing: it starts while the hands keep still, often
+mid-stance on the setup step. Free mode follows where the wrists meet, but one that takes over from an object lost from
+one hand goes on following that hand, for its swings and its stance alike, its caption saying to carry on as before (a
+loss lands while the visitor keeps still, mostly mid-stance, so it never says to swing): in the drafts' real webcam log
+the free hand hung 1.5 shoulder widths off, so the wrists' middle halved the next one-handed swing, which then fell
+short. It turns two-hand, without a caption, once the hands have held a still load together for 300 ms (not hands that
+only look together for a frame or in a swing's turned finish) with their middle loaded too, so that the switch never
+un-counts a stance the one hand held, or follows another hand once an object locks in it. A lock or a loss that keeps
+the hand followed keeps the load too, so the detector locking and losing the log's bottle three times in 15 s on the
+setup step never makes the visitor load again. The detector waits until the computer is timed, then runs 4 times a
 second while looking for an object (searching, or from a sighting by the hands until a lock window passes without
 another), and otherwise only glances: once a second to keep a detected one fresh, back at 4 a second once a glance
 misses it until it is seen again or let go, and in free mode, to spot a real one, once a second in play and twice on the
@@ -248,9 +251,9 @@ swings and their cues on the same frames and hands each to the page the moment i
 status changes, whether the camera sees the visitor, and the tracker's short caption: where the tracker is, held at
 least 0.7 s so it never flickers, or at once what just happened (a lock, a lost object, a swing, a sweep that was not
 one). The design doc asks for two- or three-word captions; the search caption is longer on purpose, so it also tells a
-visitor with nothing to hold that the hands will do, and the panel's chip wraps within the picture for it and for what a
-step waits for, which the chip shows in its place. Once the camera is off, the motion sampler's last picture and the
-tracked body are wiped along with the panel's (a dev build's diagnostics keep their notes, below).
+visitor with nothing to hold that both hands together will do, and the panel's chip wraps within the picture for it and
+for what a step waits for, which the chip shows in its place. Once the camera is off, the motion sampler's last picture
+and the tracked body are wiped along with the panel's (a dev build's diagnostics keep their notes, below).
 
 ### The `/baseball` page
 
