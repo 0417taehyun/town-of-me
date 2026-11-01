@@ -9,11 +9,12 @@ import {
   batterPoseAt,
   beginSwing,
   checkSwing,
+  HEAD_CLEARANCE,
   judgeSwing,
   NO_SWING,
   poseBatter,
   swingHeadWeight,
-  turnHeadClearOfBat,
+  turnHeadClear,
 } from './actors/batter'
 import { type Catcher, createCatcher, disposeCatcher, poseCatcher } from './actors/catcher'
 import { easeLook, fieldToRig, type HeadLook, type HeadRange, lookToward, watch } from './actors/headLook'
@@ -32,12 +33,14 @@ import { ballIsThePitchers, mittSeconds, type PitchOnStage, type ShownSwing, typ
 export type Fielders = { pitcher: Pitcher; catcher: Catcher }
 
 /**
- * The players and what they remember between frames: where the batter's eyes are, and the run and the swing the stage
- * showed the batter last, so each of its changes plays once.
+ * The players and what they remember between frames: where the batter's eyes are and how far toward them its head
+ * turned (turnHeadClear), and the run and the swing the stage showed the batter last, so each of its changes plays
+ * once.
  */
 export type BallplayerCast = Fielders & {
   batter: Batter
   batterLook: HeadLook
+  batterLookShare: number
   run: StageRun | null
   shown: ShownSwing | null
 }
@@ -68,7 +71,7 @@ export function disposeFielders({ pitcher, catcher }: Fielders) {
 }
 
 export function createCast(batter: Batter, fielders: Fielders): BallplayerCast {
-  return { ...fielders, batter, batterLook: { yaw: 85, pitch: 5 }, run: null, shown: null }
+  return { ...fielders, batter, batterLook: { yaw: 85, pitch: 5 }, batterLookShare: 1, run: null, shown: null }
 }
 
 /** Seconds from a release the pitcher is at: winding up toward the next, or on from the last; before any, his set. */
@@ -159,7 +162,8 @@ const batterBall = new Vector3()
 
 /**
  * Poses the batter at `nowMs` (game ms) with its eyes on `ball` (field meters), eased over `delta` seconds; while it
- * swings, the swing's own head turn takes over. The head turns only as far as the bat lets it.
+ * swings, the swing's own head turn takes over. The head turns only as far as its arms, mittens, and bat let it,
+ * keeping further from them the more the swing moves them.
  */
 export function poseBatterAt(cast: BallplayerCast, run: StageRun | null, nowMs: number, ball: Vec3, delta: number) {
   const { batter, batterLook } = cast
@@ -168,7 +172,8 @@ export function poseBatterAt(cast: BallplayerCast, run: StageRun | null, nowMs: 
   easeLook(batterLook, lookToward(batter.rig, fieldToRig(batter.rig, ball, batterBall), HEAD_RANGES.batter), delta)
   const own = swingHeadWeight(batter, nowMs)
   const look = { yaw: lerp(batterLook.yaw, pose.headYaw, own), pitch: lerp(batterLook.pitch, pose.headPitch, own) }
-  turnHeadClearOfBat(batter, pose, look)
+  const eased = { share: cast.batterLookShare, delta }
+  cast.batterLookShare = turnHeadClear(batter, pose, look, own * pose.headRoll, own * HEAD_CLEARANCE.lead, eased)
 }
 
 /**

@@ -161,15 +161,18 @@ PERFECT swing squares the bat there. A swing the camera saw begin leans toward t
 bat still behind the batter, and goes back to the windup by itself unless it is judged by then; once judged it speeds up
 onto its ball, as fast at the ball as a swing from the windup, or it is checked short of the plate and goes back, each
 stretch starting where and as fast as the last left the bat; a left-handed batter is the mirror image. A swing turns its
-bat and leans toward its ball, holds its finish, and comes back to the stance along keys of its own, low and in front of
-the body. Its keys keep the bat out of the body, and the elbows are solved against the body's simple solids
-(`bodyVolumes.ts`), so the forearms and the mittens stay out of the body and the forearms off the bat and each other.
+bat and leans toward its ball, turning its chest and lunging with its body rather than stretching an arm for a ball
+met far out in front, holds its finish, and comes back to the stance along keys of its own, low and in front of the
+body. Its keys keep the bat out of the body, and the elbows and the head's tilt and turn are solved against the body's
+simple solids (`bodyVolumes.ts`), smoothly from moment to moment, so the arms, the mittens, and the bat stay out of the
+head, its hair and hat, and the body, and the arms and mittens off the bat and each other.
 The other team's pitcher (`pitcher.ts`) and catcher (`catcher.ts`) wear its brick red and charcoal (`teamUniforms.ts`);
 the pitcher's throw is keyed on the same tracks with its release key at `game/pitch.ts`'s `RELEASE_POINT`, and the
 catcher's mitt reaches for where each pitch ends up. `ballplayerCast.ts` drives all three from the stage run: the
 pitcher throws on the derby's windup and release, the batter loads with them and swings the swing the stage shows, a
 judged one's bat meeting the ball where and when the stage sends it off, and every head follows the ball
-(`headLook.ts`), the batter's only as far as its bat lets a hat brim or hair turn. Nothing in `game/` reads the rigs.
+(`headLook.ts`), the batter's only as far as its arms, mittens, and bat let a hat brim or hair turn, easing away
+ahead of them while the swing moves them. Nothing in `game/` reads the rigs.
 
 ### `baseball/vision/`
 

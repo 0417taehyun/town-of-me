@@ -10,8 +10,11 @@ import { keyedTracks, type MonotoneTrack, sampleTrack, sampleTracks } from './ke
 // 3 cm lower and further out so the lean keeps the chin clear. At contact the pelvis sits back and off the plate and the
 // front elbow points down, so the chibi's short front arm meets the bat at an angle instead of running along it. The
 // contact key's grip is the pose lab's raised by the 28 cm its aim lifted it to meet a ball at the strike zone's
-// center (0.6 m), so the keys themselves square the bat there and the aim only trims what is left. At the slot the bat
-// points straight back and a little higher than the research's (-117°, 13°), which laid it through the back shoulder.
+// center (0.6 m), and moved back along the bat with the hands, which hold it at its knob, so the keys themselves square
+// the bat there and the aim only trims what is left. At the slot the bat points straight back and a little higher than
+// the research's (-117°, 13°), which laid it through the back shoulder. Past contact the top elbow lifts and goes out as
+// the wrists roll over (the research's wrist turn after contact), so the top forearm rises over the bottom hand instead
+// of across it, and at the extension the hands stay within the front arm's reach.
 //
 // Units are the batter frame of ballplayerRig.ts (town units, about 2.1 tall), with +x toward the pitcher, +y up, and
 // +z toward the plate. Angles are degrees: a yaw of 0 faces the plate and +90 the pitcher; an azimuth of 0 points at the
@@ -56,7 +59,8 @@ export const SWING_KEY_TIMES: Record<SwingKeyId, number> = {
  * - the bat's direction from knob to barrel and each elbow's pole;
  * - the front ankle over the ground and the back foot's ball, which it pivots on, with their toe turns and heel lifts,
  *   and each knee's direction (the back knee drives toward the pitcher);
- * - the head, its eyes on the ball and held still through contact.
+ * - the head, its eyes on the ball and held still through contact, tilting with the spine as the chest bends away from
+ *   the plate (`headRoll`, about the line of sight), so its side and its hair stay off the front shoulder.
  */
 export const SWING_KEYS = {
   pelvisX: [-0.06, -0.08, -0.05, 0, 0.058, 0.03, -0.02, 0.02, 0.07, 0.07],
@@ -68,16 +72,16 @@ export const SWING_KEYS = {
   chestTilt: [12, 15, 15, 16, 14, 13, 14, 17, 19, 14],
   chestSide: [-1, 2, 4, 6, 4, 6, 10, 15, 14, 9],
   chestRoll: [-10, -14, -13, -13, 0, 4, 6, 6, 0, -6],
-  gripX: [0, -0.04, -0.06, -0.07, 0.06, 0.28, 0.45, 0.42, 0.16, -0.37],
-  gripY: [-0.03, -0.06, -0.035, -0.03, -0.06, -0.14, 0.126, -0.08, 0.18, 0],
-  gripZ: [0.38, 0.37, 0.34, 0.34, 0.26, 0.17, -0.09, -0.33, -0.62, -0.62],
+  gripX: [0, -0.04, -0.06, -0.07, 0.06, 0.28, 0.438, 0.34, 0.16, -0.37],
+  gripY: [-0.03, -0.06, -0.035, -0.03, -0.06, -0.14, 0.162, -0.08, 0.18, 0],
+  gripZ: [0.38, 0.37, 0.34, 0.34, 0.26, 0.17, -0.152, -0.41, -0.62, -0.62],
   aim: [0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
   batAzimuth: [-156, -166, -169, -171, -150, -92, 11, 100, 187, 278],
   batElevation: [45, 40, 41, 42, 50, 24, -30, 24, 38, -7],
   frontPoleAzimuth: [30, 20, 20, 20, 40, 60, 110, 110, 150, 165],
   frontPoleElevation: [-70, -70, -70, -70, -60, -50, -70, -60, -50, -70],
   backPoleAzimuth: [-100, -100, -100, -100, -120, -50, -30, 60, 60, 130],
-  backPoleElevation: [-50, -40, -40, -55, -70, -75, -70, -80, -80, 20],
+  backPoleElevation: [-50, -40, -40, -55, -70, -75, -70, 0, 20, 20],
   frontFootX: [0.29, 0.27, 0.31, 0.36, 0.36, 0.36, 0.36, 0.36, 0.36, 0.36],
   frontFootLift: [0, 0.012, 0.015, 0, 0, 0, 0, 0, 0, 0],
   frontFootYaw: [5, 0, 15, 30, 35, 40, 45, 50, 60, 75],
@@ -89,6 +93,7 @@ export const SWING_KEYS = {
   backKneeAzimuth: [35, 22, 35, 47, 59, 71, 78, 80, 86, 94],
   headYaw: [85, 85, 85, 85, 80, 65, 40, 40, 45, 60],
   headPitch: [5, 5, 5, 5, 10, 25, 40, 35, 25, 10],
+  headRoll: [0, 0, 0, 0, 6, 13, 22, 22, 15, 5],
 } satisfies Record<string, number[]>
 
 /** What no key changes: the pelvis's forward tilt and each foot's distance from the plate line. */
@@ -124,10 +129,10 @@ export const CHECK_SWING_MS = { stopMs: 70, holdMs: 120, backMs: 380, fullStopRa
 
 // After the finish the batter comes back to its stance along keys of its own, a path the research does not measure.
 // Every turn unwinds one way, the way it came, but low and in front: the chest turns back first and the hands drop to
-// the belly with the bat level, carry it down in front of the knees, then lift it past the plate side and back over
-// the rear shoulder. Taking the short way round, or winding the swing back at its own height, drives the bat through
-// the head and the arms through each other; folding the hands up under the chin instead makes the bat, seen from the
-// batting camera behind the batter, seem to stick out of the head.
+// the belly with the bat level and unwound past the hands before they carry it down in front of the knees, then lift
+// it past the plate side and back over the rear shoulder. Taking the short way round, or winding the swing back at its
+// own height, drives the bat through the head and the arms through each other; folding the hands up under the chin
+// instead makes the bat, seen from the batting camera behind the batter, seem to stick out of the head.
 
 export const RETURN_KEY_IDS = ['finish', 'settle', 'relax', 'carry', 'lift', 'stance'] as const
 export type ReturnKeyId = (typeof RETURN_KEY_IDS)[number]
@@ -136,7 +141,7 @@ export type ReturnKeyId = (typeof RETURN_KEY_IDS)[number]
 export const RETURN_KEY_MS: Record<ReturnKeyId, number> = {
   finish: 0,
   settle: 520,
-  relax: 736,
+  relax: 800,
   carry: 1048,
   lift: 1372,
   stance: 1720,
@@ -151,10 +156,10 @@ export const RETURN_KEYS = {
   share: [0.02, 0.15, 0.45, 0.8],
   chestYaw: [161, 128, 75, 65],
   gripAngle: [207, 163, 121, 88],
-  gripRadius: [0.71, 0.57, 0.5, 0.34],
+  gripRadius: [0.71, 0.57, 0.44, 0.34],
   gripY: [-0.01, -0.18, -0.13, -0.04],
-  batAzimuth: [274, 205, 92, -41],
-  batElevation: [-10, 0, -41, -12],
+  batAzimuth: [274, 180, 92, -41],
+  batElevation: [-10, 4, -41, -12],
   frontFootX: [0.36, 0.36, 0.36, 0.32],
   frontFootLift: [0, 0, 0, 0.015],
   frontHeel: [0, 0, 0, 10],
@@ -171,10 +176,17 @@ type KeyedChannel = keyof typeof SWING_KEYS
 export type TrackChannel = Exclude<KeyedChannel, 'gripX' | 'gripZ'> | 'gripAngle' | 'gripRadius'
 
 /**
- * A pose of the swing: every channel, the grip both round the body and in x and z, and each elbow's swivel (degrees)
- * off its pole, which the batter solves once to keep the forearms off the bat.
+ * What the batter solves on top of the swing's data, for its own swing and anew for each aim: each elbow's swivel
+ * (degrees) off its pole, which keeps the arms off the bat, the body, and each other, and how far the head turns off
+ * its keys (degrees), which keeps it clear of the arms and the bat.
  */
-export type SwingPose = Record<KeyedChannel | TrackChannel, number> & { backSwivel: number; frontSwivel: number }
+export const SOLVED_CHANNELS = ['backSwivel', 'frontSwivel', 'headRoll', 'headPitch', 'headYaw'] as const
+export type SolvedChannel = (typeof SOLVED_CHANNELS)[number]
+export type Solved = Record<SolvedChannel, number>
+export type SolvedTracks = Record<SolvedChannel, MonotoneTrack>
+
+/** A pose of the swing: every channel, the grip both round the body and in x and z, and what the batter solved. */
+export type SwingPose = Record<KeyedChannel | TrackChannel | SolvedChannel, number>
 
 export type SwingMotion = {
   tracks: Record<TrackChannel, MonotoneTrack>
@@ -182,10 +194,10 @@ export type SwingMotion = {
   returnTracks: Record<TrackChannel, MonotoneTrack>
   /** The grip shift that puts the contact key's sweet spot on the contact point, faded in by `aim` (batter frame). */
   aimOffset: Vec3
-  /** Each elbow's swivel [back, front] by swing second, or null before the batter has solved them. */
-  swivels: [MonotoneTrack, MonotoneTrack] | null
-  /** Each elbow's swivel [back, front] by return ms, or null before the batter has solved them. */
-  returnSwivels: [MonotoneTrack, MonotoneTrack] | null
+  /** What the batter solved by swing second, or null before it has. */
+  solved: SolvedTracks | null
+  /** What the batter solved by return ms, or null before it has. */
+  returnSolved: SolvedTracks | null
 }
 
 /** Where the stance waggle's beat is (`at`, seconds on any clock) and how much of it plays (0..1). */
@@ -245,16 +257,27 @@ export function createSwingMotion(): SwingMotion {
     tracks: keyedTracks<TrackChannel>(times, swingKeys),
     returnTracks: createReturnTracks(swingKeys),
     aimOffset: { x: 0, y: 0, z: 0 },
-    swivels: null,
-    returnSwivels: null,
+    solved: null,
+    returnSolved: null,
   }
+}
+
+/** Adds `scale` of what `tracks` solved at `time` to `pose`; nothing before the batter has solved it. */
+export function addSolved(pose: SwingPose, tracks: SolvedTracks | null, time: number, scale = 1) {
+  if (!tracks) return pose
+  SOLVED_CHANNELS.forEach((channel) => {
+    pose[channel] += scale * sampleTrack(tracks[channel], time)
+  })
+  return pose
 }
 
 /** The pose `seconds` from contact, with the aim faded in by its weight and `waggle` added to the bat and grip. */
 export function sampleSwingPose(motion: SwingMotion, seconds: number, waggle: Waggle = STILL): SwingPose {
-  const pose = sampleTracks(motion.tracks, seconds) as SwingPose
-  pose.backSwivel = motion.swivels ? sampleTrack(motion.swivels[0], seconds) : 0
-  pose.frontSwivel = motion.swivels ? sampleTrack(motion.swivels[1], seconds) : 0
+  const pose = addSolved(
+    { ...sampleTracks(motion.tracks, seconds), backSwivel: 0, frontSwivel: 0 } as SwingPose,
+    motion.solved,
+    seconds,
+  )
   setGripFromAngle(pose)
   pose.gripX += pose.aim * motion.aimOffset.x
   pose.gripY += pose.aim * motion.aimOffset.y
@@ -268,9 +291,8 @@ export function sampleSwingPose(motion: SwingMotion, seconds: number, waggle: Wa
 
 /** The return's pose `ms` after the finish, from the held finish back to the stance (its aim is 0 all the way). */
 export function sampleReturnPose(motion: SwingMotion, ms: number): SwingPose {
-  const pose = sampleTracks(motion.returnTracks, ms) as SwingPose
-  pose.backSwivel = motion.returnSwivels ? sampleTrack(motion.returnSwivels[0], ms) : 0
-  pose.frontSwivel = motion.returnSwivels ? sampleTrack(motion.returnSwivels[1], ms) : 0
+  const unsolved = { ...sampleTracks(motion.returnTracks, ms), backSwivel: 0, frontSwivel: 0 } as SwingPose
+  const pose = addSolved(unsolved, motion.returnSolved, ms)
   setGripFromAngle(pose)
   return pose
 }

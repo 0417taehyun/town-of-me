@@ -4,14 +4,15 @@ import { type BallplayerRig, rigMaterial } from './ballplayerRig'
 
 // The batter's bat in its own frame: the knob at the origin, the barrel up +y, in the rig's town units (an 84 cm bat
 // for the 1.75 m player). The grip tape is thickened from life size so the handle still reads through a mitten; the
-// knob flares less than a real one, as the bottom mitten's forearm sweeps close past it as the bat rolls over.
+// knob flares less than a real one, and the bottom mitten holds the bat at its knob, wrapping it, so the knob never
+// juts into the bottom forearm as the bat comes round.
 
 export const BAT = {
   length: 1.006,
   /** From the knob to the sweet spot, where the bat meets the ball. */
   sweetSpot: 0.84,
   /** From the knob to the midpoint of the two hands. */
-  gripMiddle: 0.2125,
+  gripMiddle: 0.14,
   handleRadius: 0.027,
   /** The grip tape runs from just above the knob to here. */
   tapeEnd: 0.44,
@@ -81,14 +82,24 @@ export function batRadiusAt(height: number) {
 
 const fromKnob = new Vector3()
 
-/** How deep a sphere reaches into a bat whose knob is at `knob` pointing along `axis` (units; 0 when clear). */
-export function batPenetration(knob: Vector3, axis: Vector3, center: Vector3, radius: number) {
+/**
+ * How deep a sphere reaches into a bat whose knob is at `knob` pointing along `axis` (units; 0 when clear), counting
+ * only the bat's heights from its knob below `from` and above `to` (all of it by default): checked at nine slices
+ * through the sphere along the bat.
+ */
+export function batPenetration(knob: Vector3, axis: Vector3, center: Vector3, radius: number, from = -1, to = -1) {
   fromKnob.copy(center).sub(knob)
   const height = fromKnob.dot(axis)
   const radial = Math.sqrt(Math.max(0, fromKnob.lengthSq() - height * height))
-  const offsets = Array.from({ length: 9 }, (_, step) => ((step - 4) / 4) * radius)
-  const depths = offsets
-    .filter((offset) => height + offset >= 0 && height + offset <= BAT.length)
-    .map((offset) => batRadiusAt(height + offset) + Math.sqrt(radius * radius - offset * offset) - radial)
-  return Math.max(0, ...depths)
+  let deepest = 0
+  for (let step = 0; step < 9; step++) {
+    const offset = ((step - 4) / 4) * radius
+    const along = height + offset
+    const counted = along >= 0 && along <= BAT.length && (along < from || along > to)
+    deepest = Math.max(
+      deepest,
+      counted ? batRadiusAt(along) + Math.sqrt(radius * radius - offset * offset) - radial : 0,
+    )
+  }
+  return deepest
 }

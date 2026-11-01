@@ -42,10 +42,13 @@ export const MITTEN = {
 }
 /**
  * How far an elbow may swivel off its keyed pole (degrees), how much leaving the pole costs, the search's steps, the
- * depth (rig units) a collision costs as much as straying `change` degrees from the last swivel, and the room (rig
- * units) the search keeps round the arm, so it stays clear between the moments it is solved at.
+ * depth (rig units) a collision costs as much as straying `change` degrees from a neighbouring moment's swivel, and the
+ * room (rig units) the search keeps round the arm, so it stays clear between the moments it is solved at.
  */
 export const SWIVEL = { limit: 70, weight: 0.5, step: 5, steps: 6, depth: 0.008, change: 15, room: 0.005 }
+
+/** A neighbouring moment's swivel (degrees) and how far from it (degrees) costs as much as a collision SWIVEL.depth. */
+export type Neighbour = { swivel: number; change: number }
 
 const { DEG2RAD } = MathUtils
 const ACROSS = new Vector3(0, 1, 0)
@@ -144,12 +147,18 @@ const armPoint = new Vector3()
 
 /**
  * Points along the forearm from the elbow (0) toward the wrist (1) that must stay off the bat; the rest runs into the
- * mitten round the handle.
+ * mitten round the handle, and stays off the bat beyond the stretch of the handle the mitten covers (FOREARM_END).
  */
 export const FOREARM_FREE_SPAN = [0, 0.2, 0.4, 0.6]
+/**
+ * Points along the forearm's end, into its mitten, and how far (rig units) along the bat the mitten covers either way.
+ */
+export const FOREARM_END = { along: [0.65, 0.75, 0.85, 0.95], cover: 0.075 }
 
-/** An arm's elbow and the wrist point it reaches for. */
-export type ArmSegment = Pick<SettledMitten, 'elbow' | 'wrist'>
+/** An arm's elbow and the wrist point it reaches for, and its mitten's center on the handle. */
+export type ArmSegment = Pick<SettledMitten, 'elbow' | 'wrist'> & { center: Vector3 }
+
+const fromKnob = new Vector3()
 
 /** How far two forearms overlap, with room between them (rig units; 0 when clear). */
 export function forearmOverlap(arm: ArmSegment, other: ArmSegment | null) {
@@ -159,9 +168,10 @@ export function forearmOverlap(arm: ArmSegment, other: ArmSegment | null) {
 }
 
 /**
- * How far an arm from `shoulder` through `arm`'s elbow and wrist reaches into the bat, the body, and the `other` arm's
- * forearm (rig units), summed over points along its forearm and upper arm. The upper arm counts against the head and
- * the bat toward its elbow only: its shoulder end sits in the torso, and the front one crosses the chest in the stance.
+ * How far an arm from `shoulder` through `arm`'s elbow and wrist reaches into the bat (its forearm's end only beyond
+ * the handle its mitten covers), the body, and the `other` arm's forearm (rig units), summed over points along its
+ * forearm and upper arm. The upper arm counts against the head and the bat toward its elbow only: its shoulder end sits
+ * in the torso, and the front one crosses the chest in the stance.
  */
 export function armCollisionDepth(
   arm: ArmSegment,
@@ -179,10 +189,15 @@ export function armCollisionDepth(
   const forearmInBat = FOREARM_FREE_SPAN.map((along) =>
     batPenetration(knob, axis, armPoint.copy(elbow).lerp(wrist, along), forearm),
   )
+  const grip = fromKnob.copy(arm.center).sub(knob).dot(axis)
+  const covered: [number, number] = [grip - FOREARM_END.cover, grip + FOREARM_END.cover]
+  const forearmEndInBat = FOREARM_END.along.map((along) =>
+    batPenetration(knob, axis, armPoint.copy(elbow).lerp(wrist, along), forearm, ...covered),
+  )
   const forearmInBody = [0.3, 0.6, 0.85].map((along) =>
     deepestPenetration(volumes, armPoint.copy(elbow).lerp(wrist, along), forearm),
   )
-  const upperArmInHead = [0.45, 0.7, 0.95].map((along) =>
+  const upperArmInHead = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1].map((along) =>
     deepestPenetration(head, armPoint.copy(shoulder).lerp(elbow, along), ARM_RADII.upper),
   )
   const upperArmInBat = [0.25, 0.5, 0.75, 1].map((along) =>
@@ -190,6 +205,7 @@ export function armCollisionDepth(
   )
   const parts = [
     ...forearmInBat,
+    ...forearmEndInBat,
     deepestPenetration(volumes, elbow, ARM_RADII.elbow + room),
     ...forearmInBody,
     ...upperArmInHead,
@@ -207,10 +223,17 @@ export function parabolaOffset(before: number, at: number, after: number) {
 
 const searchShoulder = new Vector3()
 
+/** The swivel between `neighbours`, each counting as much as its change lets it. */
+export function betweenNeighbours(neighbours: Neighbour[]) {
+  const weights = neighbours.map(({ change }) => 1 / (change * change))
+  const total = weights.reduce((sum, value) => sum + value, 0)
+  return neighbours.reduce((sum, { swivel }, index) => sum + swivel * weights[index], 0) / total
+}
+
 /**
  * The elbow swivel for arm `index` holding the bat at `center` that keeps the arm off the bat, out of `volumes`, and
- * clear of the `other` arm's forearm, searched round `near` and paying for every degree it strays from there and from
- * the keyed pole, so a run of searches moves the elbow smoothly.
+ * clear of the `other` arm's forearm, searched round its `neighbours` (the moments before and after) and paying for
+ * every degree it strays from them and from the keyed pole, so a run of searches moves the elbow smoothly.
  */
 export function searchSwivel(
   rig: BallplayerRig,
@@ -218,19 +241,25 @@ export function searchSwivel(
   center: Vector3,
   bat: { knob: Vector3; axis: Vector3 },
   pole: Vector3,
-  near: number,
+  neighbours: Neighbour[],
   volumes: BodyVolume[],
   other: ArmSegment | null = null,
 ) {
-  const { limit, weight, step, steps, depth: depthScale, change } = SWIVEL
+  const { limit, weight, step, steps: wide, depth: depthScale } = SWIVEL
+  const near = betweenNeighbours(neighbours)
+  const steps = neighbours.length > 1 ? Math.ceil(wide / 2) : wide
   const shoulder = shoulderPoint(rig, index, searchShoulder)
+  const reach = ARM_BONES.upper + ARM_BONES.fore + 0.1
+  const around = volumes.filter((volume) => volume.center.distanceTo(shoulder) < reach + volume.radii.length())
   const trials = Array.from({ length: 2 * steps + 1 }, (_, offset) =>
     clamp(near + (offset - steps) * step, -limit, limit),
   )
   const costs = trials.map((trial) => {
     const arm = settleMitten(settled, shoulder, center, bat.axis, pole, trial)
-    const depth = armCollisionDepth(arm, shoulder, bat.knob, bat.axis, volumes, other)
-    return weight * (trial / 45) ** 2 + (depth / depthScale) ** 2 + ((trial - near) / change) ** 2
+    const posed = { elbow: arm.elbow, wrist: arm.wrist, center }
+    const depth = armCollisionDepth(posed, shoulder, bat.knob, bat.axis, around, other)
+    const away = neighbours.reduce((sum, { swivel, change }) => sum + ((trial - swivel) / change) ** 2, 0)
+    return weight * (trial / 45) ** 2 + (depth / depthScale) ** 2 + away
   })
   const best = costs.indexOf(Math.min(...costs))
   const inside = best > 0 && best < costs.length - 1

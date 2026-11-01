@@ -2,16 +2,19 @@ import type { Group, Mesh } from 'three'
 import { MathUtils, Vector3 } from 'three'
 import type { Vec3 } from '../../../data/models'
 import type { PlayerProfile } from '../../../data/playerProfile'
-import { clamp, clamp01, lerp, smoothstep } from '../../../motionMath'
+import { clamp, clamp01, damp, lerp, smoothstep } from '../../../motionMath'
 import { BASES, type BattingSide, CONTACT_DEPTH, STRIKE_ZONE } from '../../game/field'
 import { batterSpot, PLAYER_SCALE } from '../stageLayout'
 import {
   ANKLE_IN_FOOT,
+  ARM_BONES,
+  ARM_RADII,
   BALLPLAYER_BODY,
   type BallplayerRig,
   createBallplayerRig,
   direction,
   disposeBallplayerRig,
+  FOREARM_RADIUS,
   type LegStance,
   poseChest,
   poseLegs,
@@ -20,17 +23,18 @@ import {
   turnHead,
 } from './ballplayerRig'
 import { BAT, batRadiusAt, createBat } from './bat'
-import { bodyVolumes, deepestPenetration, headVolumes } from './bodyVolumes'
+import { type BodyVolume, bodyVolumes, deepestPenetration, headVolumes } from './bodyVolumes'
 import { limitTangents, type MonotoneTrack, monotoneTrack, sampleTrack, sampleTrackRate } from './keyframes'
-import { fieldToRig, type HeadLook } from './headLook'
+import { fieldToRig, HEAD_FOLLOW_RATE, type HeadLook } from './headLook'
 import {
-  type ArmSegment,
   createMitten,
   createSettledMitten,
   MITTEN,
+  parabolaOffset,
   placeMittens,
   searchSwivel,
   settleMitten,
+  SWIVEL,
 } from './mittenHands'
 import {
   BEGUN_SWING,
@@ -40,12 +44,17 @@ import {
   createSwingMotion,
   FINISH_HOLD_MS,
   FOLLOW_MS,
+  addSolved,
   followSeconds,
   nearestTurn,
   RETURN_KEY_MS,
   RETURN_MS,
   sampleReturnPose,
   sampleSwingPose,
+  SOLVED_CHANNELS,
+  type Solved,
+  type SolvedChannel,
+  type SolvedTracks,
   SWING_CONSTANTS,
   SWING_KEY_TIMES,
   type SwingMotion,
@@ -79,25 +88,35 @@ export type Batter = {
   swing: BatterSwing
 }
 
-/** How a swing turns toward its ball at contact (degrees): the bat's azimuth and elevation, and the chest's lean. */
-export type AimTurn = { azimuth: number; elevation: number; lean: number }
+/** How a swing turns its bat toward its ball at contact (degrees of azimuth and elevation). */
+export type AimTurn = { azimuth: number; elevation: number }
 
 /**
- * The swing under way. Its aim: the swing second its lean eases in from (the windup second it left, or where it was
- * aimed anew), the swing second its bat meets the ball, its turn toward the ball then and the grip shift (rig frame)
- * that puts the sweet spot on it, how far the head tips up (degrees) to keep its eyes on that ball, and each elbow's
- * swivel [back, front] off the swing's own by swing second, solved for this aim. Its timing (game ms): when it left the
- * windup; its way to the ball as legs of swing seconds in the order they begin, the latest one begun applying; when the
- * bat meets the ball once it is judged, the follow-through running on from there; and for a swing checked, or begun and
- * to go back unless judged, which of its legs stops the bat, and when the bat starts back to the windup and is there.
+ * How far a swing's body goes toward its ball: the chest's turn, its tilt toward the plate and side bend toward the
+ * catcher (degrees), and the pelvis's slide over the planted feet (rig units).
+ */
+export type BodyReach = { turn: number; tilt: number; side: number; pelvisX: number; pelvisZ: number }
+
+/** A share of a swing's lean, easing in from swing second `from` to the swing's contact and out to its finish. */
+export type Lean = { reach: BodyReach; from: number }
+
+/**
+ * The swing under way. Its aim: its leans (one from the windup second it left or where it was aimed, and one more from
+ * where a swing on its way was aimed anew), the swing second its bat meets the ball, its turn toward the ball then and
+ * the grip shift (rig frame) that puts the sweet spot on it, how far the head tips up (degrees) to keep its eyes on
+ * that ball, and what the batter solves off its own swing's by swing second, solved for this aim. Its timing
+ * (game ms): when it left the windup; its way to the ball as legs of swing seconds in the order they begin, the latest
+ * one begun applying; when the bat meets the ball once it is judged, the follow-through running on from there; and for
+ * a swing checked, or begun and to go back unless judged, which of its legs stops the bat, and when the bat starts back
+ * to the windup and is there.
  */
 export type BatterSwing = {
-  from: number
+  leans: Lean[]
   contactAt: number
   aimTurn: AimTurn
   aimShift: Vector3
   headLift: number
-  swivelShift: [MonotoneTrack, MonotoneTrack]
+  solvedShift: SolvedTracks
   startMs: number
   legs: MonotoneTrack[]
   contactMs: number | null
@@ -122,19 +141,36 @@ export const AIM_TURN_LIMIT = 35
 export const AIM_LEAN_LIMIT = { toward: 10, back: 6 }
 /** Swing seconds past the contact key over which a ball met out in front takes away the lean toward the plate. */
 export const AIM_LEAN_EARLY_FADE = 0.026
+/**
+ * How far a swing's body may go to bring a ball its arms would strain for within `comfort` of an arm's length: the
+ * chest turns (degrees) as far as `turn` either way, `turnStep` a round, tilts as far as `toward` the plate or `back`,
+ * bends `side` either way, and the pelvis slides `slide` (rig units) over the planted feet; it is solved in `rounds`.
+ * The limits keep the head, which a lean and a slide carry, from rushing.
+ */
+export const BODY_REACH = { comfort: 0.98, turn: 24, turnStep: 6, toward: 12, back: 6, side: 8, slide: 0.09, rounds: 6 }
+/**
+ * Swing seconds from a swing's contact at which its arms' reach is checked, through the window its aim fades in and out
+ * over: the arms reach furthest right after it.
+ */
+export const REACH_CHECKS = [-0.03, -0.02, -0.01, 0, 0.01, 0.02, 0.03, 0.04]
 /** How far the shoulders sit above the waist the chest leans about (rig units). */
 export const SHOULDERS_OVER_WAIST = SHOULDER.y - BALLPLAYER_BODY.hipHeight - BALLPLAYER_BODY.waistUp
 
 const UP = new Vector3(0, 1, 0)
-const NO_SWIVEL_SHIFT = monotoneTrack([0], [0])
+const NO_SHIFT = monotoneTrack([0], [0])
+/** Nothing solved off a swing's own: every channel stays at 0. */
+export const NO_SOLVED_SHIFT = Object.fromEntries(SOLVED_CHANNELS.map((channel) => [channel, NO_SHIFT])) as SolvedTracks
+/** Nothing solved yet. */
+export const NOTHING_SOLVED = Object.fromEntries(SOLVED_CHANNELS.map((channel) => [channel, 0])) as Solved
+export const NO_REACH: BodyReach = { turn: 0, tilt: 0, side: 0, pelvisX: 0, pelvisZ: 0 }
 /** No swing under way: the batter stands in its windup. */
 export const NO_SWING: BatterSwing = {
-  from: 0,
+  leans: [],
   contactAt: 0,
-  aimTurn: { azimuth: 0, elevation: 0, lean: 0 },
+  aimTurn: { azimuth: 0, elevation: 0 },
   aimShift: new Vector3(),
   headLift: 0,
-  swivelShift: [NO_SWIVEL_SHIFT, NO_SWIVEL_SHIFT],
+  solvedShift: NO_SOLVED_SHIFT,
   startMs: Infinity,
   legs: [],
   contactMs: null,
@@ -198,7 +234,7 @@ export function poseBody(batter: Batter, pose: SwingPose) {
   const { rig, bat, axis, knob } = batter
   poseLegs(rig, legStanceOf(pose))
   const chest = { yaw: pose.chestYaw, tilt: pose.chestTilt, side: pose.chestSide, roll: pose.chestRoll }
-  poseChest(rig, chest, pose.headYaw, pose.headPitch)
+  poseChest(rig, chest, pose.headYaw, pose.headPitch, pose.headRoll)
   direction(pose.batAzimuth, pose.batElevation, axis)
   batter.gripMiddle
     .copy(GRIP_ORIGIN)
@@ -233,6 +269,16 @@ export function elbowPoles(pose: SwingPose): [Vector3, Vector3] {
   ]
 }
 
+/**
+ * Where the mittens of the batter posed at `pose` hold the bat, as placeMittens puts them: the top one slid up the
+ * handle where tipped mittens would overlap (copies; the meshes are left placed).
+ */
+export function heldGrip(batter: Batter, pose: SwingPose) {
+  const poles = elbowPoles(pose)
+  placeMittens(batter.rig, batter.mittens, gripPoints(batter), poles, [pose.backSwivel, pose.frontSwivel])
+  return { top: batter.mittens[0].position.clone(), bottom: batter.mittens[1].position.clone(), axis: batter.axis }
+}
+
 export function poseBatter(batter: Batter, pose: SwingPose) {
   poseBody(batter, pose)
   placeMittens(batter.rig, batter.mittens, gripPoints(batter), elbowPoles(pose), [pose.backSwivel, pose.frontSwivel])
@@ -260,13 +306,13 @@ export function evenTimes(from: number, to: number, step: number) {
   return Array.from({ length: count + 1 }, (_, index) => lerp(from, to, index / count))
 }
 
-/** Swing seconds the elbows are solved at: about every 20 ms from the stance, every 10 ms from the foot strike. */
+/** Swing seconds the batter is solved at: about every 20 ms from the stance, every 10 ms from the foot strike. */
 export function swivelSolveTimes() {
   const { stance, footStrike, finish } = SWING_KEY_TIMES
   return [...evenTimes(stance, footStrike, 0.02).slice(0, -1), ...evenTimes(footStrike, finish, 0.01)]
 }
 
-/** Ms from the finish the elbows are solved at through the held finish and the return: every 10 ms. */
+/** Ms from the finish the batter is solved at through the held finish and the return: every 10 ms. */
 export function returnSolveTimes() {
   return evenTimes(0, RETURN_KEY_MS.stance, 10)
 }
@@ -274,73 +320,395 @@ export function returnSolveTimes() {
 const settledArm = createSettledMitten()
 const armShoulder = new Vector3()
 
-/** Arm `index`'s elbow and wrist (copies) holding the bat as last posed at `center`, swivelled `swivel` off `pole`. */
-export function armAt(batter: Batter, index: number, center: Vector3, pole: Vector3, swivel: number): ArmSegment {
+/**
+ * Arm `index`'s elbow and wrist (copies) holding the bat as last posed at `center`, swivelled `swivel` off `pole`, and
+ * its mitten's place and long axis.
+ */
+export function armAt(batter: Batter, index: number, center: Vector3, pole: Vector3, swivel: number) {
   const shoulder = shoulderPoint(batter.rig, index, armShoulder)
   const arm = settleMitten(settledArm, shoulder, center, batter.axis, pole, swivel)
-  return { elbow: arm.elbow.clone(), wrist: arm.wrist.clone() }
+  return { elbow: arm.elbow.clone(), wrist: arm.wrist.clone(), long: arm.long.clone(), center: center.clone() }
+}
+
+/** `pose` with `solved` added to it. */
+export function withSolved(pose: SwingPose, solved: Solved) {
+  const posed = { ...pose }
+  SOLVED_CHANNELS.forEach((channel) => {
+    posed[channel] += solved[channel]
+  })
+  return posed
 }
 
 /**
- * Both elbows' swivels [back, front] for `pose`, each searched near the last ones: the back (top hand's) arm clear of
- * where the front forearm last was, then the front one clear of it.
+ * How far the head may turn off its keys to clear the arms, the mittens, and the bat (degrees): each way's `limit`, and
+ * how far a turn goes before it costs as much as a collision `depth` (rig units) deep (`cost`), rolling about the line
+ * of sight the cheapest, as it leaves the eyes on the ball; the search's steps, and the room (rig units) it keeps round
+ * the head. Turning off its keys faster than `rate` degrees a game ms (through the swing, and slower on the way back)
+ * costs as much as that collision again, and a run of moments is smoothed back and forth `sweeps` times, so the head
+ * turns ahead of what comes near it. Following the ball, the head turns from the swing's own turn toward the eyes,
+ * checked every `pathStep` degrees, only until it would touch an arm, a mitten, or the bat, and as far as the swing
+ * moves those, it keeps `lead` (rig units) from them, turning away ahead of them (turnHeadClear).
  */
-export function solveSwivelsAt(batter: Batter, pose: SwingPose, near: [number, number]): [number, number] {
-  poseBody(batter, pose)
-  const volumes = bodyVolumes(batter.rig)
-  const { bottom, top } = gripPoints(batter)
-  const [back, front] = elbowPoles(pose)
-  const frontBefore = armAt(batter, 1, bottom, front, near[1])
-  const backSwivel = searchSwivel(batter.rig, 0, top, batter, back, near[0], volumes, frontBefore)
-  const backArm = armAt(batter, 0, top, back, backSwivel)
-  return [backSwivel, searchSwivel(batter.rig, 1, bottom, batter, front, near[1], volumes, backArm)]
+export const HEAD_CLEARANCE = {
+  turns: {
+    headRoll: { limit: 30, cost: 30 },
+    headPitch: { limit: 12, cost: 12 },
+    headYaw: { limit: 15, cost: 15 },
+  },
+  step: 2.5,
+  steps: 4,
+  depth: 0.002,
+  room: 0.005,
+  pathStep: 4,
+  lead: 0.02,
+  rate: { swing: 1.5, back: 0.25 },
+  sweeps: 3,
 }
+/** How far from the head's center (rig units) a hat's brim reaches: nothing further can touch the head. */
+export const HEAD_REACH = 0.85
 
-/** Solves the swivels at each of `times`, each from the last, starting near `start`. */
-export function solveSwivelRun(
-  batter: Batter,
-  times: number[],
-  poseAt: (time: number) => SwingPose,
-  start: [number, number],
-) {
-  const solved: [number, number][] = []
-  times.forEach((time) => solved.push(solveSwivelsAt(batter, poseAt(time), solved.at(-1) ?? start)))
-  return solved
-}
+/** A ball (rig frame). */
+export type Sphere = { center: Vector3; radius: number }
+/** Points along the upper arm from the shoulder (0) to the elbow (1) close enough that its balls hold its width. */
+export const UPPER_ARM_SPAN = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
+/** How far the head turns off its keys (degrees). */
+export type HeadTurn = Pick<Solved, 'headRoll' | 'headPitch' | 'headYaw'>
+export const NO_TURN: HeadTurn = { headRoll: 0, headPitch: 0, headYaw: 0 }
+/** An arm as posed: its elbow, its wrist, and its mitten's long axis. */
+export type PosedArm = ReturnType<typeof armAt>
 
-/** A track per elbow [back, front] through `solved` swivels at `times`. */
-export function swivelTracks(times: number[], solved: [number, number][]): [MonotoneTrack, MonotoneTrack] {
+/** Arm `index` holding its mitten at `center` as balls: its shoulder, upper arm, elbow, forearm, and mitten. */
+export function armSpheres(batter: Batter, index: number, arm: PosedArm, center: Vector3): Sphere[] {
+  const shoulder = shoulderPoint(batter.rig, index, new Vector3())
+  const along = (from: Vector3, to: Vector3, share: number) => from.clone().lerp(to, share)
+  const mitten = [-1, 0, 1].map((end) =>
+    center.clone().addScaledVector(arm.long, MITTEN.center + end * (MITTEN.long - MITTEN.wide)),
+  )
   return [
-    monotoneTrack(
-      times,
-      solved.map(([back]) => back),
-    ),
-    monotoneTrack(
-      times,
-      solved.map(([, front]) => front),
-    ),
+    { center: shoulder, radius: ARM_RADII.shoulder },
+    ...UPPER_ARM_SPAN.map((share) => ({ center: along(shoulder, arm.elbow, share), radius: ARM_RADII.upper })),
+    { center: arm.elbow, radius: ARM_RADII.elbow },
+    ...[0.33, 0.67].map((share) => ({ center: along(arm.elbow, arm.wrist, share), radius: FOREARM_RADIUS })),
+    ...mitten.map((point) => ({ center: point, radius: MITTEN.wide })),
   ]
 }
 
+/** The bat as last posed as balls every 4 cm along it. */
+export function batSpheres(batter: Batter): Sphere[] {
+  return Array.from({ length: 26 }, (_, step) => {
+    const height = 0.04 * step
+    return { center: batter.knob.clone().addScaledVector(batter.axis, height), radius: batRadiusAt(height) }
+  })
+}
+
+/** The parts of the batter as posed by `pose` near enough its head to touch it, as balls. */
+export function headNeighbours(batter: Batter, pose: SwingPose): Sphere[] {
+  const { bottom, top } = heldGrip(batter, pose)
+  const grip = [top, bottom]
+  const [back, front] = elbowPoles(pose)
+  const arms = [armAt(batter, 0, grip[0], back, pose.backSwivel), armAt(batter, 1, grip[1], front, pose.frontSwivel)]
+  const head = batter.rig.head.position.clone().applyMatrix4(batter.rig.body.matrix)
+  const spheres = [...arms.flatMap((arm, index) => armSpheres(batter, index, arm, grip[index])), ...batSpheres(batter)]
+  return spheres.filter((sphere) => sphere.center.distanceTo(head) < HEAD_REACH + sphere.radius)
+}
+
+/** How deep (rig units, summed) `spheres` reach into the head as last turned, with `room` round it. */
+export function spheresInHead(batter: Batter, spheres: Sphere[], room = HEAD_CLEARANCE.room) {
+  const head: BodyVolume[] = headVolumes(batter.rig)
+  return spheres.reduce((sum, sphere) => sum + deepestPenetration(head, sphere.center, sphere.radius + room), 0)
+}
+
+/** How deep (rig units, summed) `spheres` reach into the head, with its room, turned `turn` off `pose`'s. */
+export function headDepth(batter: Batter, pose: SwingPose, turn: HeadTurn, spheres: Sphere[]) {
+  turnHead(batter.rig, pose.headYaw + turn.headYaw, pose.headPitch + turn.headPitch, pose.headRoll + turn.headRoll)
+  return spheresInHead(batter, spheres)
+}
+
+/** A neighbouring moment's head turn and how far from it (degrees) costs as much as a collision HEAD_CLEARANCE.depth. */
+export type HeadNeighbour = { turn: HeadTurn; change: number }
+
+/** What turning the head `turn` off `pose`'s costs against `spheres`, from its `neighbours`. */
+export function headCost(
+  batter: Batter,
+  pose: SwingPose,
+  turn: HeadTurn,
+  neighbours: HeadNeighbour[],
+  spheres: Sphere[],
+) {
+  const { turns, depth } = HEAD_CLEARANCE
+  const away = (Object.keys(turns) as (keyof HeadTurn)[]).reduce(
+    (sum, axis) =>
+      sum +
+      (turn[axis] / turns[axis].cost) ** 2 +
+      neighbours.reduce((near, { turn: other, change }) => near + ((turn[axis] - other[axis]) / change) ** 2, 0),
+    0,
+  )
+  return (headDepth(batter, pose, turn, spheres) / depth) ** 2 + away
+}
+
+/** The head's turn between `neighbours` with nothing in its way: their weighted middle, drawn toward its keys. */
+export function restingTurn(neighbours: HeadNeighbour[]): HeadTurn {
+  const { turns } = HEAD_CLEARANCE
+  const weights = neighbours.map(({ change }) => 1 / (change * change))
+  const middle = (axis: keyof HeadTurn) =>
+    neighbours.reduce((sum, { turn }, index) => sum + turn[axis] * weights[index], 0) /
+    (weights.reduce((sum, weight) => sum + weight, 0) + 1 / turns[axis].cost ** 2)
+  return { headRoll: middle('headRoll'), headPitch: middle('headPitch'), headYaw: middle('headYaw') }
+}
+
+/** `turn` searched along `axis` round where it is, the rest held. */
+export function searchHeadAxis(
+  batter: Batter,
+  pose: SwingPose,
+  turn: HeadTurn,
+  axis: keyof HeadTurn,
+  neighbours: HeadNeighbour[],
+  spheres: Sphere[],
+): HeadTurn {
+  const { turns, step, steps } = HEAD_CLEARANCE
+  const { limit } = turns[axis]
+  const trials = Array.from({ length: 2 * steps + 1 }, (_, offset) =>
+    clamp(turn[axis] + (offset - steps) * step, -limit, limit),
+  )
+  const costs = trials.map((trial) => headCost(batter, pose, { ...turn, [axis]: trial }, neighbours, spheres))
+  const best = costs.indexOf(Math.min(...costs))
+  const inside = best > 0 && best < costs.length - 1
+  const refined = inside ? parabolaOffset(costs[best - 1], costs[best], costs[best + 1]) : 0
+  return { ...turn, [axis]: clamp(trials[best] + refined * step, -limit, limit) }
+}
+
 /**
- * Solves the elbows' swivels through the swing and its return once, so the arms stay off the bat, out of the head and
- * body, and clear of each other: each sample starts from the last, so the elbows move smoothly, and the return starts
- * at the finish's swivels and ends on the stance's, so neither seam jumps. Most of a new batter's cost, spent while
- * Ballplayers renders a new character or batting side.
+ * The head's turn off `pose`'s keys that keeps it clear of the batter's arms, mittens, and bat (`spheres`, from
+ * headNeighbours), between its `neighbours` and paying for every degree it strays from them and from its keys: where
+ * nothing is in its way it rests there, else it is rolled, turned, and tipped clear.
  */
-export function solveSwivels(batter: Batter) {
+export function searchHead(batter: Batter, pose: SwingPose, neighbours: HeadNeighbour[], spheres: Sphere[]): HeadTurn {
+  poseBody(batter, pose)
+  const resting = restingTurn(neighbours)
+  if (headDepth(batter, pose, resting, spheres) <= 0) return resting
+  const axes: (keyof HeadTurn)[] = ['headRoll', 'headYaw', 'headPitch', 'headRoll']
+  return axes.reduce((turn, axis) => searchHeadAxis(batter, pose, turn, axis, neighbours, spheres), resting)
+}
+
+/** The head's neighbours at moment `index` of `run` [before, after], as far as `solved` holds them. */
+export function headNeighboursOf(run: SolveRun, solved: (Solved | undefined)[], index: number): HeadNeighbour[] {
+  const { times, clock } = run
+  const sides = [index - 1, index + 1].filter((other) => solved[other] !== undefined)
+  return sides.map((other) => ({
+    turn: solved[other]!,
+    change: Math.max(HEAD_CLEARANCE.step, run.headRate * Math.abs(clock(times[other]) - clock(times[index]))),
+  }))
+}
+
+/**
+ * How fast (degrees a game ms) an elbow's swivel may turn through a swing and on its way back before it costs as much
+ * as a collision SWIVEL.depth deep; the way back is smoothed at `smoothed` of its rate once a first pass found its way.
+ */
+export const SWIVEL_RATE = { swing: 7, back: 1.5, smoothed: 0.35 }
+/** How far (swing seconds; ms on the way back) a run eases from the moments it must start and end at. */
+export const RUN_ENDS_EASE = { swing: 0.06, back: 80 }
+
+/**
+ * A run of moments the batter is solved at: their times, the pose at each, the game ms each is at (`clock`), how fast
+ * (SWIVEL_RATE) its elbows and (HEAD_CLEARANCE.rate) its head turn, how far it eases from its ends (RUN_ENDS_EASE),
+ * and how many times it is smoothed back and forth, at `smoothing` of its rate.
+ */
+export type SolveRun = {
+  times: number[]
+  poses: SwingPose[]
+  clock: (time: number) => number
+  rate: number
+  headRate: number
+  ease: number
+  sweeps: number
+  smoothing: number
+}
+
+/**
+ * About how many game ms from its contact a swing from the windup meeting its ball at swing second `contactAt` is at
+ * swing second `time`: at the windup's pace to the ball, then slowing on to the finish (followSeconds).
+ */
+export function swingClock(contactAt: number) {
+  const pace = windupPace(contactAt)
+  const span = SWING_KEY_TIMES.finish - contactAt
+  const power = (contactRate(contactAt, pace) * FOLLOW_MS) / span
+  return (time: number) =>
+    time <= contactAt
+      ? (time - contactAt) / pace
+      : FOLLOW_MS * (1 - (1 - clamp01((time - contactAt) / span)) ** (1 / power))
+}
+
+/** Each neighbour of moment `index` of `run` [before, after], as far as either exists, at what `solved` holds there. */
+export function neighboursOf(
+  run: SolveRun,
+  solved: (Solved | undefined)[],
+  index: number,
+  channel: 'backSwivel' | 'frontSwivel',
+) {
+  const { times, rate, clock } = run
+  const sides = [index - 1, index + 1].filter((other) => solved[other] !== undefined)
+  return sides.map((other) => ({
+    swivel: solved[other]![channel],
+    change: Math.max(SWIVEL.change / 5, rate * Math.abs(clock(times[other]) - clock(times[index]))),
+  }))
+}
+
+/**
+ * Both elbows' swivels at moment `index` of `run`, each searched between its neighbours as `solved` holds them: the
+ * back (top hand's) arm clear of where the front forearm is, then the front one clear of it.
+ */
+export function solveSwivelsAt(batter: Batter, run: SolveRun, solved: (Solved | undefined)[], index: number): Solved {
+  const pose = run.poses[index]
+  const current = solved[index] ?? solved[index - 1] ?? NOTHING_SOLVED
+  poseBody(batter, pose)
+  const volumes = bodyVolumes(batter.rig)
+  const { bottom, top } = heldGrip(batter, withSolved(pose, current))
+  const [back, front] = elbowPoles(pose)
+  const frontBefore = armAt(batter, 1, bottom, front, current.frontSwivel)
+  const backNear = neighboursOf(run, solved, index, 'backSwivel')
+  const backSwivel = searchSwivel(batter.rig, 0, top, batter, back, backNear, volumes, frontBefore)
+  const backArm = armAt(batter, 0, top, back, backSwivel)
+  const frontNear = neighboursOf(run, solved, index, 'frontSwivel')
+  const frontSwivel = searchSwivel(batter.rig, 1, bottom, batter, front, frontNear, volumes, backArm)
+  return { ...NO_TURN, backSwivel, frontSwivel }
+}
+
+/**
+ * `solved` at `times` eased, over `ease`, from what the run's first and last moments are held at (`ends`, where set),
+ * so a run that must start or end where another left off (the way back from the finish, a swing's own) does.
+ */
+export function heldEnds(times: number[], solved: Solved[], ends: (Solved | null)[], ease: number): Solved[] {
+  const [first, last] = ends
+  const end = times[times.length - 1]
+  return solved.map((values, index) => {
+    const fromFirst = first ? 1 - smoothstep(clamp01((times[index] - times[0]) / ease)) : 0
+    const fromLast = last ? 1 - smoothstep(clamp01((end - times[index]) / ease)) : 0
+    const own = Math.max(0, 1 - fromFirst - fromLast)
+    const blend = (channel: SolvedChannel) =>
+      own * values[channel] + fromFirst * (first?.[channel] ?? 0) + fromLast * (last?.[channel] ?? 0)
+    return Object.fromEntries(SOLVED_CHANNELS.map((channel) => [channel, blend(channel)])) as Solved
+  })
+}
+
+/** `solved`'s swivels alone. */
+export function swivelsOf(solved: Solved) {
+  return { backSwivel: solved.backSwivel, frontSwivel: solved.frontSwivel }
+}
+
+/**
+ * `swivels` at the `free` moments each averaged with its neighbours' (1:2:1), which irons out the search's own small
+ * wobble from one moment to the next.
+ */
+export function smoothedSwivels(swivels: Solved[], free: number[]): Solved[] {
+  const smoothed = new Set(free)
+  return swivels.map((values, index) => {
+    const before = swivels[index - 1] ?? values
+    const after = swivels[index + 1] ?? values
+    const share = smoothed.has(index) ? 0.25 : 0
+    const ironed = (channel: 'backSwivel' | 'frontSwivel') =>
+      values[channel] + share * (before[channel] - 2 * values[channel] + after[channel])
+    return { ...values, backSwivel: ironed('backSwivel'), frontSwivel: ironed('frontSwivel') }
+  })
+}
+
+/**
+ * Solves the batter at each moment of `run`, from `start` on, its first and last moments held at `ends` where set: the
+ * elbows first, each from the last, then smoothed back and forth (`sweeps` times, first from the end) between their
+ * neighbours, so an elbow moves ahead of a narrowing way between the bat and the body instead of turning sharply once
+ * there; then the head's turn clear of those arms, their mittens, and the bat, the same way (HEAD_CLEARANCE.sweeps), so
+ * it tilts ahead of what comes near it; both eased from the held ends.
+ */
+export function solveRun(batter: Batter, run: SolveRun, start: Solved, ends: (Solved | null)[] = [null, null]) {
+  const { times, poses, ease } = run
+  const solved: (Solved | undefined)[] = [start, ends[0] ?? undefined, ...times.slice(1).map(() => undefined)]
+  solved[times.length] = ends[1] ?? solved[times.length]
+  const offset = (index: number) => index + 1
+  const chain: SolveRun = {
+    ...run,
+    times: [times[0] - 1e-9, ...times],
+    poses: [poses[0], ...poses],
+    clock: (time: number) => (time < times[0] ? run.clock(times[0]) - SWIVEL.change / run.rate : run.clock(time)),
+  }
+  const free = [...times.keys()].filter(
+    (index) => !(index === 0 && ends[0]) && !(index === times.length - 1 && ends[1]),
+  )
+  free.forEach((index) => (solved[offset(index)] = solveSwivelsAt(batter, chain, solved, offset(index))))
+  const smoothing = { ...chain, rate: chain.rate * run.smoothing }
+  const sweeps = Array.from({ length: run.sweeps }, (_, sweep) => (sweep % 2 === 0 ? [...free].reverse() : free))
+  sweeps.flat().forEach((index) => (solved[offset(index)] = solveSwivelsAt(batter, smoothing, solved, offset(index))))
+  const swivels = [start, ...smoothedSwivels(solved.slice(1) as Solved[], free)]
+  const heads: (Solved | undefined)[] = [start, ends[0] ?? undefined, ...times.slice(1).map(() => undefined)]
+  heads[times.length] = ends[1] ?? heads[times.length]
+  const posed = swivels.map((values, index) => withSolved(chain.poses[index], { ...NO_TURN, ...swivelsOf(values!) }))
+  const near = posed.map((pose) => {
+    poseBody(batter, pose)
+    return headNeighbours(batter, pose)
+  })
+  const turnAt = (index: number) => {
+    const turn = searchHead(batter, posed[index], headNeighboursOf(chain, heads, index), near[index])
+    heads[index] = { ...swivels[index]!, ...turn }
+  }
+  free.forEach((index) => turnAt(offset(index)))
+  const headSweeps = Array.from({ length: HEAD_CLEARANCE.sweeps }, (_, sweep) =>
+    sweep % 2 === 0 ? [...free].reverse() : free,
+  )
+  headSweeps.flat().forEach((index) => turnAt(offset(index)))
+  return heldEnds(times, heads.slice(1) as Solved[], ends, ease)
+}
+
+/** A track per solved channel through `solved` at `times`. */
+export function solvedTracks(times: number[], solved: Solved[]): SolvedTracks {
+  return Object.fromEntries(
+    SOLVED_CHANNELS.map((channel) => [
+      channel,
+      monotoneTrack(
+        times,
+        solved.map((values) => values[channel]),
+      ),
+    ]),
+  ) as SolvedTracks
+}
+
+/**
+ * Solves the batter through the swing and its return once, so the arms stay off the bat, out of the head and body, and
+ * clear of each other, and the head clear of them: each run is smoothed between neighbouring moments (solveRun), so
+ * the elbows and the head move smoothly, and the return starts at the finish's and ends on the stance's, so neither
+ * seam jumps. Most of a new batter's cost, spent while Ballplayers renders a new character or batting side.
+ */
+export function solveMotion(batter: Batter) {
   const { motion } = batter
-  motion.swivels = null
-  motion.returnSwivels = null
+  motion.solved = null
+  motion.returnSolved = null
   const swingTimes = swivelSolveTimes()
-  const swing = solveSwivelRun(batter, swingTimes, (time) => sampleSwingPose(motion, time), [0, 0])
+  const swingPoses = swingTimes.map((time) => sampleSwingPose(motion, time))
+  const clock = swingClock(SWING_KEY_TIMES.contact)
+  const swingRun = {
+    times: swingTimes,
+    poses: swingPoses,
+    clock,
+    rate: SWIVEL_RATE.swing,
+    headRate: HEAD_CLEARANCE.rate.swing,
+    ease: RUN_ENDS_EASE.swing,
+    sweeps: 1,
+    smoothing: 1,
+  }
+  const swing = solveRun(batter, swingRun, NOTHING_SOLVED)
   const returnTimes = returnSolveTimes()
   const finish = swing[swing.length - 1]
-  const returning = solveSwivelRun(batter, returnTimes, (ms) => sampleReturnPose(motion, ms), finish)
-  returning[0] = finish
-  returning[returning.length - 1] = swing[0]
-  motion.swivels = swivelTracks(swingTimes, swing)
-  motion.returnSwivels = swivelTracks(returnTimes, returning)
+  const returnPoses = returnTimes.map((ms) => sampleReturnPose(motion, ms))
+  const returnRun = {
+    times: returnTimes,
+    poses: returnPoses,
+    clock: (ms: number) => ms,
+    rate: SWIVEL_RATE.back,
+    headRate: HEAD_CLEARANCE.rate.back,
+    ease: RUN_ENDS_EASE.back,
+    sweeps: 3,
+    smoothing: SWIVEL_RATE.smoothed,
+  }
+  const returning = solveRun(batter, returnRun, finish, [finish, swing[0]])
+  motion.solved = solvedTracks(swingTimes, swing)
+  motion.returnSolved = solvedTracks(returnTimes, returning)
 }
 
 /** The visitor's batter on `side`, aimed at the contact point and standing in its stance. */
@@ -361,7 +729,7 @@ export function createBatter(profile: PlayerProfile, side: BattingSide): Batter 
   }
   placeBatter(batter, side)
   aimMotion(batter)
-  solveSwivels(batter)
+  solveMotion(batter)
   poseBatter(batter, sampleSwingPose(batter.motion, windupSeconds(0)))
   return batter
 }
@@ -423,8 +791,8 @@ export function aimTurnToward(batter: Batter, pose: SwingPose, target: Vector3) 
 /**
  * The chest's lean (degrees toward the plate) that carries the hands `reach` (rig units) further toward the plate, as
  * a batter bends toward an outside ball rather than straining its arms, and stands taller for an inside one. A ball met
- * out in front, at swing second `contactAt` past the contact key, meets arms already reaching forward at head height,
- * so the head leans less into their way.
+ * out in front, at swing second `contactAt` past the contact key, meets arms already reaching forward, so the head
+ * stays steadier and leans less into their way; the body reaches further only as far as the arms need (reachBall).
  */
 export function aimLean(reach: number, contactAt: number) {
   const lean = MathUtils.radToDeg(Math.asin(clamp(reach / SHOULDERS_OVER_WAIST, -1, 1)))
@@ -460,65 +828,181 @@ export function leanWeight(time: number, from: number, contactAt: number) {
 }
 
 /**
- * Swing seconds a swing meeting its ball at `contactAt` has its own elbow swivels solved at, through the window its aim
- * fades in and out over and on to the finish, where its lean has eased out: closest together for the first half after
- * its contact, as the bat rolls over and its knob sweeps past the front forearm.
+ * Swing seconds a swing meeting its ball at `contactAt`, leaning from swing second `from`, is solved at for its aim:
+ * from where it starts leaning, through the window its aim fades in and out over, and on to the finish, where its lean
+ * has eased out, as close together from there as the swing's own (swivelSolveTimes); closest while its aim fades out
+ * after its contact, as the bat rolls over and its knob sweeps past the front forearm and the front elbow past the chest.
  */
-export function aimSolveTimes(contactAt: number) {
+export function aimSolveTimes(contactAt: number, from: number) {
   const start = aimStart(contactAt)
+  const leaning = from < start ? evenTimes(from, start, 0.015).slice(0, -1) : []
   const before = Array.from({ length: 6 }, (_, step) => lerp(start, contactAt, step / 6))
-  const rolling = Array.from({ length: 6 }, (_, step) => contactAt + (step / 12) * AIM_FADE_SECONDS)
-  const after = [0.5, 0.75].map((share) => contactAt + share * AIM_FADE_SECONDS)
-  const tail = evenTimes(contactAt + AIM_FADE_SECONDS, SWING_KEY_TIMES.finish, 0.02)
-  return [...before, ...rolling, ...after, ...tail]
+  const rolling = Array.from({ length: 12 }, (_, step) => contactAt + (step / 12) * AIM_FADE_SECONDS)
+  const tail = evenTimes(contactAt + AIM_FADE_SECONDS, SWING_KEY_TIMES.finish, 0.01)
+  return [...leaning, ...before, ...rolling, ...tail]
 }
 
 /**
- * Each elbow's swivel [back, front] off the swing's own through the aimed window of the swing under way, solved so the
- * arms stay clear of the bat and the body with the hands and the bat where this aim takes them; none at either end.
+ * What the batter solves off its own swing's through the aimed window of the swing under way, solved so the arms stay
+ * clear of the bat and the body, and the head of them, with the hands and the bat where this aim takes them; none at
+ * either end.
  */
-export function solveAimedSwivels(batter: Batter): [MonotoneTrack, MonotoneTrack] {
-  const times = aimSolveTimes(batter.swing.contactAt)
-  const own = times.map((time) => sampleSwingPose(batter.motion, time))
-  const solved = solveSwivelRun(batter, times, (time) => aimedSwingPose(batter, time), [
-    own[0].backSwivel,
-    own[0].frontSwivel,
-  ])
-  const shifts = solved.map(([back, front], index): [number, number] => [
-    back - own[index].backSwivel,
-    front - own[index].frontSwivel,
-  ])
-  shifts[0] = [0, 0]
-  shifts[shifts.length - 1] = [0, 0]
-  return swivelTracks(times, shifts)
+export function solveAimedShift(batter: Batter): SolvedTracks {
+  const { motion } = batter
+  const { contactAt, leans } = batter.swing
+  const times = aimSolveTimes(contactAt, Math.min(...leans.map((lean) => lean.from)))
+  const own = times.map((time) => addSolved({ ...NOTHING_SOLVED } as SwingPose, motion.solved, time) as Solved)
+  const unsolved = (time: number) => addSolved(aimedSwingPose(batter, time), motion.solved, time, -1)
+  const poses = times.map(unsolved)
+  const run = {
+    times,
+    poses,
+    clock: swingClock(contactAt),
+    rate: SWIVEL_RATE.swing,
+    headRate: HEAD_CLEARANCE.rate.swing,
+    ease: RUN_ENDS_EASE.swing,
+    sweeps: 1,
+    smoothing: 1,
+  }
+  const solved = solveRun(batter, run, own[0], [own[0], own[own.length - 1]])
+  const shifts = solved.map((values, index) => withSolved(values as SwingPose, scaled(own[index], -1)) as Solved)
+  return solvedTracks(times, shifts)
+}
+
+/** `solved` times `scale`. */
+export function scaled(solved: Solved, scale: number) {
+  return Object.fromEntries(SOLVED_CHANNELS.map((channel) => [channel, scale * solved[channel]])) as Solved
+}
+
+/** The grip shift that puts the sweet spot of the swing under way on `target` (rig frame) at its contact. */
+export function shiftOnto(batter: Batter, target: Vector3) {
+  batter.swing.aimShift = new Vector3()
+  poseBody(batter, aimedSwingPose(batter, batter.swing.contactAt))
+  batter.swing.aimShift = target.clone().sub(batter.sweetSpot)
+}
+
+const armReach = new Vector3()
+const reachedArm = createSettledMitten()
+
+/**
+ * How far (rig units) arm `index` of the batter posed at `pose` reaches past BODY_REACH's comfort of its length to its
+ * mitten on the bat, and `out` the way from its shoulder to its wrist (unit).
+ */
+export function overreach(batter: Batter, pose: SwingPose, index: number, out: Vector3) {
+  const shoulder = shoulderPoint(batter.rig, index, armShoulder)
+  const { bottom, top, axis } = heldGrip(batter, pose)
+  const pole = elbowPoles(pose)[index]
+  const swivel = index === 0 ? pose.backSwivel : pose.frontSwivel
+  const arm = settleMitten(reachedArm, shoulder, index === 0 ? top : bottom, axis, pole, swivel)
+  out.copy(arm.wrist).sub(shoulder)
+  const excess = out.length() - BODY_REACH.comfort * (ARM_BONES.upper + ARM_BONES.fore)
+  out.normalize()
+  return excess
 }
 
 /**
- * Aims the swing under way at `point` (field meters; the contact point when null), its lean (`lean` degrees, or what
- * the ball takes when null) easing in from swing second `from`: the swing second its bat meets the ball there, its turn
- * toward it, the grip shift that puts the sweet spot on it, the head's lift, and the elbows' swivels for that aim. Only
- * the lean shows before the slot, from `from` on, so a swing waiting there may be aimed anew. The bat turns toward the
- * ball and the grip shifts for the rest; the head follows with its eyes, which also keeps a cap's brim off a bat meeting
- * a high pitch.
+ * How far (rig units, rig frame) the body of the swing under way would have to lean at swing second `time` for both
+ * arms to reach their mittens comfortably. A lean carries the hands with the shoulders, so it only brings them closer
+ * as far as the aim's grip shift, which puts the sweet spot on the ball at contact whatever the lean, still applies.
  */
-export function aimSwing(batter: Batter, point: Vec3 | null, from: number, lean: number | null = null) {
-  const target = fieldToRig(batter.rig, point ?? CONTACT_POINT, aimTarget)
+export function reachPush(batter: Batter, time: number) {
+  const pose = aimedSwingPose(batter, time)
+  poseBody(batter, pose)
+  const push = new Vector3()
+  ;[0, 1].forEach((index) => push.addScaledVector(armReach, Math.max(0, overreach(batter, pose, index, armReach))))
+  const weight = aimWeight(time, batter.swing.contactAt)
+  return weight < 0.2 ? push.set(0, 0, 0) : push.divideScalar(weight)
+}
+
+/**
+ * `reach` moved by `push` (rig units, rig frame) as far as BODY_REACH lets it: the pelvis slides first, which carries
+ * the head no further than the shoulders, and the chest leans for the rest; `leaned` is how far the swing's other
+ * leans tilt the chest already.
+ */
+export function reachFurther(reach: BodyReach, push: Vector3, leaned: number): BodyReach {
+  const { toward, back, side: sideLimit, slide } = BODY_REACH
+  const pelvisX = clamp(reach.pelvisX + push.x, -slide, slide)
+  const pelvisZ = clamp(reach.pelvisZ + push.z, -slide, slide)
+  const tiltBy = MathUtils.radToDeg(Math.atan((push.z - pelvisZ + reach.pelvisZ) / SHOULDERS_OVER_WAIST))
+  const sideBy = -MathUtils.radToDeg(Math.atan((push.x - pelvisX + reach.pelvisX) / SHOULDERS_OVER_WAIST))
+  return {
+    turn: reach.turn,
+    tilt: clamp(reach.tilt + tiltBy, -back - leaned, toward - leaned),
+    side: clamp(reach.side + sideBy, -sideLimit, sideLimit),
+    pelvisX,
+    pelvisZ,
+  }
+}
+
+/**
+ * Turns and leans the swing under way's last lean further, round by round, until its arms reach their mittens
+ * comfortably round its contact with the sweet spot on `target` (rig frame), as a batter fooled out in front opens up
+ * and lunges onto its front foot instead of straining its arms: the chest turns first, which leaves the head where it
+ * is, then the body slides and leans for what is left. The grip shift then puts the sweet spot on `target`.
+ */
+export function reachBall(batter: Batter, target: Vector3) {
+  const { leans, contactAt } = batter.swing
+  const last = leans[leans.length - 1]
+  const leaned = leans.slice(0, -1).reduce((sum, lean) => sum + lean.reach.tilt, 0)
+  const times = REACH_CHECKS.map((offset) => contactAt + offset)
+  for (let round = 0; round < BODY_REACH.rounds; round++) turnToReach(batter, target, last, times)
+  for (let round = 0; round < BODY_REACH.rounds; round++) {
+    shiftOnto(batter, target)
+    const pushes = times.map((time) => reachPush(batter, time))
+    const push = pushes.reduce((most, next) => (next.lengthSq() > most.lengthSq() ? next : most))
+    last.reach = reachFurther(last.reach, push, leaned)
+  }
+  shiftOnto(batter, target)
+}
+
+/** The farthest (rig units) the arms of the swing under way reach past comfort at `times`, the grip on `target`. */
+export function farthestReach(batter: Batter, target: Vector3, times: number[]) {
+  shiftOnto(batter, target)
+  return Math.max(...times.map((time) => reachPush(batter, time).length()))
+}
+
+/**
+ * Turns `lean`'s chest a step either way (BODY_REACH.turnStep, at most `turn`) where that brings the arms of the swing
+ * under way closer to their mittens round its contact: the chest turning on its spine moves a shoulder toward its hand
+ * without moving the head.
+ */
+export function turnToReach(batter: Batter, target: Vector3, lean: Lean, times: number[]) {
+  const { turn, turnStep } = BODY_REACH
+  const from = lean.reach.turn
+  const trials = [from, from - turnStep, from + turnStep].map((trial) => clamp(trial, -turn, turn))
+  const reaches = trials.map((trial) => {
+    lean.reach = { ...lean.reach, turn: trial }
+    return farthestReach(batter, target, times) + 1e-4 * Math.abs(trial)
+  })
+  lean.reach = { ...lean.reach, turn: trials[reaches.indexOf(Math.min(...reaches))] }
+}
+
+/**
+ * Aims the swing under way at `point` (field meters; the contact point when null), its leans so far (`kept`, eased
+ * anew round this aim's contact) going on and one more easing in from swing second `from`: the swing second its bat
+ * meets the ball there, its turn toward it, the lean toward it and the reach its arms need, the grip shift that puts
+ * the sweet spot on it, the head's lift, and the elbows' swivels for that aim. Only the leans show before the slot, so
+ * a swing waiting there may be aimed anew. The bat turns toward the ball and the grip shifts for the rest; the head
+ * follows with its eyes, which also keeps a cap's brim off a bat meeting a high pitch.
+ */
+export function aimSwing(batter: Batter, point: Vec3 | null, from: number, kept: Lean[] = []) {
+  const target = fieldToRig(batter.rig, point ?? CONTACT_POINT, aimTarget).clone()
   const contactAt = contactMoment(batter, target.x)
   const pose = sampleSwingPose(batter.motion, contactAt)
   poseBody(batter, pose)
   const headLift = lookDown(batter, batter.sweetSpot) - lookDown(batter, target)
-  const aimTurn = { ...aimTurnToward(batter, pose, target), lean: 0 }
+  const aimTurn = aimTurnToward(batter, pose, target)
   pose.batAzimuth += aimTurn.azimuth
   pose.batElevation += aimTurn.elevation
   poseBody(batter, pose)
-  aimTurn.lean = lean ?? aimLean(target.z - batter.sweetSpot.z, contactAt)
-  pose.chestTilt += aimTurn.lean
-  poseBody(batter, pose)
-  const aimShift = target.clone().sub(batter.sweetSpot)
-  const { swivelShift } = NO_SWING
-  batter.swing = { ...batter.swing, from, contactAt, aimTurn, aimShift, headLift, swivelShift }
-  // The elbows are solved for this aim once it is set, from the swing's own swivels.
-  batter.swing.swivelShift = solveAimedSwivels(batter)
+  const leaned = kept.reduce((sum, lean) => sum + lean.reach.tilt, 0)
+  const lean = { reach: { ...NO_REACH, tilt: aimLean(target.z - batter.sweetSpot.z, contactAt) - leaned }, from }
+  const { solvedShift } = NO_SWING
+  const leans = [...kept, lean]
+  batter.swing = { ...batter.swing, leans, contactAt, aimTurn, aimShift: new Vector3(), headLift, solvedShift }
+  reachBall(batter, target)
+  // The elbows and the head are solved for this aim once it is set, from the swing's own.
+  batter.swing.solvedShift = solveAimedShift(batter)
 }
 
 /**
@@ -632,23 +1116,29 @@ export function keepSwingOn(batter: Batter, atMs: number, load: number) {
 
 /**
  * Aims the swing under way, judged as it is drawn at swing second `seconds`, at `point` (as aimSwing): one the camera
- * saw no start of from there, and one already on its way only anew at a ball in play, keeping the lean it has eased in
- * with as far as it has (leanFromFor), so only its turn and its grip shift change, which show from the slot on.
+ * saw no start of from there, and one already on its way only anew at a ball in play, keeping each lean it has eased in
+ * with as far as it has (leanFromFor) and leaning on from there as far as this ball takes, so nothing jumps; its turn
+ * and its grip shift show from the slot on.
  */
 export function aimJudgedSwing(batter: Batter, point: Vec3 | null, seconds: number) {
   const { swing } = batter
   if (swing.legs.length === 0) return aimSwing(batter, point, seconds)
   if (!point) return
   const contactAt = contactMoment(batter, fieldToRig(batter.rig, point, aimTarget).x)
-  aimSwing(batter, point, leanFromFor(swing, seconds, contactAt), swing.aimTurn.lean)
+  const kept = swing.leans.map((lean) => ({
+    ...lean,
+    from: leanFromFor(lean.from, swing.contactAt, seconds, contactAt),
+  }))
+  aimSwing(batter, point, seconds, kept)
 }
 
 /**
- * The swing second a swing met at `contactAt` eases its lean in from, so that at swing second `seconds` it has leaned
- * as far as `swing` has: aimed anew there, the lean neither jumps nor stops.
+ * The swing second a lean easing in from `from` to a contact at `before` eases in from to a contact at `contactAt`
+ * instead, so that at swing second `seconds` it has leaned as far as it had: aimed anew there, it neither jumps nor
+ * stops.
  */
-export function leanFromFor(swing: BatterSwing, seconds: number, contactAt: number) {
-  const share = clamp01((seconds - swing.from) / Math.max(swing.contactAt - swing.from, 1e-6))
+export function leanFromFor(from: number, before: number, seconds: number, contactAt: number) {
+  const share = clamp01((seconds - from) / Math.max(before - from, 1e-6))
   return (seconds - share * contactAt) / Math.max(1 - share, 1e-6)
 }
 
@@ -701,19 +1191,26 @@ export function judgeSwing(
  * and its lean eased in and out over the whole swing.
  */
 export function aimedSwingPose(batter: Batter, time: number) {
-  const { from, contactAt, aimTurn, aimShift, headLift, swivelShift } = batter.swing
+  const { leans, contactAt, aimTurn, aimShift, headLift, solvedShift } = batter.swing
   const pose = sampleSwingPose(batter.motion, time)
   const weight = aimWeight(time, contactAt)
   pose.batAzimuth += weight * aimTurn.azimuth
   pose.batElevation += weight * aimTurn.elevation
-  pose.chestTilt += leanWeight(time, from, contactAt) * aimTurn.lean
+  leans.forEach((lean) => leanInto(pose, lean.reach, leanWeight(time, lean.from, contactAt)))
   pose.gripX += weight * aimShift.x
   pose.gripY += weight * aimShift.y
   pose.gripZ += weight * aimShift.z
   pose.headPitch -= weight * headLift
-  pose.backSwivel += sampleTrack(swivelShift[0], time)
-  pose.frontSwivel += sampleTrack(swivelShift[1], time)
-  return pose
+  return addSolved(pose, solvedShift, time)
+}
+
+/** Adds `weight` of `reach` to `pose`. */
+export function leanInto(pose: SwingPose, reach: BodyReach, weight: number) {
+  pose.chestYaw += weight * reach.turn
+  pose.chestTilt += weight * reach.tilt
+  pose.chestSide += weight * reach.side
+  pose.pelvisX += weight * reach.pelvisX
+  pose.pelvisZ += weight * reach.pelvisZ
 }
 
 /**
@@ -769,38 +1266,95 @@ export function batterPoseAt(batter: Batter, nowMs: number, load: number, waggle
   return windupPose(batter, nowMs, load, waggle)
 }
 
-const alongBat = new Vector3()
-
-/** How deep the bat as last posed reaches into the head with its hair and hat (rig units), checked along its length. */
-export function batInHead(batter: Batter) {
-  const head = headVolumes(batter.rig)
-  const depths = Array.from({ length: 25 }, (_, step) => {
-    const height = 0.04 * (step + 1)
-    return deepestPenetration(
-      head,
-      alongBat.copy(batter.knob).addScaledVector(batter.axis, height),
-      batRadiusAt(height),
-    )
-  })
-  return Math.max(...depths)
-}
-
-/** Halves `range`, the share of the way from the pose's own head turn to a look, toward the most that clears the bat. */
-export function halveClearRange(batter: Batter, pose: SwingPose, look: HeadLook, [clear, blocked]: [number, number]) {
-  const middle = (clear + blocked) / 2
-  turnHead(batter.rig, lerp(pose.headYaw, look.yaw, middle), lerp(pose.headPitch, look.pitch, middle))
-  return batInHead(batter) > 0 ? ([clear, middle] as [number, number]) : ([middle, blocked] as [number, number])
+/** The head turned `share` of the way from `pose`'s own turn to `look` rolled `roll` (degrees, rig frame). */
+export function turnHeadToward(batter: Batter, pose: SwingPose, look: HeadLook, roll: number, share: number) {
+  const { rig } = batter
+  turnHead(
+    rig,
+    lerp(pose.headYaw, look.yaw, share),
+    lerp(pose.headPitch, look.pitch, share),
+    lerp(pose.headRoll, roll, share),
+  )
 }
 
 /**
- * Turns the posed batter's head toward `look` (degrees, rig frame) as far as the bat lets it: a hat brim or a bob
- * turned toward the bat resting behind the head stops short, on the way from the pose's own head turn, which the
- * swing keeps clear of the bat.
+ * Whether the head turned `share` of the way from `pose`'s own turn to `look`, rolled `roll`, keeps `room` from
+ * `spheres`.
  */
-export function turnHeadClearOfBat(batter: Batter, pose: SwingPose, look: HeadLook) {
-  turnHead(batter.rig, look.yaw, look.pitch)
-  if (batInHead(batter) <= 0) return
-  let range: [number, number] = [0, 1]
-  for (let step = 0; step < 10; step++) range = halveClearRange(batter, pose, look, range)
-  turnHead(batter.rig, lerp(pose.headYaw, look.yaw, range[0]), lerp(pose.headPitch, look.pitch, range[0]))
+export function headClearAt(
+  batter: Batter,
+  pose: SwingPose,
+  look: HeadLook,
+  roll: number,
+  spheres: Sphere[],
+  room: number,
+  share: number,
+) {
+  turnHeadToward(batter, pose, look, roll, share)
+  return spheresInHead(batter, spheres, room) <= 0
+}
+
+/**
+ * The most of the way, from `from` up to `to` (shares of the way from `pose`'s own head turn, which the swing keeps
+ * clear of the arms, mittens, and bat, to `look` rolled `roll`), that the head turns before a hat brim or a bob first
+ * comes within `room` of one of `spheres`, so it never jumps past one to a clear turn beyond.
+ */
+export function clearShare(
+  batter: Batter,
+  pose: SwingPose,
+  look: HeadLook,
+  roll: number,
+  spheres: Sphere[],
+  room: number,
+  [from, to]: [number, number],
+) {
+  const angle = Math.max(
+    Math.abs(look.yaw - pose.headYaw),
+    Math.abs(look.pitch - pose.headPitch),
+    Math.abs(roll - pose.headRoll),
+  )
+  const count = Math.max(1, Math.ceil((angle * (to - from)) / HEAD_CLEARANCE.pathStep))
+  const shares = Array.from({ length: count }, (_, step) => lerp(from, to, (step + 1) / count))
+  const blocked = shares.findIndex((share) => !headClearAt(batter, pose, look, roll, spheres, room, share))
+  if (blocked < 0) return to
+  let range: [number, number] = [shares[blocked - 1] ?? from, shares[blocked]]
+  for (let step = 0; step < 6; step++) range = halveClearRange(batter, pose, look, roll, spheres, room, range)
+  return range[0]
+}
+
+/** Halves `range`, from a share of the way that keeps `room` from `spheres` to one that does not (clearShare). */
+export function halveClearRange(
+  batter: Batter,
+  pose: SwingPose,
+  look: HeadLook,
+  roll: number,
+  spheres: Sphere[],
+  room: number,
+  [clear, blocked]: [number, number],
+): [number, number] {
+  const middle = (clear + blocked) / 2
+  return headClearAt(batter, pose, look, roll, spheres, room, middle) ? [middle, blocked] : [clear, middle]
+}
+
+/**
+ * Turns the posed batter's head toward `look` (degrees, rig frame), rolled `roll` about its line of sight, as far as
+ * its arms, mittens, and bat let it (clearShare), easing over `delta` seconds from `share`, how far it turned last, to
+ * as far as keeps `lead` (rig units) from them, so it turns away ahead of an arm or the bat coming near; one closing in
+ * faster stops it at once. Returns how far it turns now.
+ */
+export function turnHeadClear(
+  batter: Batter,
+  pose: SwingPose,
+  look: HeadLook,
+  roll: number,
+  lead: number,
+  { share, delta }: { share: number; delta: number },
+) {
+  const spheres = headNeighbours(batter, pose)
+  const { room } = HEAD_CLEARANCE
+  const kept = clearShare(batter, pose, look, roll, spheres, room + lead, [0, 1])
+  const eased = damp(share, kept, HEAD_FOLLOW_RATE, delta)
+  const turned = eased > kept ? clearShare(batter, pose, look, roll, spheres, room, [kept, eased]) : eased
+  turnHeadToward(batter, pose, look, roll, turned)
+  return turned
 }

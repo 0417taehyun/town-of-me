@@ -359,13 +359,15 @@ const waistInBody = new Vector3()
 
 /**
  * Turns the chest about its tilted spine (degrees: `tilt` forward, `side` toward -x, `yaw` about the spine, then `roll`
- * lifting the +x shoulder) on the posed pelvis, and the head to `headYaw` and `headPitch` (down) in the rig frame.
+ * lifting the +x shoulder) on the posed pelvis, and the head to `headYaw`, `headPitch` (down) and `headRoll` in the rig
+ * frame (turnHead).
  */
 export function poseChest(
   rig: BallplayerRig,
   chest: { yaw: number; tilt: number; side: number; roll: number },
   headYaw: number,
   headPitch: number,
+  headRoll = 0,
 ) {
   const { body } = rig
   tiltYaw(chestTurn, chest.tilt, chest.side, chest.yaw).multiply(
@@ -376,12 +378,15 @@ export function poseChest(
   waistInBody.set(0, BALLPLAYER_BODY.hipHeight + BALLPLAYER_BODY.waistUp, 0).applyQuaternion(chestTurn)
   body.position.copy(waist).sub(waistInBody)
   body.updateMatrix()
-  turnHead(rig, headYaw, headPitch)
+  turnHead(rig, headYaw, headPitch, headRoll)
 }
 
-/** Turns the head on the posed chest to `yaw` and `pitch` (down), degrees in the rig frame. */
-export function turnHead(rig: Pick<BallplayerRig, 'body' | 'head'>, yaw: number, pitch: number) {
-  headTurn.setFromEuler(headAngles.set(pitch * DEG2RAD, yaw * DEG2RAD, 0, 'YXZ'))
+/**
+ * Turns the head on the posed chest to `yaw` and `pitch` (down), degrees in the rig frame, then `roll` about the line of
+ * sight, lifting the head's +x side: a tilt that leaves the eyes on what they look at.
+ */
+export function turnHead(rig: Pick<BallplayerRig, 'body' | 'head'>, yaw: number, pitch: number, roll = 0) {
+  headTurn.setFromEuler(headAngles.set(pitch * DEG2RAD, yaw * DEG2RAD, roll * DEG2RAD, 'YXZ'))
   rig.head.quaternion.copy(rig.body.quaternion).invert().multiply(headTurn)
   rig.head.updateMatrix()
 }

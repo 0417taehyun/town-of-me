@@ -1,12 +1,7 @@
 import { Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
 import type { Vec3 } from '../../../data/models'
-import {
-  type AppearanceField,
-  DEFAULT_PLAYER_PROFILE,
-  type PlayerProfile,
-  PROFILE_CHOICES,
-} from '../../../data/playerProfile'
+import { DEFAULT_PLAYER_PROFILE } from '../../../data/playerProfile'
 import { DERBY_PHASE_MS, RESULT_HOLD_MS } from '../../game/derby'
 import type { BattingSide } from '../../game/field'
 import {
@@ -20,8 +15,8 @@ import {
 import { PITCH_TARGET_BAND } from '../../game/pitchSchedule'
 import { BATTER_LOAD_START } from '../ballplayerCast'
 import { PLAYER_SCALE } from '../stageLayout'
-import { ARM_BONES, ARM_RADII, BALLPLAYER_BODY, FOREARM_RADIUS, shoulderPoint } from './ballplayerRig'
-import { BAT, batPenetration, batRadiusAt } from './bat'
+import { ARM_BONES, BALLPLAYER_BODY, hipOffset, shoulderPoint } from './ballplayerRig'
+import { BAT } from './bat'
 import {
   type Batter,
   batterPoseAt,
@@ -32,8 +27,7 @@ import {
   NO_SWING,
   poseBatter,
 } from './batter'
-import { type BodyVolume, bodyVolumes, deepestPenetration, segmentDistance } from './bodyVolumes'
-import { FOREARM_FREE_SPAN, MITTEN } from './mittenHands'
+import { armStretch, batterOverlaps, OVERLAP_PAIRS } from '../../../testing/batterOverlap'
 import {
   BEGUN_SWING,
   begunSwingState,
@@ -55,8 +49,10 @@ import {
 const sides: BattingSide[] = ['right', 'left']
 /** A swing is back in its stance this long after it starts (ms). */
 const RETURNED_MS = SWING_MS + FINISH_HOLD_MS + RETURN_MS
-/** How deep anything may sink into anything (m): about a seam's width, invisible at the batting camera's distance. */
-const TOLERANCE = 0.005
+/** How deep anything may sink into anything (m): a millimeter, the overlap measure's own tolerance. */
+const TOLERANCE = 0.001
+/** How much longer than its bone an upper arm may be drawn: soft IK's own at an arm's full reach (twoBoneIk.ts). */
+const STRETCH = 0.03
 
 /** Where a pitch aimed at `corner` is met by a swing `timingSeconds` off PERFECT (early swings meet it further out). */
 function meetPoint(type: PitchTypeId, corner: { x: number; y: number }, timingSeconds: number) {
@@ -78,24 +74,6 @@ function meetPointsOf(types: readonly PitchTypeId[]) {
 }
 
 const meetPoints = meetPointsOf(PITCH_TYPE_IDS)
-
-/** Option `index` of `field`, counting round its choices. */
-function optionAt<Field extends AppearanceField>(field: Field, index: number) {
-  const { options } = PROFILE_CHOICES[field]
-  return options[index % options.length] as PlayerProfile[Field]
-}
-
-/**
- * Every hat with every hair (they fill the same place round the head), and every other option the town character
- * creator offers spread over them, so each one is worn at least once.
- */
-const looks: Partial<PlayerProfile>[] = PROFILE_CHOICES.hat.options.flatMap((hat, hatIndex) =>
-  PROFILE_CHOICES.hair.options.map((hair, hairIndex) => {
-    const index = hatIndex * PROFILE_CHOICES.hair.options.length + hairIndex
-    const spread = ['ears', 'nose', 'mustache', 'top', 'bottom', 'shoes'] as const
-    return { hat, hair, ...Object.fromEntries(spread.map((field) => [field, optionAt(field, index + hatIndex)])) }
-  }),
-)
 
 /**
  * Swings at `point` (the contact point when null) a swing the camera saw no start of, taken at `startMs` (game ms) from
@@ -132,113 +110,6 @@ function mirrorGaps(right: Batter, left: Batter, nowMs: number) {
   return parts(right).map((part, index) => leftParts[index].distanceTo(new Vector3(-part.x, part.y, part.z)))
 }
 
-const along = new Vector3()
-
-/** Mitten `index`'s capsule, as last posed: its two ends and its middle (rig frame). */
-function mittenPoints(batter: Batter, index: number) {
-  const mitten = batter.mittens[index]
-  return [-1, 0, 1].map((end) =>
-    new Vector3(0, 0, MITTEN.center + end * (MITTEN.long - MITTEN.wide))
-      .applyQuaternion(mitten.quaternion)
-      .add(mitten.position),
-  )
-}
-
-/** Whether `volume` comes anywhere near the bat as last posed: most of the body is far from most of the bat. */
-function nearBat(batter: Batter, volume: BodyVolume) {
-  const fromKnob = along.copy(volume.center).sub(batter.knob)
-  const height = Math.min(BAT.length, Math.max(0, fromKnob.dot(batter.axis)))
-  const gap = fromKnob.addScaledVector(batter.axis, -height).length()
-  return gap < volume.radii.length() + 0.1
-}
-
-/** How deep (rig units) the bat as last posed reaches into `volumes`, checked every 2 cm along it. */
-function batInBody(batter: Batter, volumes: BodyVolume[]) {
-  const near = volumes.filter((volume) => nearBat(batter, volume))
-  const depths = Array.from({ length: 51 }, (_, step) => {
-    const height = (BAT.length * step) / 50
-    const center = along.copy(batter.knob).addScaledVector(batter.axis, height)
-    return deepestPenetration(near, center, batRadiusAt(height))
-  })
-  return Math.max(...depths)
-}
-
-/** How deep (rig units) arm `index` reaches into `volumes`: its elbow, its forearm, and its mitten. */
-function armInBody(batter: Batter, index: number, volumes: BodyVolume[]) {
-  const elbow = batter.rig.elbows[index]
-  const wrist = batter.rig.wrists[index]
-  const forearm = [0.25, 0.5, 0.75, 1].map((share) =>
-    deepestPenetration(volumes, along.copy(elbow).lerp(wrist, share), FOREARM_RADIUS),
-  )
-  const mitten = mittenPoints(batter, index).map((center) => deepestPenetration(volumes, center, MITTEN.wide))
-  return Math.max(deepestPenetration(volumes, elbow, ARM_RADII.elbow), ...forearm, ...mitten)
-}
-
-/** How deep (rig units) the bat reaches into arm `index`: its shoulder, its upper arm, its forearm short of the mitten. */
-function batInArm(batter: Batter, index: number) {
-  const { knob, axis } = batter
-  const elbow = batter.rig.elbows[index]
-  const shoulder = shoulderPoint(batter.rig, index, new Vector3())
-  const upperArm = [0.25, 0.5, 0.75, 1].map((share) =>
-    batPenetration(knob, axis, along.copy(shoulder).lerp(elbow, share), ARM_RADII.upper),
-  )
-  const forearm = FOREARM_FREE_SPAN.map((share) =>
-    batPenetration(knob, axis, along.copy(elbow).lerp(batter.rig.wrists[index], share), FOREARM_RADIUS),
-  )
-  return Math.max(batPenetration(knob, axis, shoulder, ARM_RADII.shoulder), ...upperArm, ...forearm)
-}
-
-/**
- * How deep (m) the batter as last posed sinks into itself anywhere: the bat into the head (with its hair and hat), the
- * torso, the hips, the legs, or an arm; an elbow, a forearm, or a mitten into the body; one forearm into the other.
- * Known limits the elbow's swivel alone cannot clear, left out: the upper arms cross under the chin, into the head by
- * up to about 3 cm from contact into the follow-through on a high pitch met early and into a bob's side hair by up to
- * 4 cm on an outside one (under 7 mm through the held finish), and the top forearm runs over the bottom mitten, by up
- * to about 3 cm, as the bat rolls over and on the way back, where the body hides both hands from the batting camera.
- */
-function deepestInItself(batter: Batter) {
-  const volumes = bodyVolumes(batter.rig)
-  const { elbows, wrists } = batter.rig
-  const forearms = 2 * FOREARM_RADIUS - segmentDistance(elbows[0], wrists[0], elbows[1], wrists[1])
-  const depths = [batInBody(batter, volumes), forearms, ...[0, 1].map((index) => armInBody(batter, index, volumes))]
-  return Math.max(...depths, ...[0, 1].map((index) => batInArm(batter, index))) * PLAYER_SCALE
-}
-
-/**
- * Game ms from a swing's start to check it at: every half ms to its contact, while the bat moves fastest, then every
- * ms while its aim fades out and the bat rolls over; with `full`, on for 200 ms, then every 5 ms through the finish,
- * the return, and the waggle fading back in.
- */
-function swingFrames(full: boolean) {
-  const toContact = Array.from({ length: CONTACT_DELAY_MS * 2 }, (_, step) => step / 2)
-  const onward = Array.from({ length: full ? 200 : 100 }, (_, step) => CONTACT_DELAY_MS + step)
-  const rest = Array.from(
-    { length: (RETURNED_MS + WAGGLE_FADE_MS - CONTACT_DELAY_MS - 200) / 5 + 1 },
-    (_, step) => CONTACT_DELAY_MS + 200 + step * 5,
-  )
-  return [...toContact, ...onward, ...(full ? rest : [])]
-}
-
-/** The deepest (m) a swing from `load` at `point` sinks the batter into itself, and where. */
-function deepestInSwing(batter: Batter, load: number, point: Vec3 | null, full: boolean) {
-  swingFromWindup(batter, 0, load, point)
-  const depths = swingFrames(full).map((nowMs) => {
-    poseAt(batter, nowMs, nowMs < RETURNED_MS ? load : 0, true)
-    return { depth: deepestInItself(batter), at: `${point ? 'a hit' : 'a miss'} from load ${load} at ${nowMs} ms` }
-  })
-  return depths.reduce((deepest, depth) => (depth.depth > deepest.depth ? depth : deepest))
-}
-
-/** The deepest (m) the batter sinks into itself through its windup, from the stance to the front foot down. */
-function deepestInWindup(batter: Batter) {
-  batter.swing = NO_SWING
-  const depths = Array.from({ length: 21 }, (_, step) => {
-    poseAt(batter, step * 100, step / 20, true)
-    return { depth: deepestInItself(batter), at: `the windup at load ${step / 20}` }
-  })
-  return depths.reduce((deepest, depth) => (depth.depth > deepest.depth ? depth : deepest))
-}
-
 /** Points that show a pop: the bat's tip and knob, both mittens, both elbows, the head, the chest (field meters). */
 function trackedPoints(batter: Batter) {
   batter.rig.root.updateMatrixWorld(true)
@@ -267,15 +138,24 @@ function pathVelocities(path: Vector3[][]) {
     .map((points, ms) => points.map((point, part) => point.clone().sub(path[ms][part]).multiplyScalar(1000)))
 }
 
+/** How deep (m) the batter as last posed sinks into itself, its deepest pair (batterOverlap.ts). */
+function deepestInItself(batter: Batter) {
+  const overlaps = batterOverlaps(batter)
+  return Math.max(...OVERLAP_PAIRS.map((pair) => overlaps[pair]))
+}
+
 /**
  * The batter each ms from `fromMs` to `toMs` (game ms) at load 1: its tracked points, its bat's azimuth, and every
- * other ms how deep (m) it sinks into itself.
+ * fifth ms how deep (m) it sinks into itself and how far an arm is drawn past its bone (batterOverlap.*.test.ts check
+ * these swings closer).
  */
 function drawnPath(batter: Batter, fromMs: number, toMs: number) {
   return Array.from({ length: toMs - fromMs + 1 }, (_, ms) => {
     const pose = poseAt(batter, fromMs + ms, 1)
-    const depth = ms % 2 === 0 ? deepestInItself(batter) : 0
-    return { points: trackedPoints(batter), azimuth: pose.batAzimuth, depth }
+    const measured = ms % 5 === 0
+    const depth = measured ? deepestInItself(batter) : 0
+    const stretch = measured ? armStretch(batter) : 0
+    return { points: trackedPoints(batter), azimuth: pose.batAzimuth, depth, stretch }
   })
 }
 
@@ -332,13 +212,15 @@ const JOINT_ANGLES = [
   'gripAngle',
   'headYaw',
   'headPitch',
+  'headRoll',
   'backSwivel',
   'frontSwivel',
 ] as const
+const HEAD_ANGLES = ['headYaw', 'headPitch', 'headRoll'] as const
 
-/** The most any joint angle of `pose` (degrees) differs from `last`. */
-function angleChange(pose: SwingPose, last: SwingPose) {
-  return Math.max(...JOINT_ANGLES.map((channel) => Math.abs(pose[channel] - last[channel])))
+/** The most any of `channels` (joint angles, degrees) of `pose` differs from `last`. */
+function angleChange(pose: SwingPose, last: SwingPose, channels: readonly (keyof SwingPose)[] = JOINT_ANGLES) {
+  return Math.max(...channels.map((channel) => Math.abs(pose[channel] - last[channel])))
 }
 
 describe('batter', () => {
@@ -380,61 +262,50 @@ describe('batter', () => {
     expect(Math.max(...gaps)).toBeLessThan(1e-6)
   })
 
-  // Each look meets one pitch type's balls in turn, the first look all of them, so every type meets every hair and hat.
-  const cases = looks.map((look, index) => ({
-    look,
-    types: index === 0 ? PITCH_TYPE_IDS : [PITCH_TYPE_IDS[index % 3]],
-  }))
+  // Every look, both sides, and every pitch the batter can meet are checked for overlaps in batterOverlap.*.test.ts.
 
-  describe.each(sides)('batting %s-handed', (side) => {
-    it.each(cases)(
-      'keeps its bat, arms, and mittens out of its body and each other, wearing $look',
-      ({ look, types }) => {
-        const batter = createBatter({ ...DEFAULT_PLAYER_PROFILE, ...look }, side)
-        const swings = [
-          deepestInWindup(batter),
-          deepestInSwing(batter, 1, null, true),
-          ...[0, 0.5].map((load) => deepestInSwing(batter, load, null, false)),
-          ...meetPointsOf(types).map((point) => deepestInSwing(batter, 1, point, false)),
+  // The plain bob also plays it: its side hair is the nearest the arms come to the head, which turns to clear them.
+  it.each([{ hair: 'crop' }, { hair: 'bob' }] as const)(
+    'swings, holds its finish, and comes back to its stance smoothly, without a pop anywhere, wearing $hair hair',
+    (look) => {
+      const batter = createBatter({ ...DEFAULT_PLAYER_PROFILE, ...look }, 'right')
+      const outside = [meetPoint('changeup', corners[1], 0), meetPoint('fastball', corners[3], 0)]
+      for (const point of [null, meetPoint('fastball', corners[0], 0), ...outside]) {
+        swingFromWindup(batter, 0, 1, point)
+        const frames = Array.from({ length: RETURNED_MS + WAGGLE_FADE_MS }, (_, ms) => ms + 1)
+        const poses = frames.map((nowMs) => ({ nowMs, pose: poseAt(batter, nowMs, nowMs < RETURNED_MS ? 1 : 0, true) }))
+        const velocities = frames.map((nowMs) => ({ nowMs, velocities: velocitiesAt(batter, nowMs, 1) }))
+        const changes = velocities.slice(1).map(({ nowMs, velocities: now }, index) => ({
+          nowMs,
+          speed: Math.max(...now.map((velocity, part) => velocity.distanceTo(velocities[index].velocities[part]))),
+          angle: angleChange(poses[index + 1].pose, poses[index].pose),
+          head: angleChange(poses[index + 1].pose, poses[index].pose, HEAD_ANGLES),
+        }))
+        const swinging = changes.filter(({ nowMs }) => nowMs < SWING_MS)
+        const after = changes.filter(({ nowMs }) => nowMs >= SWING_MS)
+        expect(Math.max(...swinging.map(({ angle }) => angle))).toBeLessThan(10)
+        expect(Math.max(...after.map(({ speed }) => speed))).toBeLessThan(0.3)
+        expect(Math.max(...after.map(({ angle }) => angle))).toBeLessThan(0.5)
+        // The head keeps its eyes on the ball through the swing, and on the way back turns about 25 degrees over its
+        // keys, tilting calmly round the shoulder and the hands it clears instead of wobbling.
+        expect(Math.max(...swinging.map(({ head }) => head))).toBeLessThan(4)
+        expect(Math.max(...after.map(({ head }) => head))).toBeLessThan(0.15)
+        // The way back is calm: the bat's tip and the mittens never rush, as the swing wound back would. The tip runs
+        // 0.87 rig units past the hands, the bottom mitten holding the bat at its knob.
+        const returning = velocities.filter(({ nowMs }) => nowMs >= SWING_MS).map((frame) => frame.velocities)
+        expect(Math.max(...returning.map(([tip]) => tip.length()))).toBeLessThan(6.5)
+        const mittenSpeeds = returning.flatMap(([, , back, front]) => [back.length(), front.length()])
+        expect(Math.max(...mittenSpeeds)).toBeLessThan(4)
+        const seams = [
+          SWING_MS,
+          ...RETURN_KEY_IDS.map((id) => SWING_MS + RETURN_KEY_MS[id]),
+          RETURNED_MS + WAGGLE_FADE_MS,
         ]
-        const deepest = swings.reduce((worst, swing) => (swing.depth > worst.depth ? swing : worst))
-        expect(deepest.depth, deepest.at).toBeLessThan(TOLERANCE)
-      },
-    )
-  })
-
-  it('swings, holds its finish, and comes back to its stance smoothly, without a pop anywhere', () => {
-    const batter = createBatter(DEFAULT_PLAYER_PROFILE, 'right')
-    const outside = [meetPoint('changeup', corners[1], 0), meetPoint('fastball', corners[3], 0)]
-    for (const point of [null, meetPoint('fastball', corners[0], 0), ...outside]) {
-      swingFromWindup(batter, 0, 1, point)
-      const frames = Array.from({ length: RETURNED_MS + WAGGLE_FADE_MS }, (_, ms) => ms + 1)
-      const poses = frames.map((nowMs) => ({ nowMs, pose: poseAt(batter, nowMs, nowMs < RETURNED_MS ? 1 : 0, true) }))
-      const velocities = frames.map((nowMs) => ({ nowMs, velocities: velocitiesAt(batter, nowMs, 1) }))
-      const changes = velocities.slice(1).map(({ nowMs, velocities: now }, index) => ({
-        nowMs,
-        speed: Math.max(...now.map((velocity, part) => velocity.distanceTo(velocities[index].velocities[part]))),
-        angle: angleChange(poses[index + 1].pose, poses[index].pose),
-      }))
-      const swinging = changes.filter(({ nowMs }) => nowMs < SWING_MS)
-      const after = changes.filter(({ nowMs }) => nowMs >= SWING_MS)
-      expect(Math.max(...swinging.map(({ angle }) => angle))).toBeLessThan(10)
-      expect(Math.max(...after.map(({ speed }) => speed))).toBeLessThan(0.3)
-      expect(Math.max(...after.map(({ angle }) => angle))).toBeLessThan(0.5)
-      // The way back is calm: the bat's tip and the mittens never rush, as the swing wound back would.
-      const returning = velocities.filter(({ nowMs }) => nowMs >= SWING_MS).map((frame) => frame.velocities)
-      expect(Math.max(...returning.map(([tip]) => tip.length()))).toBeLessThan(6)
-      const mittenSpeeds = returning.flatMap(([, , back, front]) => [back.length(), front.length()])
-      expect(Math.max(...mittenSpeeds)).toBeLessThan(4)
-      const seams = [
-        SWING_MS,
-        ...RETURN_KEY_IDS.map((id) => SWING_MS + RETURN_KEY_MS[id]),
-        RETURNED_MS + WAGGLE_FADE_MS,
-      ]
-      expect(velocityJump(batter, CONTACT_DELAY_MS, 0.005)).toBeLessThan(0.5)
-      expect(Math.max(...seams.map((atMs) => velocityJump(batter, atMs, 0.01)))).toBeLessThan(0.01)
-    }
-  })
+        expect(velocityJump(batter, CONTACT_DELAY_MS, 0.005)).toBeLessThan(0.5)
+        expect(Math.max(...seams.map((atMs) => velocityJump(batter, atMs, 0.01)))).toBeLessThan(0.01)
+      }
+    },
+  )
 
   // A swing plays the research's 175 ms from the foot strike in CONTACT_DELAY_MS, under three frames at 60 fps, so one
   // that meets its ball early in the swing turns its bat onto it in under 10 ms: no point's velocity ever jumps, but
@@ -504,6 +375,7 @@ describe('batter', () => {
       expect(pops.head).toBeLessThan(5)
       expect(pops.headSpeed).toBeLessThan(11)
       expect(Math.max(...path.map(({ depth }) => depth))).toBeLessThan(TOLERANCE)
+      expect(Math.max(...path.map(({ stretch }) => stretch))).toBeLessThan(STRETCH)
       poseAt(batter, throughMs + stretchMs, 1)
       expect(worldSweetSpot(batter).distanceTo(new Vector3(point.x, point.y, point.z))).toBeLessThan(0.002)
       // It meets the ball about as fast as a swing the camera saw no start of: the swing seen first is no weaker.
@@ -531,6 +403,7 @@ describe('batter', () => {
       expect(pops.body).toBeLessThan(36)
       expect(pops.head).toBeLessThan(5)
       expect(Math.max(...path.map(({ depth }) => depth))).toBeLessThan(TOLERANCE)
+      expect(Math.max(...path.map(({ stretch }) => stretch))).toBeLessThan(STRETCH)
       // Back in the windup as if it had never swung.
       const checked = path.at(-1)!.points
       batter.swing = NO_SWING
@@ -586,6 +459,28 @@ describe('batter', () => {
     const slides = planted.map(({ ankle }) => ankle.distanceTo(frames[0].ankle) * PLAYER_SCALE)
     expect(planted.length).toBeGreaterThan(FINISH_HOLD_MS)
     expect(Math.max(...slides)).toBeLessThan(0.01)
+  })
+
+  it('keeps both feet planted while its body reaches for a ball out in front, its legs reaching them', () => {
+    const batter = createBatter(DEFAULT_PLAYER_PROFILE, 'right')
+    const { thigh, shin } = BALLPLAYER_BODY
+    for (const point of [meetPoint('fastball', corners[3], -0.2), meetPoint('curve', corners[1], -0.2), null]) {
+      swingFromWindup(batter, 0, 1, point)
+      const frames = Array.from({ length: SWING_MS + 1 }, (_, nowMs) => {
+        poseAt(batter, nowMs, 1)
+        const { rig } = batter
+        const reached = [0, 1].map((index) => {
+          const hip = hipOffset(rig.pelvisTurn, index, new Vector3()).add(rig.pelvis.position)
+          const knee = new Vector3(0, -thigh, 0).applyQuaternion(rig.legs[index].quaternion).add(hip)
+          const shinTurn = rig.legs[index].quaternion.clone().multiply(rig.knees[index].quaternion)
+          return new Vector3(0, -shin, 0).applyQuaternion(shinTurn).add(knee).distanceTo(rig.ankles[index])
+        })
+        return { front: rig.ankles[1].clone(), reached: Math.max(...reached) }
+      })
+      const slides = frames.map(({ front }) => front.distanceTo(frames[0].front) * PLAYER_SCALE)
+      expect(Math.max(...slides)).toBeLessThan(1e-6)
+      expect(Math.max(...frames.map(({ reached }) => reached)) * PLAYER_SCALE).toBeLessThan(0.001)
+    }
   })
 
   it('is back in its stance before the next pitch can start its load, even after the shortest result', () => {

@@ -121,9 +121,21 @@ export function penetration(volume: BodyVolume, center: Vector3, radius: number)
   if (volume.shape === 'roundedBox') return roundedBoxPenetration(volume, local, radius)
   if (volume.shape === 'box') return boxPenetration(volume.radii, local, radius)
   if (volume.shape === 'cylinder') return cylinderPenetration(volume.radii, local, radius)
-  const { radii } = volume
-  const inflated = Math.hypot(local.x / (radii.x + radius), local.y / (radii.y + radius), local.z / (radii.z + radius))
-  return inflated < 1 ? (1 - inflated) * (Math.min(radii.x, radii.y, radii.z) + radius) : 0
+  return ellipsoidPenetration(volume.radii, local, radius)
+}
+
+/**
+ * How deep a sphere of `radius` centered at `local` (in the ellipsoid's own axes) sits in an ellipsoid of `radii`: its
+ * radius less the distance to the surface, taken as how far the ellipsoid's measure is off 1 over how steeply it grows
+ * there, which holds along a long axis as well as a short one near the surface.
+ */
+export function ellipsoidPenetration(radii: Vector3, local: Vector3, radius: number) {
+  const scaledX = local.x / radii.x
+  const scaledY = local.y / radii.y
+  const scaledZ = local.z / radii.z
+  const measure = Math.hypot(scaledX, scaledY, scaledZ)
+  const slope = Math.hypot(scaledX / radii.x, scaledY / radii.y, scaledZ / radii.z) / Math.max(measure, 1e-9)
+  return Math.max(0, radius - (measure - 1) / Math.max(slope, 1e-9))
 }
 
 /** How deep a sphere of `radius` centered at `local` (in the solid's own axes) sits in a rounded box. */

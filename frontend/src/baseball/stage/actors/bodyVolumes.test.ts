@@ -2,7 +2,7 @@ import { type Mesh, type Object3D, Quaternion, Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PLAYER_PROFILE } from '../../../data/playerProfile'
 import { batterPoseAt, createBatter, judgeSwing, poseBatter } from './batter'
-import { legVolumes, segmentDistance } from './bodyVolumes'
+import { ellipsoidPenetration, legVolumes, segmentDistance } from './bodyVolumes'
 import { CONTACT_DELAY_MS } from './swingMotion'
 
 /** `mesh`'s center and turn in its rig's frame, the space of its `root`. */
@@ -30,6 +30,14 @@ describe('body volumes', () => {
         expect(volumes[index].inverse.clone().multiply(turn).angleTo(new Quaternion())).toBeLessThan(1e-6)
       })
     }
+  })
+
+  it('measure how deep a ball sits in an ellipsoid as deep along its long axes as along its short one', () => {
+    // A bob's side hair: narrow across, long down and back.
+    const radii = new Vector3(0.12, 0.36, 0.31)
+    const touching = [new Vector3(0.12 + 0.05, 0, 0), new Vector3(0, 0.36 + 0.05, 0), new Vector3(0, 0, -0.31 - 0.05)]
+    for (const center of touching) expect(ellipsoidPenetration(radii, center, 0.06)).toBeCloseTo(0.01, 4)
+    expect(ellipsoidPenetration(radii, new Vector3(0, 0.36 + 0.07, 0), 0.06)).toBe(0)
   })
 
   it('measure the shortest distance between two segments, ends included', () => {
