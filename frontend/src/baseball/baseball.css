@@ -350,8 +350,8 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   line-height: 1.3;
 }
 
-/* After practice, the card that waits for the run stands in the band the camera panel leaves the play. */
-.derby-screen .derby-practice-done {
+/* After practice and a run, the card that waits for the next one stands in the band the camera panel leaves the play. */
+.derby-screen :is(.derby-practice-done, .derby-result) {
   left: var(--play-centre, 50%);
   width: min(520px, calc(var(--play-width, 100vw) - 32px));
 }

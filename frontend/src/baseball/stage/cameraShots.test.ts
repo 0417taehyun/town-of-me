@@ -90,7 +90,7 @@ describe('camera shots', () => {
       { width: 1440, height: 810 },
       { width: 1024, height: 768 },
     ]
-    const playing = { screen: 'play', chasing: false, searching: false, size: 'large' } as const
+    const playing = { screen: 'play', chasing: false, searching: false, waiting: false, size: 'large' } as const
     screens.forEach((screen) =>
       sides.forEach((side) => {
         const { band } = cameraPanelLayout(playing, screen, side)

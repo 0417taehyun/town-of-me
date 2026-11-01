@@ -13,7 +13,7 @@ import {
 } from './cameraPanelLayout'
 
 const LAPTOP = { width: 1440, height: 900 }
-const PLAYING: CameraPanelState = { screen: 'play', chasing: false, searching: false, size: 'medium' }
+const PLAYING: CameraPanelState = { screen: 'play', chasing: false, searching: false, waiting: false, size: 'medium' }
 
 /** Where the panel goes, for a right-handed batter on a laptop screen. */
 function placementOf(state: Partial<CameraPanelState>) {
@@ -31,15 +31,25 @@ const blockedStore = {
 }
 
 describe('the camera panel layout', () => {
-  it('is the stage while the camera sets up, beside the play from practice on, a chip in a chase, hidden after', () => {
+  it('is the stage while the camera sets up, beside the play from practice on, a chip in a chase, hidden when off', () => {
     const steps = ['setup', 'practice', 'practiceDone', 'play', 'result'] as const
     expect(steps.map((step) => cameraScreen(true, step))).toEqual(['setup', 'play', 'play', 'play', 'result'])
     expect(cameraScreen(false, 'play')).toBe(null)
     expect(placementOf({ screen: 'setup', size: 'off' })).toBe('stage')
     expect(placementOf({})).toBe('side')
     expect(placementOf({ chasing: true })).toBe('chip')
-    expect(placementOf({ screen: 'result', searching: true })).toBe('hidden')
     expect(placementOf({ screen: null })).toBe('hidden')
+  })
+
+  it('comes back at medium while a step waits for the stance, after practice or a run, though the visitor hid it', () => {
+    for (const screen of ['play', 'result'] as const) {
+      const hidden = cameraPanelLayout({ ...PLAYING, screen, waiting: true, size: 'off' }, LAPTOP, 'right')
+      expect(hidden.placement).toBe('side')
+      expect(hidden.width).toBe(cameraPanelLayout(PLAYING, LAPTOP, 'right').width)
+      expect(hidden.band.width).toBe(LAPTOP.width - PANEL_EDGE - hidden.width)
+    }
+    expect(placementOf({ screen: 'result', waiting: true, size: 'large' })).toBe('side')
+    expect(placementOf({ screen: 'result', size: 'off' })).toBe('hidden')
   })
 
   it('hides when the visitor turns it off, but never while the camera is looking for them', () => {

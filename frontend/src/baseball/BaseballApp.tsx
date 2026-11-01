@@ -323,18 +323,20 @@ export function DerbyScreen({
   const pitchCount = run?.plan.schedule.length ?? 0
   const paused = pausedForAway(step, camera.present, betweenPitches(hud, pitchCount))
   const searching = cameraOn && !camera.seen
-  const panel = cameraPanelLayout({ screen, chasing: chasingHomeRun(hud), searching, size: panelSize }, viewport, side)
   // A step that waits for the stance says so in a screen reader's ear, as practice and the run do in their captions.
   const waitsForStance = status.kind === 'ready' && step === flow.step && stanceWait(flow) !== null
+  const panelState = { screen, chasing: chasingHomeRun(hud), searching, waiting: waitsForStance, size: panelSize }
+  const panel = cameraPanelLayout(panelState, viewport, side)
   const stanceNeed = waitsForStance && camera.stanceNeed ? stanceNeedText(camera.stanceNeed, side, language) : null
   const stateId = cameraStateId(status, camera.seen)
   // Once the camera sees the visitor, the swing tracker says what to do next, or the stance a step waits for does.
   const trackerState = stateId === 'seen' ? seenCameraState(camera.caption, stanceNeed, language) : null
   const cameraState = trackerState ?? (stateId && cameraCopy.states[stateId])
   const panelShown = panel.placement !== 'hidden'
-  // A panel the visitor hid that is back while the camera looks for them says so, or V would seem to do nothing.
+  // A panel the visitor hid that is back while the camera looks for them, or a step waits for their stance, says so, or V
+  // would seem to do nothing.
   const panelSizeLabel =
-    panelSize === 'off' && panelShown ? cameraCopy.hiddenWhileSearching : cameraCopy.panelSizes[panelSize]
+    panelSize === 'off' && panelShown ? cameraCopy.hiddenWhileNeeded : cameraCopy.panelSizes[panelSize]
   const feedback =
     step === 'practice' && run ? shownPracticeFeedback(judgedResult(hud), run.plan.rules.difficulty) : null
 
@@ -534,7 +536,7 @@ export function DerbyScreen({
             <kbd aria-hidden="true">V</kbd>
           </button>
         )}
-        {/* The panel is hidden here while the camera stays on for another go, so the way to turn it off is too. */}
+        {/* The camera stays on here for another go, so this is the way to turn it off. */}
         {screen === 'result' && (
           <button className="derby-camera-toggle" type="button" onClick={camera.turnOff}>
             {cameraCopy.turnOff}

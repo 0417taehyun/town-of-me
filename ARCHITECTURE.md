@@ -299,13 +299,15 @@ a run's judging take the camera's lag out; L saves the last minute of these numb
 picture. A production build leaves both out. `ui/cameraPanelLayout.ts`
 places the camera panel: the mirrored camera is the stage while it sets up, a column under the scoreboard on the side
 opposite the batter from practice on (medium, 29% of the width, by default; V or the camera button cycles medium, large,
-hidden, remembered in `localStorage`), a corner chip while the camera chases a home run, and hidden on the result screen
-(which can turn the camera off) or below a readable width, but never while the camera looks for the visitor. The stage
-centres the play and the HUD its caption and banner in the band the panel leaves free (`centreInBand` in
-`stage/cameraShots.ts`). No key swings and there is no swing button (keys only press the focused button, leave with
-Escape, or resize the camera panel with V, and in a dev build show the diagnostics with D and save them with L): the
-swings are the camera's, which the stage takes before advancing the derby in the same frame, so a swing seen a little
-late is still judged at the moment its frame was taken.
+hidden, remembered in `localStorage`), a corner chip while the camera chases a home run, and beside the result screen
+too, where the design doc hides it, as that screen waits for the visitor's stance (its card, like practice's last one,
+centres in the band the panel leaves, and the screen can turn the camera off). A panel the visitor hid comes back at
+medium while the camera looks for them or a step waits for their stance, so they see the stance they take, and it hides
+below a readable width. The stage centres the play and the HUD its caption and banner in the band the panel leaves free
+(`centreInBand` in `stage/cameraShots.ts`). No key swings and there is no swing button (keys only press the focused
+button, leave with Escape, or resize the camera panel with V, and in a dev build show the diagnostics with D and save
+them with L): the swings are the camera's, which the stage takes before advancing the derby in the same frame, so a
+swing seen a little late is still judged at the moment its frame was taken.
 
 ## Backend (`backend/src`)
 

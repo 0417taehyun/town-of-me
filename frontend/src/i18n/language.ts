@@ -751,7 +751,7 @@ export const languageCopy = {
         },
         panel: 'Camera view',
         panelSizes: { medium: 'Medium', large: 'Large', off: 'Hidden' },
-        hiddenWhileSearching: 'Hidden · shows while looking for you',
+        hiddenWhileNeeded: 'Hidden · shows when you need it',
         problems: {
           denied: {
             title: 'Camera access is off',
@@ -1531,7 +1531,7 @@ export const languageCopy = {
         },
         panel: '카메라 화면',
         panelSizes: { medium: '중간', large: '크게', off: '숨김' },
-        hiddenWhileSearching: '숨김 · 찾는 동안 보여요',
+        hiddenWhileNeeded: '숨김 · 필요할 때 보여요',
         problems: {
           denied: {
             title: '카메라 권한이 꺼져 있어요',

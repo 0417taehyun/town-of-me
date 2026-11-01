@@ -5,9 +5,10 @@ import type { FreeBand } from '../stage/cameraShots'
 // Where the camera panel goes on each screen of a camera run, and how wide it is. While the camera sets up, the
 // mirrored camera is the stage. Through practice and the run the panel hangs in a column under the scoreboard on the
 // side opposite the batter, at the size the visitor picks with V (remembered in this browser), and the play is centred
-// in the band it leaves free. It shrinks to a corner chip while the camera chases a home run, and hides on the result
-// screen and whenever the camera is off. It never hides while the camera is looking for the visitor, who has to see it
-// to step back into view. V is one of the two keys the derby's page takes itself (derbyKeyAction).
+// in the band it leaves free. It shrinks to a corner chip while the camera chases a home run, and hides whenever the
+// camera is off. It never hides while the camera is looking for the visitor, who has to see it to step back into view,
+// nor while a step waits for their batting stance (after practice, and on the result screen, which has no V to bring it
+// back), so they see the stance they take. V is one of the two keys the derby's page takes itself (derbyKeyAction).
 
 export type CameraPanelPlacement = 'stage' | 'side' | 'chip' | 'hidden'
 
@@ -48,6 +49,8 @@ export type CameraPanelState = {
   chasing: boolean
   /** The camera is on and does not see the visitor. */
   searching: boolean
+  /** A step waits for the visitor's batting stance. */
+  waiting: boolean
   /** The size the visitor picked with V. */
   size: CameraPanelSize
 }
@@ -64,16 +67,15 @@ export function cameraScreen(cameraOn: boolean, step: DerbyStep): CameraScreen |
   return step === 'result' ? 'result' : 'play'
 }
 
-export function cameraPanelPlacement({ screen, chasing, searching, size }: CameraPanelState): CameraPanelPlacement {
-  if (screen === 'setup') return 'stage'
-  if (screen !== 'play') return 'hidden'
-  if (size === 'off' && !searching) return 'hidden'
-  return chasing ? 'chip' : 'side'
+export function cameraPanelPlacement(state: CameraPanelState): CameraPanelPlacement {
+  if (state.screen === 'setup') return 'stage'
+  if (state.screen === null || shownPanelSize(state) === 'off') return 'hidden'
+  return state.chasing ? 'chip' : 'side'
 }
 
-/** The size on screen: a panel the visitor hid comes back at medium while the camera looks for them. */
-export function shownPanelSize(size: CameraPanelSize, searching: boolean): CameraPanelSize {
-  return size === 'off' && searching ? 'medium' : size
+/** The size on screen: a panel the visitor hid comes back at medium while the camera looks for them or a step waits. */
+export function shownPanelSize({ searching, waiting, size }: CameraPanelState): CameraPanelSize {
+  return size === 'off' && (searching || waiting) ? 'medium' : size
 }
 
 /** The side panel's width (px) at `size`, or 0 when it is off or would be too narrow to read. */
@@ -107,7 +109,7 @@ export function cameraPanelLayout(
 ): CameraPanelLayout {
   const side = panelSideFor(battingSide)
   const placement = cameraPanelPlacement(state)
-  const width = placement === 'side' ? sidePanelWidth(shownPanelSize(state.size, state.searching), viewport) : 0
+  const width = placement === 'side' ? sidePanelWidth(shownPanelSize(state), viewport) : 0
   const shown = placement === 'side' && width === 0 ? 'hidden' : placement
   const panelSpan = width > 0 ? PANEL_EDGE + width : 0
   return { placement: shown, side, width, band: freeBand(viewport.width, panelSpan, side) }
