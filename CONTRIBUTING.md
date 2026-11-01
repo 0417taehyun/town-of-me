@@ -20,12 +20,12 @@ and your LinkedIn email in `ADMIN_EMAILS`.
 
 ## Make a change
 
-- Keep a change to one behavior, and to **one module**: `frontend/` or `backend/`. CI rejects a push or pull request that
+- Keep a change to one feature, and to **one module**: `frontend/` or `backend/`. CI rejects a push or pull request that
   touches both, except a dependency-only change to the `package.json` files and the lockfile. Split API changes into a
   backend change first, then a frontend change.
 - Follow the code style in [AGENTS.md](AGENTS.md); lint enforces most of it (`eslint.codeStyle.mjs`).
-- Add a test only where a plausible bug would otherwise go unnoticed, and assert behavior rather than restating
-  constants or copy.
+- Add a test only where a plausible bug in logic would otherwise go unnoticed (mutation-first, not test-first), and
+  assert behavior rather than restating constants, copy, markup or layout.
 - Before you push, run the checks for the module you touched, or `npm run check` for both:
 
   ```sh

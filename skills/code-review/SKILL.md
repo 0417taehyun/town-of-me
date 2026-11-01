@@ -28,4 +28,4 @@ Treat convention findings as P3 unless they create a concrete correctness, regre
 
 ## Output
 
-List findings first in descending priority. Keep summaries brief and avoid praise or a file-by-file walkthrough. If no actionable findings exist, say so explicitly and mention any material test coverage or verification gap. Do not apply fixes unless the user asks for implementation.
+List findings first in descending priority. Keep summaries brief and avoid praise or a file-by-file walkthrough. If no actionable findings exist, say so explicitly. Ask for a missing test only where a plausible logic bug would otherwise go unnoticed; never for rendering, markup, copy or constants. Do not apply fixes unless the user asks for implementation.

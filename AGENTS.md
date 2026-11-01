@@ -38,7 +38,7 @@ npm test
 npm run build
 ```
 
-Equivalent root commands use `--workspace frontend` or `--workspace backend`. Run lint, format, test, and build for the one module touched by a change. Add the smallest focused test for non-trivial logic; do not add a new test framework when the existing one is sufficient.
+Equivalent root commands use `--workspace frontend` or `--workspace backend`. Run lint, format, test, and build for the one module touched by a change. Add a test only where a plausible bug in non-trivial logic would otherwise go unnoticed (see Code style); do not add a new test framework when the existing one is sufficient.
 
 ## Module boundary
 
@@ -59,7 +59,7 @@ Claude discovers thin wrappers under `.claude/skills/`; each wrapper imports the
 
 ## Reviewable changes
 
-- Keep each change set focused on one behavior and independently reviewable.
+- Keep each change set focused on one feature in one module, and independently reviewable.
 - Touch the fewest files needed. Do not mix feature work with unrelated cleanup, renaming, or formatting.
 - Reuse existing project patterns before creating a new layer or abstraction.
 - Keep diffs easy to verify: separate mechanical changes from behavioral changes when both are necessary.
@@ -78,7 +78,7 @@ Lint enforces the structural rules below in both modules (`eslint.codeStyle.mjs`
 - Prefer plain data and functions over classes unless identity or lifecycle makes a class materially simpler.
 - Remove dead code instead of preserving it for hypothetical future use.
 - Never commit a real person's data (names, contact details, references, LinkedIn links), including in tests and seeds; real content lives in the database or in the ignored `.seed/` folder.
-- Write tests mutation-first: add one only where a plausible bug would otherwise go unnoticed, and assert behavior, not constants, copy text, markup, or a restatement of the implementation.
+- Write tests mutation-first, not test-first: add one only where a plausible bug in logic (a small mutation of the code) would otherwise go unnoticed. Assert behavior, not constants, copy text, markup, rendering or layout, or a restatement of the implementation. Prefer extending an existing test, and keep each suite fast by sampling cases rather than sweeping them exhaustively.
 
 ## Completion
 
