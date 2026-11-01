@@ -19,6 +19,7 @@ import {
   playStageFrame,
   type RealTimeSwing,
   type RealTimeSwingCue,
+  resumeStageRun,
   setStageRunPaused,
   type StageEvent,
   type StageRun,
@@ -496,7 +497,7 @@ describe('stage run', () => {
     expect(shownEvents.map((event) => event.type)).toEqual(['release'])
   })
 
-  it('begins the batter’s swing on a cue, ready as the judge would time its crossing, and checks it if it ends', () => {
+  it('begins the batter’s swing on a cue, saying so, ready as the judge would time its crossing, and checks it if it ends', () => {
     const practice = Array.from({ length: CALIBRATION_RULES.minimumValidSwings }, () => ({
       errorMs: 80,
       speed: CALIBRATION_RULES.peakFloor,
@@ -506,21 +507,24 @@ describe('stage run', () => {
     expect(offsetMs).toBeGreaterThan(0)
     // Still in the windup, no pitch is on its way to swing at.
     advanceStageRun(run, DERBY_PHASE_MS.ready + 100, false)
-    cueStageSwing(run, { kind: 'started', crossingAtRealMs: DERBY_PHASE_MS.ready + 400 }, DERBY_PHASE_MS.ready + 100)
+    const windupCue = { kind: 'started', crossingAtRealMs: DERBY_PHASE_MS.ready + 400 } as const
+    expect(cueStageSwing(run, windupCue, DERBY_PHASE_MS.ready + 100)).toEqual([])
     expect(run.shown).toBeNull()
     const releasedMs = DERBY_PHASE_MS.ready + DERBY_PHASE_MS.windup
     advanceStageRun(run, releasedMs, false)
     // The camera expects the crossing 400 ms on; the judge times this visitor's swings `offsetMs` sooner.
-    cueStageSwing(run, { kind: 'started', crossingAtRealMs: releasedMs + 500 }, releasedMs + 100)
+    const started = cueStageSwing(run, { kind: 'started', crossingAtRealMs: releasedMs + 500 }, releasedMs + 100)
+    expect(started).toEqual([{ type: 'swing', pitchIndex: 0 }])
     expect(run.shown?.begun).toEqual({ startedMs: releasedMs + 100, readyMs: releasedMs + 500 - offsetMs })
     // A second start of the swing under way changes nothing; a check stops it, and a start after that begins anew, its
     // crossing due already, so the bat gets the least time it swings in.
     const begun = run.shown
-    cueStageSwing(run, { kind: 'started', crossingAtRealMs: releasedMs + 600 }, releasedMs + 150)
+    expect(cueStageSwing(run, { kind: 'started', crossingAtRealMs: releasedMs + 600 }, releasedMs + 150)).toEqual([])
     expect(run.shown).toBe(begun)
-    cueStageSwing(run, { kind: 'checked' }, releasedMs + 200)
+    expect(cueStageSwing(run, { kind: 'checked' }, releasedMs + 200)).toEqual([])
     expect(run.shown?.checkedMs).toBe(releasedMs + 200)
-    cueStageSwing(run, { kind: 'started', crossingAtRealMs: releasedMs + 250 }, releasedMs + 250)
+    const restarted = cueStageSwing(run, { kind: 'started', crossingAtRealMs: releasedMs + 250 }, releasedMs + 250)
+    expect(restarted).toEqual([{ type: 'swing', pitchIndex: 0 }])
     expect(run.shown).toMatchObject({
       begun: { startedMs: releasedMs + 250, readyMs: releasedMs + 250 + CONTACT_DELAY_MS },
       checkedMs: null,
@@ -530,9 +534,33 @@ describe('stage run', () => {
     expect(events).toEqual(['result'])
     expect(run.shown?.checkedMs).toBe(releasedMs + 1600)
     // Judged, the pitch takes no other start.
-    cueStageSwing(run, { kind: 'started', crossingAtRealMs: releasedMs + 1700 }, releasedMs + 1650)
+    expect(cueStageSwing(run, { kind: 'started', crossingAtRealMs: releasedMs + 1700 }, releasedMs + 1650)).toEqual([])
     expect(run.shown?.checkedMs).toBe(releasedMs + 1600)
     expect(run.derby.log.swings).toEqual([null])
+  })
+
+  it('holds a hit still while the batter aims it, then steps back and runs on as it would have at once', () => {
+    const takenAtMs = (waiting: boolean) => {
+      const run = createStageRun(runSetup('normal', 1, 7), 0)
+      const release = advanceStageRun(run, DERBY_PHASE_MS.ready + DERBY_PHASE_MS.windup, false).at(-1)
+      if (release?.type !== 'release') throw new Error('expected the release')
+      const contactAtRealMs = release.releasedMs + contactSeconds(release.pitch) * 1000
+      const handedInAtMs = contactAtRealMs + 120
+      advanceStageRun(run, handedInAtMs, false)
+      swingStageRun(run, levelSwing(release.pitch, contactAtRealMs), handedInAtMs, waiting)
+      return { run, handedInAtMs }
+    }
+    const atOnce = takenAtMs(false)
+    const waited = takenAtMs(true)
+    const { handedInAtMs } = waited
+    const heldMs = gameTime(waited.run.clock, handedInAtMs)
+    expect(gameTime(waited.run.clock, handedInAtMs + 50)).toBe(heldMs)
+    expect(advanceStageRun(waited.run, handedInAtMs + 50, false)).toEqual([])
+    resumeStageRun(waited.run, handedInAtMs + 50)
+    const throughMs = atOnce.run.shown!.judged!.throughMs
+    expect(heldMs).toBeGreaterThan(throughMs)
+    expect(gameTime(waited.run.clock, handedInAtMs + 70)).toBe(gameTime(atOnce.run.clock, handedInAtMs + 20))
+    expect(gameTime(atOnce.run.clock, handedInAtMs)).toBe(throughMs)
   })
 
   it('lets no cue of a swing begun or checked change what the derby judges, as a replay of its log shows', () => {

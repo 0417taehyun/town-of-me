@@ -1,25 +1,32 @@
 import { Vector3 } from 'three'
 import type { Vec3 } from '../../data/models'
 import { clamp01, lerp, smoothstep } from '../../motionMath'
-import { DERBY_PHASE_MS } from '../game/derby'
+import { DERBY_PHASE_MS, derbyPitch } from '../game/derby'
 import { STRIKE_ZONE } from '../game/field'
 import { contactSeconds, pitchPosition, RELEASE_POINT } from '../game/pitch'
 import {
   type Batter,
+  type BatterJob,
   batterPoseAt,
   beginSwing,
   checkSwing,
+  drain,
   HEAD_CLEARANCE,
-  judgeSwing,
+  judgeSwingSteps,
   NO_SWING,
   poseBatter,
+  type PreparedAim,
+  preparedAim,
+  prepareAimSteps,
+  samePoint,
+  stepJob,
   swingHeadWeight,
   turnHeadClear,
 } from './actors/batter'
 import { type Catcher, createCatcher, disposeCatcher, poseCatcher } from './actors/catcher'
 import { easeLook, fieldToRig, type HeadLook, type HeadRange, lookToward, watch } from './actors/headLook'
 import { createPitcher, disposePitcher, type Pitcher, posePitcher } from './actors/pitcher'
-import { FINISH_HOLD_MS, FOLLOW_MS, RETURN_MS } from './actors/swingMotion'
+import { FINISH_HOLD_MS, FOLLOW_MS, RETURN_MS, windupSeconds } from './actors/swingMotion'
 import type { BallView } from './ballMeshes'
 import { MITT_DEPTH } from './stageLayout'
 import { ballIsThePitchers, mittSeconds, type PitchOnStage, type ShownSwing, type StageRun } from './stageRun'
@@ -29,6 +36,9 @@ import { ballIsThePitchers, mittSeconds, type PitchOnStage, type ShownSwing, typ
 // one, judged so its bat meets the ball where and when the stage sends it off, or checked short of the plate. The
 // catcher's mitt goes where a pitch will end up. Every head follows the ball, the pitcher's watching the mitt while the
 // ball is still his and as it leaves his hand. They only show what the derby decided; nothing here changes a run.
+// Aiming a swing at its ball is the batter's costliest work (batter.ts aimSwing), so the frames never do it at once:
+// the aims a swing from the windup takes are solved ahead a little each frame (prepareAims), and a swing judged with a
+// ball in play is aimed a slice a frame while the stage waits for it (settleBatter).
 
 export type Fielders = { pitcher: Pitcher; catcher: Catcher }
 
@@ -43,6 +53,10 @@ export type BallplayerCast = Fielders & {
   batterLookShare: number
   run: StageRun | null
   shown: ShownSwing | null
+  /** The judgment of the swing shown last, while it is still being solved. */
+  judging: BatterJob | null
+  /** An aim being solved ahead (prepareAims). */
+  preparing: BatterJob | null
 }
 
 /** How far each head turns (degrees in its rig frame, yaw from its +z toward +x, pitch down). */
@@ -56,6 +70,12 @@ export const HEAD_RANGES = {
 export const MITT_SET_TARGET: Vec3 = { x: 0, y: STRIKE_ZONE.center, z: -MITT_DEPTH }
 /** The batter's front foot comes down this long before the ball reaches the contact point (the research's median). */
 export const FOOT_DOWN_LEAD_MS = 175
+/**
+ * How long (ms) a frame works on the batter's judged swing, and on the aims it solves ahead, before it draws: together
+ * with a frame's own drawing, the camera's tracking, and the page's answer to the result, they stay inside a 60 Hz
+ * frame.
+ */
+export const BATTER_WORK_MS = { judging: 5, preparing: 3 }
 /** The share of the windup gone before the batter starts lifting its front foot. */
 export const BATTER_LOAD_START = 0.35
 /** The pitcher keeps his eyes on the mitt through his release, until the ball is this far (m) on its way. */
@@ -71,7 +91,16 @@ export function disposeFielders({ pitcher, catcher }: Fielders) {
 }
 
 export function createCast(batter: Batter, fielders: Fielders): BallplayerCast {
-  return { ...fielders, batter, batterLook: { yaw: 85, pitch: 5 }, batterLookShare: 1, run: null, shown: null }
+  return {
+    ...fielders,
+    batter,
+    batterLook: { yaw: 85, pitch: 5 },
+    batterLookShare: 1,
+    run: null,
+    shown: null,
+    judging: null,
+    preparing: null,
+  }
 }
 
 /** Seconds from a release the pitcher is at: winding up toward the next, or on from the last; before any, his set. */
@@ -129,33 +158,109 @@ export function perfectMeetPoint(run: StageRun) {
   return run.pitch && pitchPosition(run.pitch.plan, contactSeconds(run.pitch.plan))
 }
 
-/** A new run starts the batter afresh; each change of the swing the stage shows plays on the batter once. */
+/** A new run starts the batter afresh; each change of the swing the stage shows plays on the batter once, at once. */
 export function cueBatter(cast: BallplayerCast, run: StageRun | null) {
-  if (cast.run !== run) {
-    cast.run = run
-    cast.shown = null
-    cast.batter.swing = NO_SWING
-  }
-  const shown = run?.shown ?? null
-  if (!run || !shown || shown === cast.shown) return
+  const shown = changedShown(cast, run)
+  if (!run || !shown) return
   showSwing(cast.batter, run, shown, cast.shown)
+  drain(judgeShownSteps(cast.batter, run, shown, cast.shown))
   cast.shown = shown
 }
 
 /**
- * Plays on `batter` what changed in the swing the stage shows since `before`, in order: its start, its check, its
- * judgment, each from where the batter is drawn then. A judged swing meets the ball in play where the stage sends it
- * off; a miss goes through the contact point.
+ * The swing the stage shows when it changed since the cast last took it, else null; a new run starts the batter
+ * afresh, dropping a judgment still being solved.
+ */
+export function changedShown(cast: BallplayerCast, run: StageRun | null) {
+  if (cast.run !== run) {
+    cast.run = run
+    cast.shown = null
+    cast.judging = null
+    cast.batter.swing = NO_SWING
+  }
+  const shown = run?.shown ?? null
+  return shown === cast.shown ? null : shown
+}
+
+/**
+ * Before a frame poses the players, from `frameStartMs` (performance.now() ms; `now` reads that clock): as cueBatter,
+ * but a judged swing is worked on BATTER_WORK_MS.judging a frame until it is done, the swing drawn meanwhile being the
+ * one before it; while none is, the aims of swings to come are solved ahead. Returns whether the batter has caught up
+ * with the stage, which waits for it before it plays a ball in play on (stageRun.ts resumeStageRun).
+ */
+export function settleBatter(
+  cast: BallplayerCast,
+  run: StageRun | null,
+  frameStartMs: number,
+  now = () => performance.now(),
+) {
+  const shown = changedShown(cast, run)
+  if (run && shown) startShown(cast, run, shown)
+  if (!cast.judging) return prepareAims(cast, run, frameStartMs + BATTER_WORK_MS.preparing, now)
+  if (!stepJob(cast.batter, cast.judging, frameStartMs + BATTER_WORK_MS.judging, now)) return false
+  cast.batter.swing = cast.judging.swing
+  cast.judging = null
+  return true
+}
+
+/** Plays `shown`'s start and check on the batter at once, and sets its judgment, if any, to be worked on. */
+export function startShown(cast: BallplayerCast, run: StageRun, shown: ShownSwing) {
+  const { batter } = cast
+  showSwing(batter, run, shown, cast.shown)
+  cast.judging = { steps: judgeShownSteps(batter, run, shown, cast.shown), swing: batter.swing }
+  cast.shown = shown
+}
+
+/**
+ * Plays on `batter` what changed in the swing the stage shows since `before`, in order: its start and its check, each
+ * from where the batter is drawn then; its judgment follows (judgeShownSteps).
  */
 export function showSwing(batter: Batter, run: StageRun, shown: ShownSwing, before: ShownSwing | null) {
-  const { begun, checkedMs, judged } = shown
+  const { begun, checkedMs } = shown
   if (begun && begun !== before?.begun)
     beginSwing(batter, begun.startedMs, begun.readyMs, batterLoad(run, begun.startedMs), perfectMeetPoint(run))
   if (checkedMs !== null && checkedMs !== before?.checkedMs) checkSwing(batter, checkedMs, batterLoad(run, checkedMs))
+}
+
+/**
+ * The judgment of `shown`'s swing, if it changed since `before`, a step at a time: a judged swing meets the ball in play
+ * where the stage sends it off; a miss goes through the contact point.
+ */
+export function* judgeShownSteps(batter: Batter, run: StageRun, shown: ShownSwing, before: ShownSwing | null) {
+  const { judged } = shown
   if (!judged || judged === before?.judged) return
   const point = run.batted?.pitchIndex === shown.pitchIndex ? run.batted.start : null
   const { takenMs, throughMs, contactMs } = judged
-  judgeSwing(batter, takenMs, throughMs, contactMs, point, batterLoad(run, throughMs))
+  yield* judgeSwingSteps(batter, takenMs, throughMs, contactMs, point, batterLoad(run, throughMs))
+}
+
+/**
+ * The aims a swing from the windup takes, as the frame that begins or judges it would ask for them: from the windup's
+ * end, with the front foot down, at the contact point (a miss judged with no start seen) and at where the pitch on its
+ * way, or the one to come, meets a PERFECT swing (a swing begun).
+ */
+export function wantedAims(run: StageRun | null): Omit<PreparedAim, 'aim'>[] {
+  const from = windupSeconds(1)
+  const upcoming = run && run.derby.phase !== 'result' && run.derby.phase !== 'finished'
+  const plan = upcoming ? derbyPitch(run.derby, run.derby.pitchIndex) : null
+  const meet = plan ? [{ point: pitchPosition(plan, contactSeconds(plan)), from }] : []
+  return [{ point: null, from }, ...meet]
+}
+
+/**
+ * Solves the first of the wanted aims not yet prepared, a slice until `untilMs` each frame, keeping only the wanted
+ * ones, so the swing that takes one has it at hand. Always caught up with the stage, so returns true.
+ */
+export function prepareAims(cast: BallplayerCast, run: StageRun | null, untilMs: number, now: () => number) {
+  const { batter } = cast
+  const wanted = wantedAims(run)
+  const missing = wanted.find(({ point, from }) => !preparedAim(batter.prepared, point, from))
+  const isWanted = (aim: PreparedAim) =>
+    wanted.some(({ point, from }) => from === aim.from && samePoint(point, aim.point))
+  if (!cast.preparing && missing)
+    cast.preparing = { steps: prepareAimSteps(batter, missing.point, missing.from, isWanted), swing: NO_SWING }
+  if (cast.preparing && stepJob(batter, cast.preparing, untilMs, now)) cast.preparing = null
+  return true
 }
 
 const batterBall = new Vector3()

@@ -20,6 +20,7 @@ import {
   scoreboardTotals,
   seenCameraState,
   stanceNeedText,
+  stanceTicked,
 } from './derbyCues'
 
 /**
@@ -213,6 +214,15 @@ describe('the derby HUD', () => {
   it('shows distances in whole meters, spaced in English and not in Korean, and a total to the decimeter', () => {
     expect([distanceText(1324, 'en'), distanceText(1324, 'ko')]).toEqual(['132 m', '132m'])
     expect([homeRunDistanceText(2170, 'en', 1), homeRunDistanceText(2174, 'en', 1)]).toEqual(['217 m', '217.4 m'])
+  })
+})
+
+describe('the stance gauge', () => {
+  it('ticks at each whole second it fills past, never at full, draining, or starting over', () => {
+    const ticks = (steps: number[]) => steps.slice(1).filter((after, index) => stanceTicked(steps[index], after)).length
+    expect(ticks([0, 0.2, 0.34, 0.5, 0.67, 0.9, 1])).toBe(2)
+    expect(ticks([0.9, 0.5, 0.2, 0])).toBe(0)
+    expect(ticks([0.5, 0, 0.1, 0.4])).toBe(1)
   })
 })
 

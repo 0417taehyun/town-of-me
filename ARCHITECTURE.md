@@ -142,9 +142,10 @@ met it and flies to the landing the judge already decided, fast enough to come d
 swing is the stage's too (`ShownSwing`): it begins when the camera cues the visitor's swing starting, eases into the
 slot short of the plate until the derby judges it, and a judged swing gets its last stretch to the ball, timed from
 where it is drawn (`lastStretchFor`: a frame or two from near the slot, the whole `CONTACT_DELAY_MS` from the windup).
-The stage changes the clock's pace (a step back for a hit reported late, so the bat swings that stretch into the ball; a
-hit-stop that holds them together; slow motion at a showcase home run's peak; a pause while the page is hidden) but
-never an outcome, and no cue reaches the derby. `cameraShots.ts` frames the batting shot between the HUD's bands at any
+The stage changes the clock's pace (a step back for a hit reported late, so the bat swings that stretch into the ball,
+after the clock stands still a few frames, the ball resting at the back of the reach, while the batter aims the swing a
+slice a frame; a hit-stop that holds them together; slow motion at a showcase home run's peak; a pause while the page
+is hidden) but never an outcome, and no cue reaches the derby. `cameraShots.ts` frames the batting shot between the HUD's bands at any
 aspect. The pitcher throws only strikes: every pitch passes through the zone whole (`game/pitchSchedule.test.ts`), and
 `strikeZoneOutline.ts` draws the zone as a faint box from the windup until the pitch is judged. The batting shot looks
 down, so a ball farther off is drawn higher and one flat frame would show strikes nearer the pitcher above it; the box
@@ -165,7 +166,9 @@ bat and leans toward its ball, turning its chest and lunging with its body rathe
 met far out in front, holds its finish, and comes back to the stance along keys of its own, low and in front of the
 body. Its keys keep the bat out of the body, and the elbows and the head's tilt and turn are solved against the body's
 simple solids (`bodyVolumes.ts`), smoothly from moment to moment, so the arms, the mittens, and the bat stay out of the
-head, its hair and hat, and the body, and the arms and mittens off the bat and each other.
+head, its hair and hat, and the body, and the arms and mittens off the bat and each other. That aim is the costliest
+work a frame could do, so no frame does it at once: the aims a swing from the windup takes are solved ahead during the
+windup, and a hit's is solved a slice a frame while the stage waits (`ballplayerCast.ts` `settleBatter`).
 The other team's pitcher (`pitcher.ts`) and catcher (`catcher.ts`) wear its brick red and charcoal (`teamUniforms.ts`);
 the pitcher's throw is keyed on the same tracks with its release key at `game/pitch.ts`'s `RELEASE_POINT`, and the
 catcher's mitt reaches for where each pitch ends up. `ballplayerCast.ts` drives all three from the stage run: the

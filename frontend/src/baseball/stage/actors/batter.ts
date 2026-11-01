@@ -86,6 +86,8 @@ export type Batter = {
   gripMiddle: Vector3
   sweetSpot: Vector3
   swing: BatterSwing
+  /** Aims solved ahead of the swings that take them (PreparedAim). */
+  prepared: PreparedAim[]
 }
 
 /** How a swing turns its bat toward its ball at contact (degrees of azimuth and elevation). */
@@ -125,6 +127,21 @@ export type BatterSwing = {
 
 /** Where a swing is drawn at a moment: its swing second, and how fast (swing seconds per ms) it moves on. */
 export type SwingState = { seconds: number; rate: number }
+
+/** What aimSwing sets of a swing: its leans, contact, turn and grip shift toward the ball, head lift, and solve. */
+export type SwingAim = Pick<BatterSwing, 'leans' | 'contactAt' | 'aimTurn' | 'aimShift' | 'headLift' | 'solvedShift'>
+
+/**
+ * The aim of a swing from the windup, leaning in from swing second `from`, at `point` (field meters; the contact point
+ * when null), solved before a swing takes it, so the frame that begins or judges it does not solve it (aimSwing).
+ */
+export type PreparedAim = { point: Vec3 | null; from: number; aim: SwingAim }
+
+/**
+ * Work on the batter's swing solved a slice at a time between frames (stepJob): its steps, and the swing they work on,
+ * which is not the one drawn until the work is done.
+ */
+export type BatterJob = { steps: Generator<void, void>; swing: BatterSwing }
 
 /**
  * What the swing is aimed at before any pitch (field meters): the strike zone's center at the contact depth in front of
@@ -619,6 +636,16 @@ export function smoothedSwivels(swivels: Solved[], free: number[]): Solved[] {
  * it tilts ahead of what comes near it; both eased from the held ends.
  */
 export function solveRun(batter: Batter, run: SolveRun, start: Solved, ends: (Solved | null)[] = [null, null]) {
+  return drain(solveRunSteps(batter, run, start, ends))
+}
+
+/** solveRun a moment at a time, each step posing the batter afresh, so the frames may pose it between them. */
+export function* solveRunSteps(
+  batter: Batter,
+  run: SolveRun,
+  start: Solved,
+  ends: (Solved | null)[] = [null, null],
+): Generator<void, Solved[]> {
   const { times, poses, ease } = run
   const solved: (Solved | undefined)[] = [start, ends[0] ?? undefined, ...times.slice(1).map(() => undefined)]
   solved[times.length] = ends[1] ?? solved[times.length]
@@ -632,28 +659,59 @@ export function solveRun(batter: Batter, run: SolveRun, start: Solved, ends: (So
   const free = [...times.keys()].filter(
     (index) => !(index === 0 && ends[0]) && !(index === times.length - 1 && ends[1]),
   )
-  free.forEach((index) => (solved[offset(index)] = solveSwivelsAt(batter, chain, solved, offset(index))))
+  for (const index of free) {
+    solved[offset(index)] = solveSwivelsAt(batter, chain, solved, offset(index))
+    yield
+  }
   const smoothing = { ...chain, rate: chain.rate * run.smoothing }
   const sweeps = Array.from({ length: run.sweeps }, (_, sweep) => (sweep % 2 === 0 ? [...free].reverse() : free))
-  sweeps.flat().forEach((index) => (solved[offset(index)] = solveSwivelsAt(batter, smoothing, solved, offset(index))))
+  for (const index of sweeps.flat()) {
+    solved[offset(index)] = solveSwivelsAt(batter, smoothing, solved, offset(index))
+    yield
+  }
   const swivels = [start, ...smoothedSwivels(solved.slice(1) as Solved[], free)]
   const heads: (Solved | undefined)[] = [start, ends[0] ?? undefined, ...times.slice(1).map(() => undefined)]
   heads[times.length] = ends[1] ?? heads[times.length]
   const posed = swivels.map((values, index) => withSolved(chain.poses[index], { ...NO_TURN, ...swivelsOf(values!) }))
-  const near = posed.map((pose) => {
+  const near: Sphere[][] = []
+  for (const pose of posed) {
     poseBody(batter, pose)
-    return headNeighbours(batter, pose)
-  })
+    near.push(headNeighbours(batter, pose))
+    yield
+  }
   const turnAt = (index: number) => {
     const turn = searchHead(batter, posed[index], headNeighboursOf(chain, heads, index), near[index])
     heads[index] = { ...swivels[index]!, ...turn }
   }
-  free.forEach((index) => turnAt(offset(index)))
   const headSweeps = Array.from({ length: HEAD_CLEARANCE.sweeps }, (_, sweep) =>
     sweep % 2 === 0 ? [...free].reverse() : free,
   )
-  headSweeps.flat().forEach((index) => turnAt(offset(index)))
+  for (const index of [...free, ...headSweeps.flat()]) {
+    turnAt(offset(index))
+    yield
+  }
   return heldEnds(times, heads.slice(1) as Solved[], ends, ease)
+}
+
+/** Runs `steps` to their end at once and returns what they return. */
+export function drain<Result>(steps: Generator<void, Result>): Result {
+  let step = steps.next()
+  while (!step.done) step = steps.next()
+  return step.value
+}
+
+/**
+ * Works on `job` until `now()` reaches `untilMs`, one step at least, with its own swing as the batter's meanwhile and
+ * the drawn one put back after; returns whether it is done, its swing then the one to draw.
+ */
+export function stepJob(batter: Batter, job: BatterJob, untilMs: number, now: () => number) {
+  const drawn = batter.swing
+  batter.swing = job.swing
+  let step = job.steps.next()
+  while (!step.done && now() < untilMs) step = job.steps.next()
+  job.swing = batter.swing
+  batter.swing = drawn
+  return step.done === true
 }
 
 /** A track per solved channel through `solved` at `times`. */
@@ -726,6 +784,7 @@ export function createBatter(profile: PlayerProfile, side: BattingSide): Batter 
     gripMiddle: new Vector3(),
     sweetSpot: new Vector3(),
     swing: NO_SWING,
+    prepared: [],
   }
   placeBatter(batter, side)
   aimMotion(batter)
@@ -792,7 +851,7 @@ export function aimTurnToward(batter: Batter, pose: SwingPose, target: Vector3) 
  * The chest's lean (degrees toward the plate) that carries the hands `reach` (rig units) further toward the plate, as
  * a batter bends toward an outside ball rather than straining its arms, and stands taller for an inside one. A ball met
  * out in front, at swing second `contactAt` past the contact key, meets arms already reaching forward, so the head
- * stays steadier and leans less into their way; the body reaches further only as far as the arms need (reachBall).
+ * stays steadier and leans less into their way; the body reaches further only as far as the arms need (reachBallSteps).
  */
 export function aimLean(reach: number, contactAt: number) {
   const lean = MathUtils.radToDeg(Math.asin(clamp(reach / SHOULDERS_OVER_WAIST, -1, 1)))
@@ -845,9 +904,9 @@ export function aimSolveTimes(contactAt: number, from: number) {
 /**
  * What the batter solves off its own swing's through the aimed window of the swing under way, solved so the arms stay
  * clear of the bat and the body, and the head of them, with the hands and the bat where this aim takes them; none at
- * either end.
+ * either end. Solved a moment a step (solveRunSteps).
  */
-export function solveAimedShift(batter: Batter): SolvedTracks {
+export function* solveAimedShiftSteps(batter: Batter): Generator<void, SolvedTracks> {
   const { motion } = batter
   const { contactAt, leans } = batter.swing
   const times = aimSolveTimes(contactAt, Math.min(...leans.map((lean) => lean.from)))
@@ -864,7 +923,7 @@ export function solveAimedShift(batter: Batter): SolvedTracks {
     sweeps: 1,
     smoothing: 1,
   }
-  const solved = solveRun(batter, run, own[0], [own[0], own[own.length - 1]])
+  const solved = yield* solveRunSteps(batter, run, own[0], [own[0], own[own.length - 1]])
   const shifts = solved.map((values, index) => withSolved(values as SwingPose, scaled(own[index], -1)) as Solved)
   return solvedTracks(times, shifts)
 }
@@ -938,19 +997,24 @@ export function reachFurther(reach: BodyReach, push: Vector3, leaned: number): B
  * Turns and leans the swing under way's last lean further, round by round, until its arms reach their mittens
  * comfortably round its contact with the sweet spot on `target` (rig frame), as a batter fooled out in front opens up
  * and lunges onto its front foot instead of straining its arms: the chest turns first, which leaves the head where it
- * is, then the body slides and leans for what is left. The grip shift then puts the sweet spot on `target`.
+ * is, then the body slides and leans for what is left, a round a step. The grip shift then puts the sweet spot on
+ * `target`.
  */
-export function reachBall(batter: Batter, target: Vector3) {
+export function* reachBallSteps(batter: Batter, target: Vector3) {
   const { leans, contactAt } = batter.swing
   const last = leans[leans.length - 1]
   const leaned = leans.slice(0, -1).reduce((sum, lean) => sum + lean.reach.tilt, 0)
   const times = REACH_CHECKS.map((offset) => contactAt + offset)
-  for (let round = 0; round < BODY_REACH.rounds; round++) turnToReach(batter, target, last, times)
+  for (let round = 0; round < BODY_REACH.rounds; round++) {
+    turnToReach(batter, target, last, times)
+    yield
+  }
   for (let round = 0; round < BODY_REACH.rounds; round++) {
     shiftOnto(batter, target)
     const pushes = times.map((time) => reachPush(batter, time))
     const push = pushes.reduce((most, next) => (next.lengthSq() > most.lengthSq() ? next : most))
     last.reach = reachFurther(last.reach, push, leaned)
+    yield
   }
   shiftOnto(batter, target)
 }
@@ -986,6 +1050,16 @@ export function turnToReach(batter: Batter, target: Vector3, lean: Lean, times: 
  * follows with its eyes, which also keeps a cap's brim off a bat meeting a high pitch.
  */
 export function aimSwing(batter: Batter, point: Vec3 | null, from: number, kept: Lean[] = []) {
+  drain(aimSwingSteps(batter, point, from, kept))
+}
+
+/** aimSwing a step at a time; a swing from the windup takes the batter's aim prepared for it instead, if any. */
+export function* aimSwingSteps(batter: Batter, point: Vec3 | null, from: number, kept: Lean[] = []) {
+  const prepared = kept.length === 0 ? preparedAim(batter.prepared, point, from) : null
+  if (prepared) {
+    batter.swing = { ...batter.swing, ...prepared }
+    return
+  }
   const target = fieldToRig(batter.rig, point ?? CONTACT_POINT, aimTarget).clone()
   const contactAt = contactMoment(batter, target.x)
   const pose = sampleSwingPose(batter.motion, contactAt)
@@ -1000,9 +1074,37 @@ export function aimSwing(batter: Batter, point: Vec3 | null, from: number, kept:
   const { solvedShift } = NO_SWING
   const leans = [...kept, lean]
   batter.swing = { ...batter.swing, leans, contactAt, aimTurn, aimShift: new Vector3(), headLift, solvedShift }
-  reachBall(batter, target)
+  yield* reachBallSteps(batter, target)
   // The elbows and the head are solved for this aim once it is set, from the swing's own.
-  batter.swing.solvedShift = solveAimedShift(batter)
+  const swing = batter.swing
+  swing.solvedShift = yield* solveAimedShiftSteps(batter)
+}
+
+/** The aim in `prepared` for a swing from the windup leaning in from swing second `from` at `point`, if any. */
+export function preparedAim(prepared: readonly PreparedAim[], point: Vec3 | null, from: number) {
+  return prepared.find((entry) => entry.from === from && samePoint(entry.point, point))?.aim ?? null
+}
+
+export function samePoint(first: Vec3 | null, second: Vec3 | null) {
+  if (!first || !second) return first === second
+  return first.x === second.x && first.y === second.y && first.z === second.z
+}
+
+/**
+ * Solves, a step at a time, the aim of a swing from the windup leaning in from swing second `from` at `point`, and
+ * keeps it with the batter's other prepared aims that are still `wanted`, for the swing that takes it (aimSwing).
+ */
+export function* prepareAimSteps(
+  batter: Batter,
+  point: Vec3 | null,
+  from: number,
+  wanted: (aim: PreparedAim) => boolean,
+) {
+  batter.swing = NO_SWING
+  yield* aimSwingSteps(batter, point, from)
+  const { leans, contactAt, aimTurn, aimShift, headLift, solvedShift } = batter.swing
+  const aim = { leans, contactAt, aimTurn, aimShift, headLift, solvedShift }
+  batter.prepared = [...batter.prepared.filter(wanted), { point, from, aim }]
 }
 
 /**
@@ -1118,18 +1220,18 @@ export function keepSwingOn(batter: Batter, atMs: number, load: number) {
  * Aims the swing under way, judged as it is drawn at swing second `seconds`, at `point` (as aimSwing): one the camera
  * saw no start of from there, and one already on its way only anew at a ball in play, keeping each lean it has eased in
  * with as far as it has (leanFromFor) and leaning on from there as far as this ball takes, so nothing jumps; its turn
- * and its grip shift show from the slot on.
+ * and its grip shift show from the slot on. A step at a time, as aimSwingSteps.
  */
-export function aimJudgedSwing(batter: Batter, point: Vec3 | null, seconds: number) {
+export function* aimJudgedSwingSteps(batter: Batter, point: Vec3 | null, seconds: number) {
   const { swing } = batter
-  if (swing.legs.length === 0) return aimSwing(batter, point, seconds)
+  if (swing.legs.length === 0) return yield* aimSwingSteps(batter, point, seconds)
   if (!point) return
   const contactAt = contactMoment(batter, fieldToRig(batter.rig, point, aimTarget).x)
   const kept = swing.leans.map((lean) => ({
     ...lean,
     from: leanFromFor(lean.from, swing.contactAt, seconds, contactAt),
   }))
-  aimSwing(batter, point, seconds, kept)
+  yield* aimSwingSteps(batter, point, seconds, kept)
 }
 
 /**
@@ -1162,9 +1264,21 @@ export function lastStretchRates(contactAt: number, slope: number, rate: number,
  * lastStretchFor) from where it is drawn then (the windup at `load`), as fast as it was going or faster. A stage that
  * took it later than that stretch's start stepped its clock back to it, so every earlier moment moves back with it and
  * the stretch goes on from where the bat was drawn when the stage took it; a swing going back to the windup waits
- * where it was then, and one already back is done with. A ball in play aims the swing anew (aimJudgedSwing).
+ * where it was then, and one already back is done with. A ball in play aims the swing anew (aimJudgedSwingSteps).
  */
 export function judgeSwing(
+  batter: Batter,
+  takenMs: number,
+  throughMs: number,
+  contactMs: number,
+  point: Vec3 | null,
+  load: number,
+) {
+  drain(judgeSwingSteps(batter, takenMs, throughMs, contactMs, point, load))
+}
+
+/** judgeSwing a step at a time (stepJob), so a frame need not solve its aim at once. */
+export function* judgeSwingSteps(
   batter: Batter,
   takenMs: number,
   throughMs: number,
@@ -1177,7 +1291,7 @@ export function judgeSwing(
   if (takenAtMs >= swingBackMs(batter.swing)) batter.swing = NO_SWING
   keepSwingOn(batter, takenAtMs, load)
   const state = drawnState(batter, throughMs, load)
-  aimJudgedSwing(batter, point, state.seconds)
+  yield* aimJudgedSwingSteps(batter, point, state.seconds)
   const { contactAt, startMs } = batter.swing
   const legs = legsBefore(batter.swing.legs, throughMs)
   const slope = (contactAt - state.seconds) / (contactMs - throughMs)

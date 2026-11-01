@@ -56,11 +56,12 @@ export type RealTimeSwing = Omit<DerbySwing, 'contactAtMs' | 'startedAtMs'> & {
 export type RealTimeSwingCue = { kind: 'started'; crossingAtRealMs: number } | { kind: 'checked' }
 
 /**
- * The derby's events, and the moments only the stage knows: the bat meeting the ball, the camera starting to chase it,
- * it coming down, the catch.
+ * The derby's events, and the moments only the stage knows: the batter starting the swing the camera saw begin, the
+ * bat meeting the ball, the camera starting to chase it, it coming down, the catch.
  */
 export type StageEvent =
   | DerbyEvent
+  | { type: 'swing'; pitchIndex: number }
   | { type: 'contact'; pitchIndex: number }
   | { type: 'chase'; pitchIndex: number }
   | { type: 'landed'; pitchIndex: number }
@@ -134,6 +135,10 @@ export type ShownSwing = {
   judged: { takenMs: number; throughMs: number; contactMs: number } | null
 }
 
+/**
+ * `awaitingMs` is the game ms the clock steps back to once the batter has aimed a swing judged with a ball in play,
+ * while the clock stands still for it (swingStageRun); null otherwise.
+ */
 export type StageRun = {
   clock: GameClock
   derby: Derby
@@ -141,6 +146,7 @@ export type StageRun = {
   batted: BattedBall | null
   shown: ShownSwing | null
   slowMotionEndsRealMs: number | null
+  awaitingMs: number | null
 }
 
 export function createStageRun({ plan, log, practice }: StageRunSetup, realMs: number): StageRun {
@@ -152,6 +158,7 @@ export function createStageRun({ plan, log, practice }: StageRunSetup, realMs: n
     batted: null,
     shown: null,
     slowMotionEndsRealMs: null,
+    awaitingMs: null,
   }
 }
 
@@ -165,15 +172,25 @@ export function toDerbySwing(clock: GameClock, swing: RealTimeSwing): DerbySwing
  * A camera swing handed in at real moment `realMs`. A hit handed in too late for the bat's last stretch to the ball
  * (shownAfterResult) to end at the meeting steps the clock back to that stretch's start, so the bat swings into the
  * ball where the stage sends it off, the ball going back along its path to meet it: about half as far for a swing the
- * camera saw begin.
+ * camera saw begin. When `waitForBatter`, the clock first stands still, the ball waiting at the back of the reach and
+ * the bat about where the camera's swing left it, until the batter has aimed the swing (resumeStageRun).
  */
-export function swingStageRun(run: StageRun, swing: RealTimeSwing, realMs: number): StageEvent[] {
+export function swingStageRun(run: StageRun, swing: RealTimeSwing, realMs: number, waitForBatter = false) {
   const update = swingDerby(run.derby, toDerbySwing(run.clock, swing))
   const events = takeDerbyUpdate(run, update, gameTime(run.clock, realMs))
   const hit = events.some((event) => event.type === 'result' && event.swing !== null) && run.batted
   const judged = hit ? run.shown?.judged : null
-  if (judged) run.clock = holdClock(run.clock, realMs, 0, judged.throughMs)
+  if (!judged) return events
+  run.clock = waitForBatter ? setClockRate(run.clock, realMs, 0) : holdClock(run.clock, realMs, 0, judged.throughMs)
+  run.awaitingMs = waitForBatter ? judged.throughMs : null
   return events
+}
+
+/** Once the batter has aimed a swing the stage waits for, steps the clock back to its last stretch and runs it on. */
+export function resumeStageRun(run: StageRun, realMs: number) {
+  if (run.awaitingMs === null) return
+  run.clock = setClockRate(holdClock(run.clock, realMs, 0, run.awaitingMs), realMs, 1)
+  run.awaitingMs = null
 }
 
 /**
@@ -181,20 +198,21 @@ export function swingStageRun(run: StageRun, swing: RealTimeSwing, realMs: numbe
  * start begins the batter's swing, nearly at the slot when the camera expects the grip to cross the midline (`readyMs`,
  * swingMotion.ts BEGUN_SWING), mapped to game time as the judge maps a swing's contact (less the calibration's offset),
  * and no sooner than CONTACT_DELAY_MS from now; a swing already shown for the pitch takes no other, unless it was
- * checked. A check stops one not judged yet. Between pitches, and once a pitch is judged, a cue changes nothing, and
- * none reaches the derby.
+ * checked, and says so with a `swing` event. A check stops one not judged yet. Between pitches, and once a pitch is
+ * judged, a cue changes nothing, and none reaches the derby.
  */
-export function cueStageSwing(run: StageRun, cue: RealTimeSwingCue, realMs: number) {
+export function cueStageSwing(run: StageRun, cue: RealTimeSwingCue, realMs: number): StageEvent[] {
   const { pitch, derby } = run
-  if (!pitch || derby.phase !== 'pitch') return
+  if (!pitch || derby.phase !== 'pitch') return []
   const nowMs = gameTime(run.clock, realMs)
   const shown = run.shown?.pitchIndex === pitch.index ? run.shown : null
   const swinging = shown !== null && shown.checkedMs === null
-  if (cue.kind === 'checked') return checkShownSwing(run, swinging ? shown : null, nowMs)
-  if (swinging) return
+  if (cue.kind === 'checked') checkShownSwing(run, swinging ? shown : null, nowMs)
+  if (cue.kind === 'checked' || swinging) return []
   const crossingMs = gameTime(run.clock, cue.crossingAtRealMs) - derby.calibration.offsetMs
   const begun = { startedMs: nowMs, readyMs: Math.max(nowMs + CONTACT_DELAY_MS, crossingMs) }
   run.shown = { pitchIndex: pitch.index, begun, checkedMs: null, judged: null }
+  return [{ type: 'swing', pitchIndex: pitch.index }]
 }
 
 /** Checks `shown`, a swing shown and not judged, at game time `nowMs`; nothing without one. */
@@ -204,9 +222,11 @@ export function checkShownSwing(run: StageRun, shown: ShownSwing | null, nowMs: 
 
 /**
  * Everything due by `realMs`: the derby's phase changes, then the catch, the contact, the chase (on the clock as the
- * contact's hit-stop left it), and the batted ball's flight.
+ * contact's hit-stop left it), and the batted ball's flight. Nothing is while the stage waits for the batter, its clock
+ * still past the contact it is about to step back to.
  */
 export function advanceStageRun(run: StageRun, realMs: number, reducedMotion: boolean): StageEvent[] {
+  if (run.awaitingMs !== null) return []
   endSlowMotion(run, realMs)
   const nowMs = gameTime(run.clock, realMs)
   const derbyEvents = takeDerbyUpdate(run, advanceDerby(run.derby, nowMs), nowMs)
@@ -223,7 +243,7 @@ export function advanceStageRun(run: StageRun, realMs: number, reducedMotion: bo
  * the run, which it does only between pitches (flow/derbyFlow.ts pausedForAway), and starts it again after.
  */
 export function setStageRunPaused(run: StageRun, realMs: number, paused: boolean) {
-  run.clock = setClockRate(run.clock, realMs, paused ? 0 : 1)
+  run.clock = setClockRate(run.clock, realMs, paused || run.awaitingMs !== null ? 0 : 1)
   run.slowMotionEndsRealMs = null
 }
 
@@ -558,7 +578,8 @@ export function directedShot(
 
 /**
  * One frame of the run: the swing cues and then the swings the camera reported since the last frame, in order, then
- * everything due by `realMs`. Slow motion that is over ends first, so a swing made after it converts at full pace.
+ * everything due by `realMs`, a hit waiting for the batter when `waitForBatter` (swingStageRun). Slow motion that is
+ * over ends first, so a swing made after it converts at full pace.
  */
 export function playStageFrame(
   run: StageRun,
@@ -566,9 +587,10 @@ export function playStageFrame(
   realMs: number,
   reducedMotion: boolean,
   cues: readonly RealTimeSwingCue[] = [],
+  waitForBatter = false,
 ): StageEvent[] {
   endSlowMotion(run, realMs)
-  cues.forEach((cue) => cueStageSwing(run, cue, realMs))
-  const swingEvents = swings.flatMap((swing) => swingStageRun(run, swing, realMs))
-  return [...swingEvents, ...advanceStageRun(run, realMs, reducedMotion)]
+  const cueEvents = cues.flatMap((cue) => cueStageSwing(run, cue, realMs))
+  const swingEvents = swings.flatMap((swing) => swingStageRun(run, swing, realMs, waitForBatter))
+  return [...cueEvents, ...swingEvents, ...advanceStageRun(run, realMs, reducedMotion)]
 }

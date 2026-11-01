@@ -1,9 +1,14 @@
 import { createNoiseBuffer } from './noiseBuffer'
 
 // The derby's sounds, all synthesized: a burst of filtered noise with a short tone under it for the crack of the bat
-// and the pop of the mitt, and a long swell of noise for the crowd. They are cues only; the captions say the same.
+// and the pop of the mitt, a long swell of noise for the crowd, and softer puffs for the pitch leaving the hand and
+// the bat cutting the air; and short tones for the pitcher's windup, the stance gauge's seconds and its filling, the
+// camera locking on, and the visitor stepping out of its view. They are cues only, kept quiet beside the bat and the
+// crowd; the captions say the same.
 
-export type DerbySound = 'bat' | 'mitt' | 'crowd'
+export type DerbySound = StruckSound | ChimeSound
+export type StruckSound = 'bat' | 'mitt' | 'crowd' | 'release' | 'whoosh'
+export type ChimeSound = 'windup' | 'tick' | 'ding' | 'lock' | 'away'
 
 /** A filtered noise burst rising over `attackSeconds` and fading by `seconds`, with an optional tone (Hz) under it. */
 export type StruckNoise = {
@@ -36,7 +41,58 @@ export const DERBY_SOUNDS = {
     seconds: 2.6,
     tone: null,
   },
-} satisfies Record<DerbySound, StruckNoise>
+  release: {
+    filter: 'bandpass',
+    frequency: 2400,
+    resonance: 1.4,
+    level: 0.12,
+    attackSeconds: 0.01,
+    seconds: 0.12,
+    tone: null,
+  },
+  whoosh: {
+    filter: 'bandpass',
+    frequency: 850,
+    resonance: 0.9,
+    level: 0.22,
+    attackSeconds: 0.08,
+    seconds: 0.26,
+    tone: null,
+  },
+} satisfies Record<StruckSound, StruckNoise>
+
+/** A tone of `wave` gliding from `frequency` to `to` (Hz), starting `at` seconds in at `level` and fading by `seconds`. */
+export type ChimeNote = {
+  wave: OscillatorType
+  frequency: number
+  to: number
+  level: number
+  at: number
+  seconds: number
+}
+
+export const DERBY_CHIMES = {
+  // A referee's short rising whistle as the pitcher winds up.
+  windup: [{ wave: 'sine', frequency: 2100, to: 2600, level: 0.05, at: 0, seconds: 0.3 }],
+  tick: [{ wave: 'sine', frequency: 1760, to: 1760, level: 0.07, at: 0, seconds: 0.05 }],
+  ding: [
+    { wave: 'sine', frequency: 1320, to: 1320, level: 0.1, at: 0, seconds: 0.7 },
+    { wave: 'sine', frequency: 2640, to: 2640, level: 0.03, at: 0, seconds: 0.4 },
+  ],
+  lock: [
+    { wave: 'sine', frequency: 880, to: 880, level: 0.08, at: 0, seconds: 0.2 },
+    { wave: 'sine', frequency: 1320, to: 1320, level: 0.08, at: 0.09, seconds: 0.35 },
+  ],
+  // Low and falling, unlike every other cue, so it reads as "something is wrong" without looking.
+  away: [
+    { wave: 'triangle', frequency: 392, to: 392, level: 0.12, at: 0, seconds: 0.22 },
+    { wave: 'triangle', frequency: 294, to: 294, level: 0.12, at: 0.22, seconds: 0.32 },
+  ],
+} satisfies Record<ChimeSound, ChimeNote[]>
+
+export function isChime(sound: DerbySound): sound is ChimeSound {
+  return sound in DERBY_CHIMES
+}
 
 const NOISE_SECONDS = 1
 
@@ -59,6 +115,10 @@ export function createDerbySounds(createContext: () => AudioContext = () => new 
     },
     play(sound: DerbySound) {
       if (!context || !noise || context.state !== 'running') return false
+      if (isChime(sound)) {
+        playChime(context, DERBY_CHIMES[sound])
+        return true
+      }
       playStruckNoise(context, noise, DERBY_SOUNDS[sound])
       return true
     },
@@ -101,4 +161,27 @@ export function playTone(context: AudioContext, frequency: number, level: number
   oscillator.onended = () => [oscillator, envelope].forEach((node) => node.disconnect())
   oscillator.start(start)
   oscillator.stop(start + seconds + 0.02)
+}
+
+export function playChime(context: AudioContext, notes: ChimeNote[]) {
+  const start = context.currentTime
+  notes.forEach((note) => playNote(context, note, start))
+}
+
+/** `note` from `start` (the context's seconds), soft at its onset so it does not click. */
+export function playNote(context: AudioContext, note: ChimeNote, start: number) {
+  const begin = start + note.at
+  const end = begin + note.seconds
+  const oscillator = context.createOscillator()
+  oscillator.type = note.wave
+  oscillator.frequency.setValueAtTime(note.frequency, begin)
+  oscillator.frequency.exponentialRampToValueAtTime(note.to, end)
+  const envelope = context.createGain()
+  envelope.gain.setValueAtTime(0.0001, begin)
+  envelope.gain.exponentialRampToValueAtTime(note.level, begin + 0.004)
+  envelope.gain.exponentialRampToValueAtTime(0.0001, end)
+  oscillator.connect(envelope).connect(context.destination)
+  oscillator.onended = () => [oscillator, envelope].forEach((node) => node.disconnect())
+  oscillator.start(begin)
+  oscillator.stop(end + 0.02)
 }

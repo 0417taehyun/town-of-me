@@ -1,7 +1,7 @@
 import type { DerbySound } from '../../audio/derbySounds'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import type { PracticeFeedback } from '../flow/derbyFlow'
-import type { StanceNeed } from '../flow/stanceHold'
+import { STANCE_HOLD_RULES, type StanceNeed } from '../flow/stanceHold'
 import type { DerbyPhase } from '../game/derby'
 import { homeRunTotals, type PitchResult } from '../game/derbyScore'
 import type { BattingSide } from '../game/field'
@@ -185,10 +185,25 @@ export function seenCameraState(caption: TrackerReason | null, stanceNeed: strin
   return caption && languageCopy[language].baseball.camera.tracker[caption]
 }
 
-/** The sound a stage event makes: the bat at contact, the mitt at a catch, and the crowd for a home run. */
+/**
+ * The sound a stage event makes: a whistle at the windup, a puff as the pitch leaves the hand, a whoosh as the batter
+ * swings, the bat at contact, the mitt at a catch, and the crowd for a home run.
+ */
 export function derbySoundFor(event: StageEvent): DerbySound | null {
+  if (event.type === 'windup') return 'windup'
+  if (event.type === 'release') return 'release'
+  if (event.type === 'swing') return 'whoosh'
   if (event.type === 'contact') return 'bat'
   if (event.type === 'caught') return 'mitt'
   if (event.type === 'result' && event.result.outcome === 'homeRun') return 'crowd'
   return null
+}
+
+/**
+ * Whether the stance gauge, filling from `before` to `after` (0..1 of its hold), passed one of the hold's whole seconds
+ * short of full, where it ticks; a full gauge dings instead, and one draining or starting over is silent.
+ */
+export function stanceTicked(before: number, after: number) {
+  const seconds = STANCE_HOLD_RULES.holdMs / 1000
+  return after < 1 && Math.floor(after * seconds) > Math.floor(before * seconds)
 }

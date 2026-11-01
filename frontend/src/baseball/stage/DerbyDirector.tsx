@@ -6,7 +6,7 @@ import type { BattingSide } from '../game/field'
 import { gameTime } from '../game/gameClock'
 import { Ball } from './Ball'
 import { type BallParts, drawBall } from './ballMeshes'
-import { type BallplayerCast, posePitcherAt, posePlayers } from './ballplayerCast'
+import { type BallplayerCast, posePitcherAt, posePlayers, settleBatter } from './ballplayerCast'
 import { Ballplayers } from './Ballplayers'
 import { aimCamera, centreInBand, createCameraRig, type FreeBand } from './cameraShots'
 import {
@@ -15,6 +15,7 @@ import {
   playStageFrame,
   type RealTimeSwing,
   type RealTimeSwingCue,
+  resumeStageRun,
   setStageRunPaused,
   type StageEvent,
   type StageRun,
@@ -25,13 +26,15 @@ import { createStrikeZoneOutline, disposeStrikeZoneOutline, drawStrikeZoneOutlin
 
 /**
  * Plays a run in one frame loop: the derby on its game clock, the players, the ball, the strike zone's box, and the
- * camera, all in refs. React hears only the events. The pitcher is posed first, since the ball is in his hand until it
- * is released. A new `run` starts over. Swings pushed onto `swings` are taken every frame and played at the moment they
- * report, after the cues of swings begun or checked pushed onto `swingCues`, which only the batter shows; one from
- * before the run's first pitch is ignored like any swing with no pitch on its way. The run's clock
- * stops while the page is hidden, when frames stop too, so no pitch goes by unseen, and while it is `paused`, which the
- * page sets only between pitches for a visitor out of the camera's view, so no ball stops in the air. The picture is
- * centred in `band` (px), the part of the screen the camera panel leaves free.
+ * camera, all in refs. React hears only the events. The batter's swing is settled before anything is drawn: a hit
+ * waits, the clock still, while its aim is solved a slice a frame (ballplayerCast.ts settleBatter), so no frame solves
+ * it at once. The pitcher is posed first, since the ball is in his hand until it is released. A new `run` starts over.
+ * Swings pushed onto `swings` are taken every frame and played at the moment they report, after the cues of swings
+ * begun or checked pushed onto `swingCues`, which only the batter shows; one from before the run's first pitch is
+ * ignored like any swing with no pitch on its way. The run's clock stops while the page is hidden, when frames stop
+ * too, so no pitch goes by unseen, and while it is `paused`, which the page sets only between pitches for a visitor out
+ * of the camera's view, so no ball stops in the air. The picture is centred in `band` (px), the part of the screen the
+ * camera panel leaves free.
  */
 export function DerbyDirector({
   run,
@@ -89,13 +92,15 @@ export function DerbyDirector({
     const current = stage.current
     const reported = swings.current.splice(0)
     const cues = swingCues.current.splice(0)
-    const events = current ? playStageFrame(current, reported, realMs, reducedMotion, cues) : []
+    const events = current ? playStageFrame(current, reported, realMs, reducedMotion, cues, true) : []
     events.forEach((event) => listener.current(event))
+    const cast = players.current
+    const caughtUp = !cast || settleBatter(cast, current, realMs)
+    if (current && caughtUp) resumeStageRun(current, realMs)
     const nowMs = current ? gameTime(current.clock, realMs) : 0
     const gameDelta = Math.max(0, nowMs - lastGameMs.current) / 1000
     lastGameMs.current = nowMs
     const camera = state.camera as PerspectiveCamera
-    const cast = players.current
     const view = stageBallView(current, nowMs, cast && posePitcherAt(cast, current, nowMs))
     const { width, height } = state.size
     centreInBand(camera, rig, band, width, height, delta, reducedMotion)

@@ -10,7 +10,15 @@ import { contactHeight, contactSeconds, type PitchPlan, RELEASE_POINT } from '..
 import { createRunPlan } from '../game/runPlan'
 import { type BallplayerRig, turnHead } from './actors/ballplayerRig'
 import { BAT } from './actors/bat'
-import { batterPoseAt, CONTACT_POINT, createBatter, poseBatter, swingHeadWeight } from './actors/batter'
+import {
+  batterPoseAt,
+  beginSwing,
+  CONTACT_POINT,
+  createBatter,
+  NO_SWING,
+  poseBatter,
+  swingHeadWeight,
+} from './actors/batter'
 import { CONTACT_DELAY_MS } from './actors/swingMotion'
 import type { BallView } from './ballMeshes'
 import {
@@ -19,13 +27,16 @@ import {
   createCast,
   createFielders,
   cueBatter,
+  perfectMeetPoint,
   posePitcherAt,
   posePlayers,
+  settleBatter,
 } from './ballplayerCast'
 import { batterOverlaps, OVERLAP_PAIRS } from '../../testing/batterOverlap'
 import {
   advanceStageRun,
   createStageRun,
+  cueStageSwing,
   playStageFrame,
   type RealTimeSwing,
   type RealTimeSwingCue,
@@ -204,7 +215,46 @@ function playCued(cueLeadMs: number | null, reportMs: number) {
   return { frames, run }
 }
 
+/** The clock a frame's work reads when every step overruns the frame: one step a frame. */
+const OVERRUN = () => Infinity
+
 describe('ballplayer cast', () => {
+  it('aims a judged hit a step a frame, drawing the swing before it until done, then as if aimed at once', () => {
+    const { run } = swungRun('right', 0)
+    const atOnce = createCast(createBatter(DEFAULT_PLAYER_PROFILE, 'right'), createFielders())
+    cueBatter(atOnce, run)
+    const stepped = createCast(createBatter(DEFAULT_PLAYER_PROFILE, 'right'), createFielders())
+    let frames = 0
+    while (!settleBatter(stepped, run, 0, OVERRUN) && frames < 10_000) {
+      frames += 1
+      expect(stepped.batter.swing).toBe(NO_SWING)
+      // Each frame poses the batter between the steps, as the director does.
+      poseBatter(stepped.batter, batterPoseAt(stepped.batter, 3000 + frames, 1, true))
+    }
+    expect(frames).toBeGreaterThan(20)
+    expect(stepped.batter.swing).toEqual(atOnce.batter.swing)
+  })
+
+  it('solves a swing’s aim ahead during the windup, which the swing then begun takes as it would solve it', () => {
+    const plan = createRunPlan({ pitchCount: 1, difficulty: 'normal' }, 7)
+    const run = createStageRun({ plan, log: { side: 'right', practice: [] } }, 0)
+    advanceStageRun(run, DERBY_PHASE_MS.ready + 100, false)
+    const cast = createCast(createBatter(DEFAULT_PLAYER_PROFILE, 'right'), createFielders())
+    for (let frame = 0; frame < 10_000 && cast.batter.prepared.length < 2; frame += 1)
+      settleBatter(cast, run, 0, OVERRUN)
+    const releasedMs = DERBY_PHASE_MS.ready + DERBY_PHASE_MS.windup
+    advanceStageRun(run, releasedMs, false)
+    const crossingMs = releasedMs + contactSeconds(run.pitch!.plan) * 1000
+    cueStageSwing(run, { kind: 'started', crossingAtRealMs: crossingMs }, crossingMs - 50)
+    settleBatter(cast, run, 0, OVERRUN)
+    const prepared = cast.batter.prepared.map(({ aim }) => aim.solvedShift)
+    expect(prepared).toContain(cast.batter.swing.solvedShift)
+    const solvedNow = createBatter(DEFAULT_PLAYER_PROFILE, 'right')
+    const { startedMs, readyMs } = run.shown!.begun!
+    beginSwing(solvedNow, startedMs, readyMs, batterLoad(run, startedMs), perfectMeetPoint(run))
+    expect(cast.batter.swing).toEqual(solvedNow.swing)
+  })
+
   it('swings the batter so its bat meets each ball in play where and when the stage sends it off', () => {
     const sides: BattingSide[] = ['right', 'left']
     const misses = sides.flatMap((side) => {

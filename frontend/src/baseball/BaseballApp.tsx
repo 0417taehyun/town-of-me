@@ -77,6 +77,7 @@ import {
   pitchInPlay,
   seenCameraState,
   stanceNeedText,
+  stanceTicked,
 } from './ui/derbyCues'
 import { DeviceBlocked } from './ui/DeviceBlocked'
 import { PracticeDoneView, PracticeView } from './ui/PracticeView'
@@ -303,13 +304,24 @@ export function DerbyScreen({
     const next = startedFlow(flow, performance.now(), plays)
     if (next !== flow) begin(next)
   }
-  const onStanceProgress = useCallback((progress: number) => {
-    const ring = gauge.current
-    if (!ring) return
-    ring.style.setProperty('--stance-progress', String(progress))
-    ring.setAttribute('aria-valuenow', String(Math.round(progress * 100)))
-  }, [])
-  const stance: StanceWatch = { wait: stanceWait(flow), onProgress: onStanceProgress, onHeld: start }
+  // The gauge ticks each second it fills and dings full, so a visitor standing back hears the hold count.
+  const shownStance = useRef(0)
+  const onStanceProgress = useCallback(
+    (progress: number) => {
+      if (stanceTicked(shownStance.current, progress)) sounds.play('tick')
+      shownStance.current = progress
+      const ring = gauge.current
+      if (!ring) return
+      ring.style.setProperty('--stance-progress', String(progress))
+      ring.setAttribute('aria-valuenow', String(Math.round(progress * 100)))
+    },
+    [sounds],
+  )
+  const onStanceHeld = () => {
+    sounds.play('ding')
+    start()
+  }
+  const stance: StanceWatch = { wait: stanceWait(flow), onProgress: onStanceProgress, onHeld: onStanceHeld }
   const camera = useCameraTracking({
     side,
     objectsPaused: cameraSwinging && pitchInPlay(hud),
@@ -345,6 +357,16 @@ export function DerbyScreen({
     step === 'practice' && run ? shownPracticeFeedback(judgedResult(hud), run.plan.rules.difficulty) : null
 
   useEffect(() => () => sounds.dispose(), [sounds])
+  // A ding as the camera locks onto what the visitor swings, and a low alert once they have been out of its view long
+  // enough that practice or a run will pause for them.
+  useEffect(() => {
+    if (camera.caption === 'locked') sounds.play('lock')
+  }, [camera.caption, sounds])
+  const wasPresent = useRef(false)
+  useEffect(() => {
+    if (wasPresent.current && !camera.present && cameraSwinging) sounds.play('away')
+    wasPresent.current = camera.present
+  }, [camera.present, cameraSwinging, sounds])
   useEffect(() => (cameraOn ? keepScreenOn() : undefined), [cameraOn])
   useEffect(() => installDerbyDevSeam?.(), [])
 
