@@ -47,7 +47,7 @@ function swungRun(side: BattingSide, offsetMs: number) {
     contactAtRealMs,
     startedAtRealMs: contactAtRealMs,
     speed: 0,
-    heightError: null,
+    batHeight: null,
   }
   swingStageRun(run, swing, contactAtRealMs + 17)
   advanceStageRun(run, contactAtRealMs + 17, false)
@@ -95,7 +95,7 @@ function swingAtRelease(run: StageRun, events: StageEvent[], offsetsMs: (number 
   if (release?.type !== 'release' || offsetMs === null) return null
   const atGameMs = release.releasedMs + contactSeconds(release.pitch) * 1000 + offsetMs
   const atMs = run.clock.realMs + (atGameMs - run.clock.gameMs) / run.clock.rate
-  return { source: 'keyboard', contactAtRealMs: atMs, startedAtRealMs: atMs, speed: 0, heightError: null }
+  return { source: 'keyboard', contactAtRealMs: atMs, startedAtRealMs: atMs, speed: 0, batHeight: null }
 }
 
 /**

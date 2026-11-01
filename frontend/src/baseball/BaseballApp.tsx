@@ -187,12 +187,14 @@ export function BlockedPage({
 /**
  * The derby over its stadium: the rules, then the camera's setup with its picture as the stage, then a camera run with
  * the camera panel beside the play, then its result and another go. The keyboard run the rules card still offers takes
- * Space or Enter as swings; a camera run takes no key, and a camera that fails names its cause and offers another try,
- * never the keyboard. A computer that tracks too slowly is blocked for the visit. Every run reads the KST month when
- * it starts, never when the page loaded. A `preview`, the admin's try of next month's rules, plays those scheduled (or
- * this month's when none are) and says so on every screen; it is never ranked. V (or the camera view button) resizes
- * or hides the camera panel during a camera run, the result screen can turn the camera off, and Escape leaves from any
- * of these screens: for the town, or from a preview back to the editor.
+ * Space or Enter as swings; a camera run takes no key: its swings are the ones the camera sees (cameraTracking.ts),
+ * handed to the stage the moment they are seen, and a camera that fails names its cause and offers another try, never
+ * the keyboard. The object detector rests from each windup until the pitch is judged. A computer that tracks too
+ * slowly is blocked for the visit. Every run reads the KST month when it starts, never when the page loaded. A
+ * `preview`, the admin's try of next month's rules, plays those scheduled (or this month's when none are) and says so
+ * on every screen; it is never ranked. V (or the camera view button) resizes or hides the camera panel during a camera
+ * run, the "lock this object" button there and on the setup card locks what the visitor holds, the result screen can
+ * turn the camera off, and Escape leaves from any of these screens: for the town, or from a preview back to the editor.
  */
 export function DerbyScreen({
   ballpark,
@@ -221,19 +223,29 @@ export function DerbyScreen({
   const [run, setRun] = useState<StageRunSetup | null>(null)
   const [hud, setHud] = useState(NEW_RUN_HUD)
   const [result, setResult] = useState<DerbyResult | null>(null)
-  const camera = useCameraTracking()
+  const side = run?.log.side ?? DEFAULT_BATTING_SIDE
+  const keyboardPlaying = run?.log.input === 'keyboard' && result === null
+  const cameraPlaying = run?.log.input === 'camera' && result === null
+  const onCameraSwing = useCallback(
+    (swing: RealTimeSwing) => {
+      if (cameraPlaying) swings.current.push(swing)
+    },
+    [cameraPlaying],
+  )
+  const pitching = hud.phase === 'windup' || hud.phase === 'pitch'
+  const camera = useCameraTracking({ side, objectsPaused: cameraPlaying && pitching, onSwing: onCameraSwing })
   const viewport = useViewportSize()
   const [panelSize, setPanelSize] = useState(readPanelSize)
-  const keyboardPlaying = run?.log.input === 'keyboard' && result === null
   const rulesFor = preview ? plannedBallparkRules : effectiveBallparkRules
   const exit = baseballExit(preview)
   const cameraOn = isCameraOn(camera.status)
   const screen = cameraScreen(cameraOn, run !== null, result !== null)
   const searching = cameraOn && !camera.seen
-  const side = run?.log.side ?? DEFAULT_BATTING_SIDE
   const panel = cameraPanelLayout({ screen, chasing: chasingHomeRun(hud), searching, size: panelSize }, viewport, side)
   const stateId = cameraStateId(camera.status, camera.seen)
-  const cameraState = stateId && cameraCopy.states[stateId]
+  // Once the camera sees the visitor, the swing tracker says what to do next.
+  const trackerState = stateId === 'seen' && camera.caption ? cameraCopy.tracker[camera.caption] : null
+  const cameraState = trackerState ?? (stateId && cameraCopy.states[stateId])
   const panelShown = panel.placement !== 'hidden'
   // A panel the visitor hid that is back while the camera looks for them says so, or V would seem to do nothing.
   const panelSizeLabel =
@@ -318,7 +330,14 @@ export function DerbyScreen({
         reducedMotion={reducedMotion}
         onUnavailable={onGraphicsUnavailable}
       />
-      <CameraPanel video={camera.video} canvas={camera.canvas} layout={panel} state={cameraState} seen={camera.seen} />
+      <CameraPanel
+        video={camera.video}
+        canvas={camera.canvas}
+        layout={panel}
+        state={cameraState}
+        seen={camera.seen}
+        onTap={camera.lockAt}
+      />
       {run && (
         <DerbyHud
           hud={hud}
@@ -333,10 +352,13 @@ export function DerbyScreen({
           status={status}
           cameraState={cameraState}
           panelSide={panel.side}
+          freeMode={camera.freeMode}
           language={language}
           onPlay={() => startRun('camera')}
           onRetry={camera.turnOn}
           onTurnOff={camera.turnOff}
+          onLockHeld={() => camera.lockAt(null)}
+          onToggleFreeMode={camera.toggleFreeMode}
         />
       )}
       {!run && status.kind === 'off' && (
@@ -401,6 +423,11 @@ export function DerbyScreen({
             {cameraCopy.panel}
             <span aria-hidden="true">{panelSizeLabel}</span>
             <kbd aria-hidden="true">V</kbd>
+          </button>
+        )}
+        {screen === 'play' && !camera.freeMode && (
+          <button className="derby-camera-toggle" type="button" onClick={() => camera.lockAt(null)}>
+            {cameraCopy.lockHeld}
           </button>
         )}
         {/* The panel is hidden here while the camera stays on for another go, so the way to turn it off is too. */}

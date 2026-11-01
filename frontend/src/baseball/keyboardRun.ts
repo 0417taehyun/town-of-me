@@ -38,7 +38,7 @@ export function randomRunSeed() {
 
 /** A key press or button press as a swing; `timeStamp` is the event's, on the performance.now() clock. */
 export function keyboardSwing(timeStamp: number): RealTimeSwing {
-  return { source: 'keyboard', contactAtRealMs: timeStamp, startedAtRealMs: timeStamp, speed: 0, heightError: null }
+  return { source: 'keyboard', contactAtRealMs: timeStamp, startedAtRealMs: timeStamp, speed: 0, batHeight: null }
 }
 
 /**

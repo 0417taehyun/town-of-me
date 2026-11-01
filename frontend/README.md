@@ -55,9 +55,12 @@ npm run build
   banner names the pitch type only after the pitch. The result shows the home runs, their total
   distance, and the longest. Its sky, light, lawn, and snow follow local time
   and season like the town's, without changing the score. Phones, tablets, and browsers without WebGL 2 see why they
-  cannot play, with an address to copy. The camera picture is processed in the browser only and never leaves the
-  device; the camera turns off when you leave the page or after two minutes without movement, and a camera that is
-  refused, missing, or busy shows why with another try. A computer too slow to follow a swing is told so, like a phone.
+  cannot play, with an address to copy. With the camera you swing what you hold (a bat, a bottle) across your body:
+  the camera locks it while you hold it still, or when you tap it in the camera picture or press `Lock this object`,
+  and `Swing without an object` plays with empty hands. The camera picture is processed in the browser only and never
+  leaves the device; the camera turns off when you leave the page or after two minutes without movement, and a camera
+  that is refused, missing, or busy shows why with another try. A computer too slow to follow a swing is told so,
+  like a phone.
 
 ## Controls
 
@@ -78,6 +81,7 @@ npm run build
 | Debug view                  | `H`                                              |
 | Respawn and recenter camera | `R`                                              |
 | Swing (home-run derby)      | `Space` / `Enter` or the on-screen `Swing`       |
+| Lock what you swing (derby) | Hold it still, tap it, or `Lock this object`     |
 | Leave the derby             | `Esc` or `Back to town`                          |
 | Resize or hide derby camera | `V` or the on-screen `Camera view` button        |
 

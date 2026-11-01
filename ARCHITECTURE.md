@@ -121,7 +121,8 @@ not one of them. `derbyScore.ts` is that seam: `replayDerby` scores a run from i
 rules) and its raw `DerbyInputLog`, recalibrating from the practice swings in it; each swing records whether a camera
 or a key made it, and a key swing is judged at a fixed power with the bat level with the ball (a camera swing whose
 tracking lost the bat counts a common height error instead). `derby.ts` plays a run on `gameClock.ts` time with the
-same functions, so the numbers shown live are the replayed ones.
+same functions, so the numbers shown live are the replayed ones; it logs a swing's bat height against the ball's
+height at the contact point (`contactHeight` in `pitch.ts`), since only it knows which pitch the swing met.
 
 ### `baseball/stage/` and `baseball/stadium/`
 
@@ -162,20 +163,41 @@ the batter's only as far as its bat lets a hat brim or hair turn. Nothing in `ga
 
 The webcam is read in the browser only, and nothing it sees leaves the device; `/baseball`'s CSP (`connect-src 'self'`,
 `docker/nginx.conf`) enforces that. `tasksVision.ts` imports MediaPipe Tasks Vision only when asked, pinned to exactly
-0.10.35 because 1.0.0 and later send usage logs, and loads everything from this origin: Vite fingerprints the wasm
-from `frontend/`'s own copy of the package (not the one `@react-three/drei` depends on), and the models are committed
-in `public/assets/models/`. It builds a task on the GPU or, when that fails, the CPU, builds it again after a lost
-WebGL context, and keeps frame timestamps strictly increasing. `cameraInput.ts` asks for video only and stops every
-track on `pagehide`, after two minutes without movement, when the camera ends by itself, and when its caller's signal
-aborts. `poseLandmarks.ts` reduces a pose to the wrists and shoulders a swing reads, in the raw, unmirrored image.
-`poseLoop.ts` runs the pose task on each camera frame from the video's frame callback, keeps the camera on while the
-visitor moves, and holds whether it sees them through brief flickers. `performanceTier.ts` times this computer on every
+0.10.35 because 1.0.0 and later send usage logs, and loads everything from this origin: Vite fingerprints the wasm from
+`frontend/`'s own copy of the package (not the one `@react-three/drei` depends on), and the models are committed in
+`public/assets/models/`. It builds a task on the GPU or, when that fails, the CPU, builds it again after a lost WebGL
+context, and keeps frame timestamps strictly increasing. `cameraInput.ts` asks for video only and stops every track on
+`pagehide`, after two minutes without movement, when the camera ends by itself, and when its caller's signal aborts.
+`poseLandmarks.ts` reduces a pose to the wrists, the shoulders (their width, midpoint, and height), and the head (the
+nose) a swing reads, in the raw, unmirrored image, with the point, box, and grip geometry the held object and the
+tracker share. `poseLoop.ts` runs the pose task on each camera frame from the video's frame callback, times each frame
+by the browser's capture time (so a swing is timed when it happened, not after the frame was carried and tracked), keeps
+the camera on while the visitor moves, and holds whether it sees them through brief flickers. A swing counts only once
+the held object is locked, loaded behind the body on the batting side, and swept across the body's midline:
+`heldObject.ts` locks an object EfficientDet-Lite0 finds next to the visitor's still hands (an allow list of things a
+visitor might hold, never a person), one they tap on the camera picture or lock with the "lock this object" button, or
+none in free mode, and lets a detected one go after enough misses while they stand still. The detector waits until the
+computer is timed, then runs about 9 times a second while searching and 4 once locked, and rests during each windup and
+pitch (the cadence is `heldObject.ts`'s, the pause the page's, since both follow the tracker and the derby rather than
+the camera). `swingTracker.ts` follows the grip against the shoulders of frontal frames only (a turned torso narrows
+them), arms on a load, and fires at the interpolated midline crossing once the sweep is fast and long enough, the head
+stayed (a visitor walking by moves both), and `motionEnergy.ts` saw the band it swept through change; a swing whose
+wrists blur out just before the midline still counts, with its bat height unknown. It confirms a swing within 150 ms of
+the crossing, and the derby waits long enough past the last touching moment for that, a 15 fps frame, and the frame's
+trip to the stage (`LATE_SWING_MARGIN_MS`, tied to it in `stage/stageRun.test.ts`), so a slow camera or computer never
+loses a swing. The bat's height comes from where the grip crossed against the shoulders. `SWING_RULES` and
+`CONTACT_HEIGHT` come from the drafts' synthetic swings and one webcam log and still need tuning on a real webcam; the
+tests build their 30 fps sequences in code and commit no recordings. `performanceTier.ts` times this computer on every
 visit (the 95th percentile of the pose task's time and of the page's drawn-frame gaps after a warm-up, not the camera's
 frame rate; nothing is stored). `deviceGate.ts` names why the camera game cannot start (camera refused, missing, busy,
-or failed; tracking could not start), which the page shows with another try, never a keyboard game; a computer too
-slow to track is blocked like a phone. `cameraTracking.ts` runs the camera for the page, loading the pose task while
-the browser asks for the camera, and draws each frame mirrored with the upper body on the camera panel's canvas
-(`ui/cameraOverlay.ts`), so React hears only status changes and whether the camera sees the visitor.
+or failed; tracking could not start), which the page shows with another try, never a keyboard game; a computer too slow
+to track is blocked like a phone. `cameraTracking.ts` runs the camera for the page, loading the pose task and the object
+detector while the browser asks for the camera, and draws each frame mirrored with the upper body on the camera panel's
+canvas (`ui/cameraOverlay.ts`) with the locked object's box. It reads swings on the same frames and hands each to the
+page the moment it is seen, so React hears only status changes, whether the camera sees the visitor, and the tracker's
+two- or three-word caption: where the tracker is, held at least 0.7 s so it never flickers, or at once what just
+happened (a lock, a swing, a sweep that was not one). Once the camera is off, the motion sampler's last picture and the
+tracked body are wiped along with the panel's.
 
 ### The `/baseball` page
 
@@ -198,7 +220,8 @@ by default; V or the camera button cycles medium, large, hidden, remembered in `
 the camera chases a home run, and hidden on the result screen (which can turn the camera off) or below a readable
 width, but never while the camera looks for the visitor. The stage centres the play and the HUD its caption and banner
 in the band the panel leaves free (`centreInBand` in `stage/cameraShots.ts`). A camera run takes no key and shows no
-swing button.
+swing button: its swings are the camera's, which the stage takes before advancing the derby in the same frame, so a
+swing seen a little late is still judged at the moment its frame was taken.
 
 ## Backend (`backend/src`)
 

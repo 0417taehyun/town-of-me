@@ -23,7 +23,7 @@ function stageEventsFor(event: DerbyEvent): StageEvent[] {
 /** A key pressed the moment the pitch on its way reaches the contact point. */
 function swingDeadOn(derby: Derby) {
   const contactAtMs = derby.phaseStartedMs + contactSeconds(planRunPitch(derby.plan, derby.pitchIndex)) * 1000
-  return swingDerby(derby, { source: 'keyboard', contactAtMs, startedAtMs: contactAtMs, speed: 0, heightError: null })
+  return swingDerby(derby, { source: 'keyboard', contactAtMs, startedAtMs: contactAtMs, speed: 0, batHeight: null })
 }
 
 /** The stage events of a keyboard run swung dead on at every pitch. */

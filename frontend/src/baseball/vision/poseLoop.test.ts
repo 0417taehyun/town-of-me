@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
 import { TIER_MEASUREMENT } from './performanceTier'
-import { createFrameHandler, nextSight, type PoseFrame, SIGHT_HOLD_MS, type Sight, UNSEEN } from './poseLoop'
+import {
+  CAPTURE_TIME_LIMIT_MS,
+  createFrameHandler,
+  frameCapturedAt,
+  nextSight,
+  type PoseFrame,
+  SIGHT_HOLD_MS,
+  type Sight,
+  UNSEEN,
+} from './poseLoop'
 
 const MEASURED_FRAMES = TIER_MEASUREMENT.warmUpFrames + TIER_MEASUREMENT.measuredFrames
 
@@ -8,7 +17,13 @@ const MEASURED_FRAMES = TIER_MEASUREMENT.warmUpFrames + TIER_MEASUREMENT.measure
 function standing(wristX: number): PoseFrame {
   return {
     keypoints: null,
-    body: { wrists: { left: null, right: { x: wristX, y: 0.6 } }, shoulders: { width: 0.2, midX: 0.5 }, aspect: 1 },
+    body: {
+      wrists: { left: null, right: { x: wristX, y: 0.6 } },
+      shoulders: { width: 0.2, midX: 0.5, midY: 0.4 },
+      head: null,
+      aspect: 1,
+    },
+    capturedAt: 0,
   }
 }
 
@@ -37,7 +52,7 @@ describe('the vision loop', () => {
     const noteMovement = vi.fn()
     const handle = createFrameHandler({ noteMovement }, () => undefined)
     const timing = { inferenceMs: 10, frameIntervalsMs: [16.7] }
-    ;[standing(0.3), standing(0.31), { keypoints: null, body: null }, standing(0.3)].forEach((frame) =>
+    ;[standing(0.3), standing(0.31), { keypoints: null, body: null, capturedAt: 0 }, standing(0.3)].forEach((frame) =>
       handle(frame, timing),
     )
     expect(noteMovement).toHaveBeenCalledTimes(1)
@@ -70,5 +85,12 @@ describe('the vision loop', () => {
         [found, true],
       ]),
     ).toBe(true)
+  })
+
+  it('times a frame when the camera took it, not when it reached the page, unless that time is not believable', () => {
+    expect(frameCapturedAt(5000, 4930)).toBe(4930)
+    expect(frameCapturedAt(5000, undefined)).toBe(5000)
+    expect(frameCapturedAt(5000, 5010)).toBe(5000)
+    expect(frameCapturedAt(5000, 5000 - CAPTURE_TIME_LIMIT_MS)).toBe(5000)
   })
 })

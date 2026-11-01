@@ -16,6 +16,11 @@ what changed.
 - Export the town character's measurements (torso, head, hips, legs, shoes, collar) from `scene/characters`, so
   `ProceduralCharacter.tsx` and the `/baseball` ballplayer rig (`stage/actors/ballplayerRig.ts`), which repeats them
   today, share one source.
+- Tune the `/baseball` camera swing (`SWING_RULES` and `CONTACT_HEIGHT` in `baseball/vision/swingTracker.ts`, the
+  held-object rules in `heldObject.ts`) in a hands-on session with a real webcam; they come from synthetic swings and
+  one draft log only. Measure there how late a swing reaches the stage: `LATE_SWING_MARGIN_MS` (`game/derby.ts`)
+  allows the tracker's 150 ms finish window, a 15 fps frame, and 100 ms more, and a pitch nobody swings at waits that
+  long behind the batter before the catch.
 - Near a KST month boundary, an admin device whose clock runs fast treats the stored ballpark schedule as already in
   effect, so a rules edit can still save without the schedule, which the backend takes as a cancel. A schedule moved to
   any month but the server's next one is already refused.

@@ -1,8 +1,9 @@
-import type { PoseLandmarkerResult } from '@mediapipe/tasks-vision'
+import type { ObjectDetectorResult, PoseLandmarkerResult } from '@mediapipe/tasks-vision'
 import simdLoaderUrl from '@mediapipe/tasks-vision/vision_wasm_internal.js?url'
 import simdBinaryUrl from '@mediapipe/tasks-vision/vision_wasm_internal.wasm?url'
 import plainLoaderUrl from '@mediapipe/tasks-vision/vision_wasm_nosimd_internal.js?url'
 import plainBinaryUrl from '@mediapipe/tasks-vision/vision_wasm_nosimd_internal.wasm?url'
+import { HELD_OBJECT_LABELS, HELD_OBJECT_RULES } from './heldObject'
 
 // MediaPipe Tasks Vision, loaded only once the visitor turns the camera on, with everything served from this origin:
 // the wasm through Vite, the models from public/assets/models. Imports from frontend/ resolve to frontend's own copy of
@@ -16,6 +17,7 @@ import plainBinaryUrl from '@mediapipe/tasks-vision/vision_wasm_nosimd_internal.
 // context, and frame timestamps that must strictly increase (one that does not breaks the task for good).
 
 export const POSE_MODEL_PATH = '/assets/models/pose_landmarker_lite.task'
+export const OBJECT_MODEL_PATH = '/assets/models/efficientdet_lite0.tflite'
 
 export type VisionDelegate = 'GPU' | 'CPU'
 
@@ -149,4 +151,28 @@ export async function buildPoseLandmarker(
 /** The visitor's pose tracker: Pose Lite on the GPU or the CPU, rebuilt after a lost WebGL context. */
 export function createPoseTracker() {
   return createVisionTask(buildPoseLandmarker)
+}
+
+/**
+ * Builds EfficientDet-Lite0 in video mode, finding only the objects a visitor might hold, sure enough to be one
+ * (heldObject.ts), the few likeliest of each frame.
+ */
+export async function buildObjectDetector(
+  delegate: VisionDelegate,
+  canvas: HTMLCanvasElement,
+): Promise<VideoTask<ObjectDetectorResult>> {
+  const { vision, fileset } = await loadTasksVision()
+  return vision.ObjectDetector.createFromOptions(fileset, {
+    baseOptions: { modelAssetPath: OBJECT_MODEL_PATH, delegate },
+    canvas,
+    runningMode: 'VIDEO',
+    scoreThreshold: HELD_OBJECT_RULES.candidateScore,
+    maxResults: 6,
+    categoryAllowlist: HELD_OBJECT_LABELS,
+  })
+}
+
+/** The held-object detector, on its own canvas: on the GPU or the CPU, rebuilt after a lost WebGL context. */
+export function createObjectDetector() {
+  return createVisionTask(buildObjectDetector)
 }

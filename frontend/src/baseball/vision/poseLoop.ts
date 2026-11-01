@@ -8,17 +8,32 @@ import type { VisionTask } from './tasksVision'
 // drawn frames timed beside it. The first frames time this computer (performanceTier.ts), and movement keeps the camera
 // on (cameraInput.ts). Nothing here touches React; the caller hears each frame's pose.
 
-/** One camera frame's upper body, both null when nobody is in view. */
-export type PoseFrame = { keypoints: Keypoints | null; body: BodySample | null }
+/**
+ * One camera frame's upper body, both null when nobody is in view, and when the camera took the frame
+ * (performance.now() ms), which times a swing seen in it.
+ */
+export type PoseFrame = { keypoints: Keypoints | null; body: BodySample | null; capturedAt: number }
 
-export const NOBODY: PoseFrame = { keypoints: null, body: null }
-
-/** The pose task's first pose in an image `aspect` (width / height) wide. */
-export function poseFrame(result: PoseLandmarkerResult | null, aspect: number): PoseFrame {
+/** The pose task's first pose in an image `aspect` (width / height) wide, taken at `capturedAt`. */
+export function poseFrame(result: PoseLandmarkerResult | null, aspect: number, capturedAt: number): PoseFrame {
   const landmarks = result?.landmarks.at(0)
-  if (!landmarks) return NOBODY
+  if (!landmarks) return { keypoints: null, body: null, capturedAt }
   const keypoints = poseKeypoints(landmarks)
-  return { keypoints, body: bodySample(keypoints, aspect) }
+  return { keypoints, body: bodySample(keypoints, aspect), capturedAt }
+}
+
+/** A capture time further back than this (ms) from the frame's callback is not believed. */
+export const CAPTURE_TIME_LIMIT_MS = 500
+
+/**
+ * When the camera took a frame that reached the page at `frameTime` (the frame callback's time): the browser's capture
+ * time when it gives a believable one, so a swing is timed when it happened rather than after the frame was carried,
+ * decoded, and tracked; otherwise the callback's time. The delay before the capture time is left to the practice
+ * swings' calibration (game/calibration.ts).
+ */
+export function frameCapturedAt(frameTime: number, captureTime: number | undefined) {
+  const believable = captureTime !== undefined && captureTime <= frameTime
+  return believable && frameTime - captureTime < CAPTURE_TIME_LIMIT_MS ? captureTime : frameTime
 }
 
 /** Whether a frame shows the visitor well enough to follow a swing: both shoulders, which give the body its scale. */
@@ -114,7 +129,8 @@ export function runPoseLoop(
     const startedAt = performance.now()
     const result = tracker.detect(video, frameTime)
     const inferenceMs = performance.now() - startedAt
-    onFrame(poseFrame(result, metadata.width / metadata.height), {
+    const capturedAt = frameCapturedAt(frameTime, metadata.captureTime)
+    onFrame(poseFrame(result, metadata.width / metadata.height, capturedAt), {
       inferenceMs,
       frameIntervalsMs: takeFrameIntervals(),
     })

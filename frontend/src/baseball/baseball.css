@@ -156,6 +156,20 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
 .derby-secondary:hover {
   background: var(--cream-solid);
 }
+.derby-secondary[aria-pressed='true'] {
+  border-color: var(--ink);
+  background: var(--cream-solid);
+}
+/* The lock controls sit under the camera's state, smaller and closer to it than the card's main actions. */
+.derby-lock .derby-actions {
+  gap: 8px;
+  margin-top: 10px;
+}
+.derby-lock .derby-secondary {
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 0.95rem;
+}
 .derby-keyboard-play {
   display: flex;
   flex-wrap: wrap;
@@ -225,9 +239,15 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   font-weight: 700;
 }
 
-/* The setup card stands centred in the room the camera's stage leaves on the side opposite it. */
+/*
+ * The setup card stands centred in the room the camera's stage leaves on the side opposite it. On a short screen it
+ * scrolls rather than cut off its buttons, staying clear of the links along the bottom (and, being centred, as clear
+ * of the top).
+ */
 .derby-screen .derby-setup {
   width: min(440px, calc(100% - var(--camera-stage-width) - 64px));
+  max-height: calc(100% - 128px);
+  overflow-y: auto;
   padding: 32px 32px 28px;
 }
 .derby-screen .derby-setup[data-panel-side='right'] {
@@ -296,6 +316,8 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  /* A tap on the picture locks the object there. */
+  cursor: crosshair;
 }
 .camera-state {
   position: absolute;

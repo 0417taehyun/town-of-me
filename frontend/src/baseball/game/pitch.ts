@@ -70,6 +70,11 @@ export function contactSeconds(plan: PitchPlan) {
   return secondsAtDepth(plan, CONTACT_DEPTH)
 }
 
+/** How high (m) the ball is at the contact point: what a swing's bat height is measured against. */
+export function contactHeight(plan: PitchPlan) {
+  return pitchPosition(plan, contactSeconds(plan)).y
+}
+
 /**
  * When a bat swung to meet the ball `swingSeconds` after release does meet it: then, unless the ball is out of reach,
  * in which case where it comes within reach. An early swing meets it at the front of the reach a little later and a

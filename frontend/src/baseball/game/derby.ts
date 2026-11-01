@@ -9,7 +9,7 @@ import {
   scorePitch,
   type SwingEvent,
 } from './derbyScore'
-import { contactSeconds, type PitchPlan } from './pitch'
+import { contactHeight, contactSeconds, type PitchPlan } from './pitch'
 import { planRunPitch, type RunPlan } from './runPlan'
 
 // A run as it plays, on the game clock (ms, gameClock.ts). Each pitch goes ready → windup → pitch → result, then the
@@ -30,8 +30,14 @@ export const RESULT_HOLD_MS: Record<PitchResult['outcome'], number> = {
   miss: 1500,
 }
 
-/** How long a pitch waits past the latest contact that still touches the ball, for a camera swing reported late. */
-export const LATE_SWING_MARGIN_MS = 120
+/**
+ * How long a pitch waits past the latest contact that still touches the ball, for a camera swing reported late, so
+ * a slow camera or computer never loses a swing that touched the ball: as long as the camera's latest report (the
+ * tracker confirms a swing up to 150 ms after its contact, `finishWithinMs` in vision/swingTracker.ts, on a frame up
+ * to 67 ms later at 15 fps, which takes up to 100 ms to be delivered, tracked, and taken by the next drawn frame).
+ * stageRun.test.ts holds the two together.
+ */
+export const LATE_SWING_MARGIN_MS = 320
 
 /**
  * `log` holds a swing (or null) for each pitch finished so far and `results` their results. `phaseStartedMs` is when
@@ -57,14 +63,15 @@ export type DerbyUpdate = { derby: Derby; events: DerbyEvent[] }
 
 /**
  * A swing on the game clock: what made it, when the bat reached the contact point and when the swing began, its top
- * speed, and its bat height against the ball (see SwingEvent).
+ * speed (see SwingEvent), and how high the bat was there (field m), or null when nothing measured it. The derby logs
+ * that height against the ball's at the contact point, since only it knows which pitch the swing met.
  */
 export type DerbySwing = {
   source: DerbyInput
   contactAtMs: number
   startedAtMs: number
   speed: number
-  heightError: number | null
+  batHeight: number | null
 }
 
 /** A run starting at `nowMs`, judged with the calibration from the practice already in `log`. */
@@ -104,19 +111,20 @@ export function swingDerby(derby: Derby, swing: DerbySwing): DerbyUpdate {
   const advanced = advanceDerby(derby, swing.contactAtMs)
   const releasedMs = advanced.derby.phaseStartedMs
   if (advanced.derby.phase !== 'pitch' || swing.contactAtMs < releasedMs) return advanced
+  const pitch = planRunPitch(advanced.derby.plan, advanced.derby.pitchIndex)
   const event: SwingEvent = {
     source: swing.source,
     contactMs: swing.contactAtMs - releasedMs,
     startedMs: swing.startedAtMs - releasedMs,
     speed: swing.speed,
-    heightError: swing.heightError,
+    heightError: swing.batHeight === null ? null : swing.batHeight - contactHeight(pitch),
   }
   const finished = finishPitch(advanced.derby, event, swing.contactAtMs)
   return { derby: finished.derby, events: [...advanced.events, ...finished.events] }
 }
 
 export function isFiniteSwing(swing: DerbySwing) {
-  const measured = [swing.contactAtMs, swing.startedAtMs, swing.speed, swing.heightError ?? 0]
+  const measured = [swing.contactAtMs, swing.startedAtMs, swing.speed, swing.batHeight ?? 0]
   return measured.every(Number.isFinite)
 }
 
