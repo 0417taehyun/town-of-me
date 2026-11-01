@@ -3,7 +3,7 @@ import { clamp01, lerp, smoothstep } from '../../../motionMath'
 import { objectVariant, resolveVariant } from '../../objectVariant'
 import { FLOWER_VARIANTS, type FlowerVariant } from '../variants'
 
-const flowerColors = ['#ffd43b', '#ef476f', '#30bced', '#8b5cf6', '#ff8c42', '#ed3fba']
+export const flowerColors = ['#ffd43b', '#ef476f', '#30bced', '#8b5cf6', '#ff8c42', '#ed3fba']
 
 export type FlowerLayout = {
   kind: FlowerVariant

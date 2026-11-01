@@ -17,6 +17,7 @@ import { crowdCheer } from '../stadium/crowdLayout'
 import { Crowd } from '../stadium/Crowd'
 import { Dugouts } from '../stadium/Dugouts'
 import { GardenBowl } from '../stadium/GardenBowl'
+import { GardenBreeze } from '../stadium/GardenBreeze'
 import { GardenLandmarks } from '../stadium/GardenLandmarks'
 import { useApprovedLooks } from '../stadium/guestLooks'
 import { StadiumField } from '../stadium/StadiumField'
@@ -26,7 +27,10 @@ import type { FreeBand } from './cameraShots'
 import { DerbyDirector } from './DerbyDirector'
 import type { RealTimeSwing, RealTimeSwingCue, StageEvent, StageRunSetup } from './stageRun'
 
-/** Petals and leaves fall from the town's trees; none drift from the garden's yet, so only winter's snow falls here. */
+/**
+ * Petals and leaves fall from the town's trees; the garden's breeze (GardenBreeze.tsx) drifts its own, so only winter's
+ * snow falls here.
+ */
 const NO_TREES: TownObject[] = []
 /** The fog begins past the outfield hedge, so the whole field stays clear. */
 const STADIUM_FOG = { near: 130, far: 380 }
@@ -36,7 +40,8 @@ const STADIUM_FOG = { near: 130, far: 380 }
  * the nature follow the visitor's time of day and season like the town's; they only change how it looks. The play is
  * centred in `band`, the part of the screen the camera panel leaves free, and stands still while `paused`. When the
  * graphics fail or are lost, `onUnavailable` lets the page say why in the visitor's language. A computer on the
- * `reducedTier` (vision/performanceTier.ts) draws fewer people around the play.
+ * `reducedTier` (vision/performanceTier.ts) draws fewer people and petals around the play, and reduced motion leaves
+ * the garden's breeze out.
  */
 export function BaseballStage({
   language,
@@ -87,6 +92,7 @@ export function BaseballStage({
   const shadowFocus = useMemo(() => ({ current: new Vector3(0, 0, -4) }), [])
   const approvedLooks = useApprovedLooks()
   const ballView = useRef<BallView | null>(null)
+  const judged = judgedResult(hud)
 
   return (
     <GraphicsCanvas
@@ -127,10 +133,19 @@ export function BaseballStage({
       <Crowd
         approved={approvedLooks}
         ballViewRef={ballView}
-        cheer={crowdCheer(judgedResult(hud))}
+        cheer={crowdCheer(judged)}
         reduced={reducedTier}
         reducedMotion={reducedMotion}
       />
+      {!reducedMotion && (
+        <GardenBreeze
+          seasonChange={seasonChange}
+          dayChange={dayChange}
+          ballViewRef={ballView}
+          homeRun={judged?.outcome === 'homeRun'}
+          reduced={reducedTier}
+        />
+      )}
       <DerbyDirector
         run={run}
         profile={profile}

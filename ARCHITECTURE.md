@@ -164,7 +164,11 @@ never a name (`guestLooks.ts`), and a reduced performance tier draws half of the
 batting shot, our runner on second, and our teammates in our dugout, on the players' rig (`stage/actors/fieldPlayer.ts`)
 and drawn as a few instanced meshes (`stage/actors/rigBatch.ts`). They watch the ball, and for a ball in play the
 fielder nearest its landing runs for it, always to fair ground inside the hedge (`fielderLayout.test.ts`); they only
-show where the derby already sent it.
+show where the derby already sent it. The garden's breeze (`breezeLayout.ts`, `GardenBreeze.tsx`) drifts the season's
+petals or leaves round the park beyond the infield and flies butterflies over the flower beds by day, and when a home
+run's ball clears the hedge it bursts petals over the hedge and from the far light towers, from one bounded pool;
+nothing of it comes near the pitch or between the camera and the ball (`breezeLayout.test.ts`), a reduced tier draws
+fewer, and reduced motion leaves it out.
 
 `stage/actors/` builds the players in plain Three.js. `ballplayerRig.ts` is the town character's body, look, and
 proportions posed by joints (two-bone IK legs on planted feet, a chest turning about a tilted spine, elbow arms); the
