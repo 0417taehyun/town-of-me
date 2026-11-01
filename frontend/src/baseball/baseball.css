@@ -233,53 +233,58 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   background: #fbe3d9;
   font-weight: 700;
 }
-.baseball-note.derby-swing-tip {
-  color: var(--ink);
-  font-weight: 700;
-}
-/* The rules card scrolls on a short screen rather than run under the links along the bottom. */
+/*
+ * The rules card fits a laptop's 768 px without scrolling (Esc to leave beside its button); on a shorter screen it
+ * scrolls rather than run under the links along the bottom.
+ */
 .derby-screen .derby-start {
   width: min(580px, calc(100% - 32px));
   max-height: calc(100% - 128px);
   overflow-y: auto;
 }
-/* The visitor's own character, the one at the plate, with its name. */
+.derby-start h2 {
+  margin-top: 20px;
+}
+.derby-start .derby-actions .baseball-note {
+  margin: 0;
+}
+/* The visitor's own character, the one at the plate, with its name, in a row no taller than a few lines. */
 .derby-batter {
   display: grid;
-  grid-template-columns: 96px 1fr;
+  grid-template-columns: 52px 1fr;
   align-items: center;
-  gap: 16px;
-  margin-top: 20px;
-  padding: 10px 16px 10px 10px;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 6px 16px 6px 6px;
   border-radius: var(--radius-md);
   background: rgba(71, 111, 96, 0.08);
 }
 .derby-batter-portrait {
-  height: 120px;
+  height: 64px;
   overflow: hidden;
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.6);
 }
 .derby-batter strong {
   display: block;
-  font-size: 1.25rem;
+  font-size: 1.15rem;
 }
 .derby-batter p {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   color: var(--muted);
   line-height: 1.45;
 }
 
 /*
- * The setup card stands centred in the room the camera's stage leaves on the side opposite it. On a short screen it
- * scrolls rather than cut off its buttons, staying clear of the links along the bottom (and, being centred, as clear
- * of the top).
+ * The setup card stands centred in the room the camera's stage leaves on the side opposite it, fitting a laptop's
+ * 768 px. On a shorter screen it scrolls rather than cut off its buttons, staying clear of the links along the bottom
+ * (and, being centred, as clear of the top).
  */
 .derby-screen .derby-setup {
   width: min(700px, calc(100% - var(--camera-stage-width) - 64px));
   max-height: calc(100% - 128px);
   overflow-y: auto;
-  padding: 32px 32px 28px;
+  padding: 28px 32px 24px;
 }
 .derby-screen .derby-setup[data-panel-side='right'] {
   left: calc((100% - var(--camera-stage-width) - var(--camera-panel-edge)) / 2);
@@ -298,7 +303,7 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   font-size: clamp(1.8rem, 3vw, 2.6rem);
 }
 .derby-setup .baseball-note {
-  margin-top: 12px;
+  margin-top: 10px;
 }
 .derby-setup .baseball-note.derby-safety {
   line-height: 1.45;
@@ -309,18 +314,37 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
 .derby-setup .derby-actions .primary-button {
   min-width: 0;
 }
+/*
+ * The camera stage's line under its picture says at 6vh what the stance waits for, so here the ring and the line
+ * beside it are sized by the screen's height, and what holding starts sits beside the ring, under the line.
+ */
+.derby-setup .stance-gauge {
+  --stance-ring: clamp(72px, 12vh, 160px);
+}
+.derby-setup .stance-gauge-ring {
+  grid-row: span 2;
+}
+.derby-setup .stance-gauge .stance-gauge-need {
+  align-self: end;
+  font-size: max(1.2rem, min(4.5vh, (100cqi - var(--stance-ring) - var(--stance-gap)) * 2.2 / (var(--need-ems) + 1)));
+}
+.derby-setup .stance-gauge .stance-gauge-hint {
+  grid-column: 2;
+  align-self: start;
+}
 
-/* Which side the visitor bats from, a pair of radio buttons the arrow keys move between. */
+/* Which side the visitor bats from, named on the row of its two radio buttons, which the arrow keys move between. */
 .derby-side {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 4px 20px;
-  margin: 18px 0 0;
+  margin: 14px 0 0;
   padding: 0;
   border: 0;
 }
 .derby-side legend {
-  margin-bottom: 4px;
+  float: left;
   padding: 0;
   color: var(--muted);
   font-size: 0.9rem;
@@ -403,10 +427,13 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   line-height: 1.45;
 }
 
-/* After practice and a run, the card that waits for the next one stands in the band the camera panel leaves the play. */
+/*
+ * After practice and a run, the card that waits for the next one stands in the band the camera panel leaves the play,
+ * as wide as the band allows, so the line beside the stance ring reads at 6vh.
+ */
 .derby-screen :is(.derby-practice-done, .derby-result) {
   left: var(--play-centre, 50%);
-  width: min(600px, calc(var(--play-width, 100vw) - 32px));
+  width: min(1180px, calc(var(--play-width, 100vw) - 32px));
 }
 /* Practice's caption says how a swing was timed in a word, tinted so the word reads at a glance. */
 .derby-caption[data-feedback='good'] {
@@ -529,14 +556,18 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
     transform: scale(0.8);
   }
 }
-/* What to do, under the picture: two lines kept so the panel does not jump as it changes, three at most. */
+/*
+ * What to do, under the picture: two lines kept so the panel does not jump as it changes, three at most, set as large
+ * as three lines of the panel's width hold its length (--headline-ems), so a long line shrinks rather than lose its
+ * end.
+ */
 .camera-headline {
   display: -webkit-box;
   min-height: 2.3em;
   margin: 0;
   overflow: hidden;
   color: var(--ink);
-  font-size: max(16px, min(6vh, 13.5cqi));
+  font-size: max(16px, min(6vh, 13.5cqi, 230cqi / (var(--headline-ems) + 1)));
   font-weight: 800;
   line-height: 1.15;
   text-align: center;
@@ -594,7 +625,6 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   container-type: inline-size;
   /* Centred in the room above the links along the bottom. */
   top: calc(50% - 3vh);
-  width: min(1180px, calc(var(--play-width, 100vw) - 32px));
   padding: 3vh 4vh;
 }
 html[lang='ko'] .derby-screen .derby-result {

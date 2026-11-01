@@ -53,8 +53,8 @@ export type BallplayerCast = Fielders & {
   batterLookShare: number
   run: StageRun | null
   shown: ShownSwing | null
-  /** The judgment of the swing shown last, while it is still being solved. */
-  judging: BatterJob | null
+  /** The judgment of the swing shown last, while it is still being solved, and how long (ms) its next slice is. */
+  judging: (BatterJob & { sliceMs: number }) | null
   /** An aim being solved ahead (prepareAims). */
   preparing: BatterJob | null
 }
@@ -73,7 +73,8 @@ export const FOOT_DOWN_LEAD_MS = 175
 /**
  * How long (ms) a frame works on the batter's judged swing, and on the aims it solves ahead, before it draws: together
  * with a frame's own drawing, the camera's tracking, and the page's answer to the result, they stay inside a 60 Hz
- * frame.
+ * frame. A judged swing still unsolved works twice as long each frame after, so a slow computer holds the clock a few
+ * frames, not a dozen.
  */
 export const BATTER_WORK_MS = { judging: 5, preparing: 3 }
 /** The share of the windup gone before the batter starts lifting its front foot. */
@@ -184,9 +185,10 @@ export function changedShown(cast: BallplayerCast, run: StageRun | null) {
 
 /**
  * Before a frame poses the players, from `frameStartMs` (performance.now() ms; `now` reads that clock): as cueBatter,
- * but a judged swing is worked on BATTER_WORK_MS.judging a frame until it is done, the swing drawn meanwhile being the
- * one before it; while none is, the aims of swings to come are solved ahead. Returns whether the batter has caught up
- * with the stage, which waits for it before it plays a ball in play on (stageRun.ts resumeStageRun).
+ * but a judged swing is worked on a slice a frame, BATTER_WORK_MS.judging and then twice the last, until it is done,
+ * the swing drawn meanwhile being the one before it; while none is, the aims of swings to come are solved ahead.
+ * Returns whether the batter has caught up with the stage, which waits for it before it plays a ball in play on
+ * (stageRun.ts resumeStageRun).
  */
 export function settleBatter(
   cast: BallplayerCast,
@@ -196,9 +198,13 @@ export function settleBatter(
 ) {
   const shown = changedShown(cast, run)
   if (run && shown) startShown(cast, run, shown)
-  if (!cast.judging) return prepareAims(cast, run, frameStartMs + BATTER_WORK_MS.preparing, now)
-  if (!stepJob(cast.batter, cast.judging, frameStartMs + BATTER_WORK_MS.judging, now)) return false
-  cast.batter.swing = cast.judging.swing
+  const { judging } = cast
+  if (!judging) return prepareAims(cast, run, frameStartMs + BATTER_WORK_MS.preparing, now)
+  if (!stepJob(cast.batter, judging, frameStartMs + judging.sliceMs, now)) {
+    judging.sliceMs *= 2
+    return false
+  }
+  cast.batter.swing = judging.swing
   cast.judging = null
   return true
 }
@@ -207,7 +213,8 @@ export function settleBatter(
 export function startShown(cast: BallplayerCast, run: StageRun, shown: ShownSwing) {
   const { batter } = cast
   showSwing(batter, run, shown, cast.shown)
-  cast.judging = { steps: judgeShownSteps(batter, run, shown, cast.shown), swing: batter.swing }
+  const steps = judgeShownSteps(batter, run, shown, cast.shown)
+  cast.judging = { steps, swing: batter.swing, sliceMs: BATTER_WORK_MS.judging }
   cast.shown = shown
 }
 

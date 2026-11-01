@@ -541,6 +541,7 @@ export function DerbyScreen({
                 )}
               </li>
             )}
+            <li>{cameraCopy.swingTip}</li>
           </ul>
           {preview && (
             <p className="baseball-note derby-preview-note">
@@ -555,13 +556,12 @@ export function DerbyScreen({
             </p>
           )}
           <p className="baseball-note derby-safety">{cameraCopy.safety}</p>
-          <p className="baseball-note derby-swing-tip">{cameraCopy.swingTip}</p>
           <p className="baseball-note">{cameraCopy.notice}</p>
-          <p className="baseball-note">{copy.baseball.leaveKey}</p>
           <div className="derby-actions">
             <button className="primary-button" type="button" autoFocus onClick={startWithCamera}>
               {cameraCopy.turnOn}
             </button>
+            <p className="baseball-note">{copy.baseball.leaveKey}</p>
           </div>
         </section>
       )}

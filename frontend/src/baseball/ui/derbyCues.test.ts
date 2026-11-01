@@ -251,7 +251,7 @@ describe('the derby HUD', () => {
 
   it('shows distances in whole meters, spaced in English and not in Korean, and a total to the decimeter', () => {
     expect([distanceText(1324, 'en'), distanceText(1324, 'ko')]).toEqual(['132 m', '132m'])
-    expect([homeRunDistanceText(2170, 'en', 1), homeRunDistanceText(2174, 'en', 1)]).toEqual(['217 m', '217.4 m'])
+    expect([homeRunDistanceText(2170, 'en', 1), homeRunDistanceText(2174, 'en', 1)]).toEqual(['217.0 m', '217.4 m'])
   })
 })
 

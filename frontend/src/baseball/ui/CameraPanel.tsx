@@ -27,8 +27,10 @@ export function CameraPanel({
   onTap: (point: Point) => void
 }) {
   const style = { '--camera-panel-width': `${layout.width}px` } as CSSProperties
-  // The chip sets its word as large as the panel's width allows, up to its height (baseball.css).
+  // The chip sets its word as large as the panel's width allows, up to its height, and the line its words as large as
+  // three lines of that width hold them (baseball.css).
   const chipStyle = { '--chip-ems': textEms(words?.chip ?? '') } as CSSProperties
+  const headlineStyle = { '--headline-ems': textEms(words?.headline ?? '') } as CSSProperties
   const tap = (event: PointerEvent<HTMLCanvasElement>) => {
     const picture = event.currentTarget
     const point = tappedImagePoint({ x: event.clientX, y: event.clientY }, picture.getBoundingClientRect(), picture)
@@ -52,7 +54,9 @@ export function CameraPanel({
         <div className="camera-picture">
           <canvas ref={canvas} onPointerDown={tap} />
         </div>
-        <p className="camera-headline">{words?.headline}</p>
+        <p className="camera-headline" style={headlineStyle}>
+          {words?.headline}
+        </p>
       </div>
     </>
   )

@@ -235,6 +235,21 @@ describe('ballplayer cast', () => {
     expect(stepped.batter.swing).toEqual(atOnce.batter.swing)
   })
 
+  it('holds the clock for a judged hit only a few frames, even on a computer several times slower', () => {
+    const { run } = swungRun('right', 0)
+    // Frames until the judged hit is solved when each of its steps takes `stepMs`: about 0.05 on a fast laptop.
+    const framesAt = (stepMs: number) => {
+      const cast = createCast(createBatter(DEFAULT_PLAYER_PROFILE, 'right'), createFielders())
+      let clockMs = 0
+      const now = () => (clockMs += stepMs)
+      let frames = 1
+      while (!settleBatter(cast, run, clockMs, now) && frames < 10_000) frames += 1
+      return frames
+    }
+    expect(framesAt(0.1)).toBeLessThanOrEqual(4)
+    expect(framesAt(1)).toBeLessThanOrEqual(8)
+  })
+
   it('solves a swing’s aim ahead during the windup, which the swing then begun takes as it would solve it', () => {
     const plan = createRunPlan({ pitchCount: 1, difficulty: 'normal' }, 7)
     const run = createStageRun({ plan, log: { side: 'right', practice: [] } }, 0)

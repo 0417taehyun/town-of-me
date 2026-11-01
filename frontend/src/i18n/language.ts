@@ -708,7 +708,7 @@ export const languageCopy = {
         swingTip: 'Pull your hands back to your back shoulder, then swing across your body.',
         tracker: {
           showHands: 'Show your hands',
-          looking: 'Looking for what you swing · none? Both hands together will do, as on a bat',
+          looking: 'Hold up your object or join hands',
           holdStill: 'Hold still',
           locking: 'Locking on…',
           locked: 'Object locked',
@@ -755,7 +755,7 @@ export const languageCopy = {
         /** The camera panel's chip once it sees the visitor, a word for where the swing tracker is (derbyCues.ts). */
         tones: { searching: 'Looking', help: 'Oops', locked: 'Ready', loaded: 'Loaded', swing: 'Swing!' },
         /** The camera panel's line under its picture while the camera looks for the visitor. */
-        stepIn: 'Stand where the camera sees your upper body and hands',
+        stepIn: 'Show your upper body and hands',
         stopped: {
           idle: 'The camera turned off after 2 minutes without movement.',
           pagehide: 'The camera turned off when you left the page.',
@@ -1504,7 +1504,7 @@ export const languageCopy = {
         swingTip: '손을 뒷어깨 쪽으로 당겼다가 몸 앞을 가로질러 휘둘러요.',
         tracker: {
           showHands: '손이 보이게',
-          looking: '들고 칠 물건을 찾는 중이에요 · 없으면 배트를 쥐듯 두 손을 모으면 돼요',
+          looking: '물건을 들거나 두 손을 모아요',
           holdStill: '잠깐 멈춰요',
           locking: '물건 잡는 중…',
           locked: '물건을 잡았어요',

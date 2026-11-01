@@ -149,13 +149,14 @@ export function practiceCaptionId(hud: DerbyHudState, feedback: PracticeFeedback
 }
 
 /**
- * A distance as each language writes it, in whole meters unless `fractionDigits` asks for more: "132 m" in English,
- * "132m" in Korean.
+ * A distance as each language writes it, in whole meters unless `fractionDigits` asks for that many decimals, kept
+ * even when zero so a column of them lines up: "132 m" in English, "132m" in Korean.
  */
 export function distanceText(decimetres: number, language: AppLanguage, fractionDigits = 0) {
   const format = new Intl.NumberFormat(language, {
     style: 'unit',
     unit: 'meter',
+    minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
   })
   return format.format(decimetres / 10)

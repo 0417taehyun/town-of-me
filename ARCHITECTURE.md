@@ -168,7 +168,8 @@ body. Its keys keep the bat out of the body, and the elbows and the head's tilt 
 simple solids (`bodyVolumes.ts`), smoothly from moment to moment, so the arms, the mittens, and the bat stay out of the
 head, its hair and hat, and the body, and the arms and mittens off the bat and each other. That aim is the costliest
 work a frame could do, so no frame does it at once: the aims a swing from the windup takes are solved ahead during the
-windup, and a hit's is solved a slice a frame while the stage waits (`ballplayerCast.ts` `settleBatter`).
+windup, and a hit's is solved a slice a frame, each twice the last, while the stage waits (`ballplayerCast.ts`
+`settleBatter`), so even a slow computer holds the clock only a few frames.
 The other team's pitcher (`pitcher.ts`) and catcher (`catcher.ts`) wear its brick red and charcoal (`teamUniforms.ts`);
 the pitcher's throw is keyed on the same tracks with its release key at `game/pitch.ts`'s `RELEASE_POINT`, and the
 catcher's mitt reaches for where each pitch ends up. `ballplayerCast.ts` drives all three from the stage run: the
