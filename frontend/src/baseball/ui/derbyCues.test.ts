@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { advanceDerby, createDerby, type Derby, type DerbyEvent, phaseEndMs, swingDerby } from '../game/derby'
 import { contactSeconds, type PitchTypeId } from '../game/pitch'
+import type { PitchResult } from '../game/derbyScore'
 import { createRunPlan, planRunPitch, type RunPlan } from '../game/runPlan'
 import type { StageEvent } from '../stage/stageRun'
 import {
   bannerResult,
+  bannerText,
+  betweenPitches,
   chasingHomeRun,
   distanceText,
   homeRunDistanceText,
@@ -104,6 +107,33 @@ describe('the derby HUD', () => {
     ])
     const hit = { ...hud.results[0], outcome: 'hit' as const }
     expect(chasingHomeRun({ phase: 'result', pitchIndex: 0, results: [hit], settledPitch: -1 })).toBe(false)
+  })
+
+  it('is between pitches before the first windup and once a ball is down, never with one on its way or after the last', () => {
+    let hud = NEW_RUN_HUD
+    expect(betweenPitches(hud, 3)).toBe(true)
+    const between = deadOnRun(createRunPlan({ pitchCount: 3, difficulty: 'normal' }, 11)).map((event) => {
+      hud = hudAfterEvent(hud, event)
+      return [event.type, betweenPitches(hud, 3)]
+    })
+    expect(between).toEqual([
+      ...[true, true, false].flatMap((another) => [
+        ['windup', false],
+        ['release', false],
+        ['result', false],
+        ['landed', another],
+      ]),
+      ['finished', false],
+    ])
+  })
+
+  it('names the distance and the pitch in the banner, never how the swing was timed or how hard it was', () => {
+    const landing = { outcome: 'homeRun', distanceDecimetres: 1203, spray: 0.1, launchDegrees: 28 } as const
+    const deadOn: PitchResult = { ...landing, pitchType: 'curve', timing: 'perfect', errorMs: 3, power: 1.1 }
+    const lateAndWeak: PitchResult = { ...deadOn, timing: 'late', errorMs: 120, power: 0.6 }
+    expect(bannerText(lateAndWeak, 'en')).toEqual(bannerText(deadOn, 'en'))
+    expect(bannerText(lateAndWeak, 'ko')).toEqual(bannerText(deadOn, 'ko'))
+    expect(bannerText({ ...deadOn, pitchType: 'fastball' }, 'en')).not.toEqual(bannerText(deadOn, 'en'))
   })
 
   it('shows distances in whole meters, spaced in English and not in Korean, and a total to the decimeter', () => {

@@ -122,7 +122,10 @@ rules) and its raw `DerbyInputLog`, recalibrating from the practice swings in it
 or a key made it, and a key swing is judged at a fixed power with the bat level with the ball (a camera swing whose
 tracking lost the bat counts a common height error instead). `derby.ts` plays a run on `gameClock.ts` time with the
 same functions, so the numbers shown live are the replayed ones; it logs a swing's bat height against the ball's
-height at the contact point (`contactHeight` in `pitch.ts`), since only it knows which pitch the swing met.
+height at the contact point (`contactHeight` in `pitch.ts`), since only it knows which pitch the swing met. Practice
+plays as a derby too (`createPracticePlan` in `runPlan.ts`, `createDerby`'s `practice`): the fixed practice pitches at
+the practice pace, which the scoring functions take as an argument that a run never passes, taking swings as late as
+the calibration still counts one, so a server needs none of it.
 
 ### `baseball/stage/` and `baseball/stadium/`
 
@@ -204,24 +207,43 @@ tracked body are wiped along with the panel's.
 `BaseballApp.tsx` checks the device first (`deviceGate.ts`: a phone or tablet, then WebGL 2) and shows why one cannot
 play in the visitor's language (also when the stadium's graphics fail later, or when the camera finds this computer too
 slow to track), then the character, then the derby. Each
-run reads the KST month it starts in and gets a `crypto` seed (`keyboardRun.ts`), so a page left open into a new month
-plays the rules scheduled for it, as loaded with the page, from its next run. The editor's link to `?rules=next`
+run reads the KST month it starts in and gets a `crypto` seed (`flow/derbyFlow.ts`), so a page left open into a new
+month plays the rules scheduled for it, as loaded with the page, from its next run. The editor's link to `?rules=next`
 (`isNextRulesPreview` in `baseballRoute.ts`) plays the rules scheduled for next month instead, or this month's when
 none are (`plannedBallparkRules`), badged `Preview · not ranked`; once ranked runs exist, such a preview must never get
 a run ticket. The editor opens the preview in the same tab, so the preview's back links and Escape return to `/admin`
 (`baseballExit`). The HUD (`ui/`) keeps only what the stage's events tell it (`derbyCues.ts`): a release carries
 nothing it shows, so the pitch type reaches the screen only in a result, and the result banner waits until the ball is
 down so it never covers the play; the scoreboard's home runs and their summed distance count a home run as its banner
-shows. The result screen draws the `DerbyResult` that `replayDerby` returns with the `finished` event. The rules card
+shows. The banner and the HUD show the outcome, the distance, and the pitch type, never a timing verdict or a swing's
+power. The result screen draws the `DerbyResult` that `replayDerby` returns with the `finished` event. The rules card
 promises that the camera picture stays on the device and turns off on leaving or after two minutes without movement,
-then turns the camera on. `ui/cameraPanelLayout.ts` places the camera panel: the mirrored camera is the stage while it
-sets up, a column under the scoreboard on the side opposite the batter during a camera run (medium, 29% of the width,
-by default; V or the camera button cycles medium, large, hidden, remembered in `localStorage`), a corner chip while
-the camera chases a home run, and hidden on the result screen (which can turn the camera off) or below a readable
-width, but never while the camera looks for the visitor. The stage centres the play and the HUD its caption and banner
-in the band the panel leaves free (`centreInBand` in `stage/cameraShots.ts`). A camera run takes no key and shows no
-swing button: its swings are the camera's, which the stage takes before advancing the derby in the same frame, so a
-swing seen a little late is still judged at the moment its frame was taken.
+then turns the camera on with the only click the derby needs, which also unlocks its sounds and asks for the full
+screen; the screen stays awake while the camera is on, asked again each time the page shows
+(`flow/screenRequests.ts`). `flow/derbyFlow.ts` holds the steps after it: the setup, where the visitor picks the
+batting side (which the batter, the camera panel, and the swing tracker follow), then practice, the step after it, the
+run, and its result. Each step that waits goes on by its focused button (Enter and Space press it, as on any page) or by
+holding the batting stance about three seconds (`flow/stanceHold.ts`): the swing tracker loaded on the batting side
+with the grip up by the shoulders and still, measured in shoulder widths. A stance kept from before the step asked, or
+in its first two seconds, counts for nothing, moving drains the ring at twice its pace, and a brief dropout holds it.
+The vision loop follows the hold and fills `ui/StanceGauge.tsx` straight on its element, so React renders only when a
+step changes. Practice pitches the game core's practice schedule at the practice pace as a derby of its own, with no
+calibration, so its swings' errors are against the contact point, and it takes swings as late as the calibration still
+counts one, so a slow camera's late swings still teach it. It tells each swing only a bit early, good, or a bit late
+(its own error against the contact point, within the difficulty's GOOD window or not), and its swings calibrate every
+run until the camera turns off. Practice and a run stand still once the visitor has been out of the camera's view
+1.5 s, but only between pitches (before the first windup, or once a result's ball is down and another pitch is to
+come), so a ball on its way plays out and no swing made meanwhile meets a pitch; the next pitch comes once they are
+back. A camera that turns off, as after two minutes without movement, takes the page back to the rules card. In a dev
+build, `devSeam.ts` lets an automated check stand in for a visitor the fake camera cannot show; a production build
+leaves it out. `ui/cameraPanelLayout.ts` places the camera panel: the mirrored camera is the stage while it sets up, a
+column under the scoreboard on the side opposite the batter from practice on (medium, 29% of the width, by default; V
+or the camera button cycles medium, large, hidden, remembered in `localStorage`), a corner chip while the camera chases
+a home run, and hidden on the result screen (which can turn the camera off) or below a readable width, but never while
+the camera looks for the visitor. The stage centres the play and the HUD its caption and banner in the band the panel
+leaves free (`centreInBand` in `stage/cameraShots.ts`). A camera run takes no key and shows no swing button: its swings
+are the camera's, which the stage takes before advancing the derby in the same frame, so a swing seen a little late is
+still judged at the moment its frame was taken.
 
 ## Backend (`backend/src`)
 

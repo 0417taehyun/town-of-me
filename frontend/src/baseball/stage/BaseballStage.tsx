@@ -26,8 +26,8 @@ const STADIUM_FOG = { near: 130, far: 380 }
 /**
  * The derby's stadium on its own flat canvas (the town's world curve is never installed here). The sky, the light, and
  * the nature follow the visitor's time of day and season like the town's; they only change how it looks. The play is
- * centred in `band`, the part of the screen the camera panel leaves free. When the graphics fail or are lost,
- * `onUnavailable` lets the page say why in the visitor's language.
+ * centred in `band`, the part of the screen the camera panel leaves free, and stands still while `paused`. When the
+ * graphics fail or are lost, `onUnavailable` lets the page say why in the visitor's language.
  */
 export function BaseballStage({
   label,
@@ -38,6 +38,7 @@ export function BaseballStage({
   swings,
   onEvent,
   band,
+  paused,
   period,
   season,
   reducedMotion,
@@ -51,6 +52,7 @@ export function BaseballStage({
   swings: MutableRefObject<RealTimeSwing[]>
   onEvent: (event: StageEvent) => void
   band: FreeBand
+  paused: boolean
   period: DayPeriod
   season: Season
   reducedMotion: boolean
@@ -93,6 +95,7 @@ export function BaseballStage({
         swings={swings}
         onEvent={onEvent}
         band={band}
+        paused={paused}
         reducedMotion={reducedMotion}
       />
     </GraphicsCanvas>

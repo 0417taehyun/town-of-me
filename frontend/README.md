@@ -57,10 +57,14 @@ npm run build
   and season like the town's, without changing the score. Phones, tablets, and browsers without WebGL 2 see why they
   cannot play, with an address to copy. With the camera you swing what you hold (a bat, a bottle) across your body:
   the camera locks it while you hold it still, or when you tap it in the camera picture or press `Lock this object`,
-  and `Swing without an object` plays with empty hands. The camera picture is processed in the browser only and never
-  leaves the device; the camera turns off when you leave the page or after two minutes without movement, and a camera
-  that is refused, missing, or busy shows why with another try. A computer too slow to follow a swing is told so,
-  like a phone.
+  and `Swing without an object` plays with empty hands. Choose to bat right- or left-handed on the setup card. The one
+  click on `Start with the camera` is the only one needed: from there you go on hands-free by holding your batting
+  stance for about three seconds (or with the step's button): to five practice pitches, which tell each swing only
+  `A bit early`, `Good`, or `A bit late` and set your timing for the runs after them, then to the run, and to another
+  after its result. Practice and a run pause between pitches while you are out of the camera's view. The camera
+  picture is processed in the browser only and never leaves the device; the camera turns off when you leave the page
+  or after two minutes without movement, and a camera that is refused, missing, or busy shows why with another try. A
+  computer too slow to follow a swing is told so, like a phone.
 
 ## Controls
 
@@ -82,7 +86,8 @@ npm run build
 | Respawn and recenter camera | `R`                                              |
 | Swing (home-run derby)      | `Space` / `Enter` or the on-screen `Swing`       |
 | Lock what you swing (derby) | Hold it still, tap it, or `Lock this object`     |
-| Leave the derby             | `Esc` or `Back to town`                          |
+| Go on hands-free (derby)    | Hold your batting stance 3 s, or the step button |
+| Leave the derby             | `Esc` (twice in full screen) or `Back to town`   |
 | Resize or hide derby camera | `V` or the on-screen `Camera view` button        |
 
 The camera button tunes the follow camera live, and `?` reopens help. Turning off `Ambient motion` in help freezes

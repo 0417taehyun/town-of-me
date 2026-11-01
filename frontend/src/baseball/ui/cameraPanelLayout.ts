@@ -1,12 +1,13 @@
+import type { DerbyStep } from '../flow/derbyFlow'
 import type { BattingSide } from '../game/field'
 import type { FreeBand } from '../stage/cameraShots'
 
 // Where the camera panel goes on each screen of a camera run, and how wide it is. While the camera sets up, the
-// mirrored camera is the stage. During a run the panel hangs in a column under the scoreboard on the side opposite the
-// batter, at the size the visitor picks with V (remembered in this browser), and the play is centred in the band it
-// leaves free. It shrinks to a corner chip while the camera chases a home run, and hides on the result screen and
-// whenever the camera is off. It never hides while the camera is looking for the visitor, who has to see it to step
-// back into view.
+// mirrored camera is the stage. Through practice and the run the panel hangs in a column under the scoreboard on the
+// side opposite the batter, at the size the visitor picks with V (remembered in this browser), and the play is centred
+// in the band it leaves free. It shrinks to a corner chip while the camera chases a home run, and hides on the result
+// screen and whenever the camera is off. It never hides while the camera is looking for the visitor, who has to see it
+// to step back into view. V is one of the two keys the derby's page takes itself (derbyKeyAction).
 
 export type CameraPanelPlacement = 'stage' | 'side' | 'chip' | 'hidden'
 
@@ -53,11 +54,14 @@ export type CameraPanelState = {
 
 export type CameraPanelLayout = { placement: CameraPanelPlacement; side: PanelSide; width: number; band: FreeBand }
 
-/** The camera's screen: setting up until a run starts, then the run, then its result; null while the camera is off. */
-export function cameraScreen(cameraOn: boolean, running: boolean, finished: boolean): CameraScreen | null {
+/**
+ * The camera's screen for the derby's step: setting up until practice starts, then the play through practice and the
+ * run, then its result; null while the camera is off.
+ */
+export function cameraScreen(cameraOn: boolean, step: DerbyStep): CameraScreen | null {
   if (!cameraOn) return null
-  if (!running) return 'setup'
-  return finished ? 'result' : 'play'
+  if (step === 'rules' || step === 'setup') return 'setup'
+  return step === 'result' ? 'result' : 'play'
 }
 
 export function cameraPanelPlacement({ screen, chasing, searching, size }: CameraPanelState): CameraPanelPlacement {
@@ -144,4 +148,20 @@ export function savePanelSize(size: CameraPanelSize, store: SizeStore | null = b
 /** V on any keyboard layout (a Korean one types ㅍ there), unless a modifier makes it a shortcut such as paste. */
 export function isCameraPanelKey(event: Pick<KeyboardEvent, 'code' | 'repeat' | 'altKey' | 'ctrlKey' | 'metaKey'>) {
   return event.code === 'KeyV' && !event.repeat && !event.altKey && !event.ctrlKey && !event.metaKey
+}
+
+export type DerbyKeyAction = 'leave' | 'cameraPanel'
+
+/**
+ * What a key does on the derby's page, wherever focus is: Escape leaves, and V resizes or hides the camera panel beside
+ * the play. Nothing else: Enter and Space press the focused button as on any page, so no key goes on by itself, and in
+ * practice and a camera run no key swings (only the keyboard run the rules card still offers takes Space and Enter as
+ * swings, BaseballApp.tsx, until the camera-only change removes it).
+ */
+export function derbyKeyAction(
+  event: Pick<KeyboardEvent, 'key' | 'code' | 'repeat' | 'altKey' | 'ctrlKey' | 'metaKey'>,
+  screen: CameraScreen | null,
+): DerbyKeyAction | null {
+  if (event.key === 'Escape') return 'leave'
+  return screen === 'play' && isCameraPanelKey(event) ? 'cameraPanel' : null
 }

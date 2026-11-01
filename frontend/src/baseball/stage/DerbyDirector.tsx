@@ -27,8 +27,9 @@ import { createStrikeZoneOutline, disposeStrikeZoneOutline, drawStrikeZoneOutlin
  * camera, all in refs. React hears only the events. The pitcher is posed first, since the ball is in his hand until it
  * is released. A new `run` starts over. Swings pushed onto `swings` are taken every frame and played at the moment they
  * report; one from before the run's first pitch is ignored like any swing with no pitch on its way. The run's clock
- * stops while the page is hidden, when frames stop too, so no pitch goes by unseen. The picture is centred in `band`
- * (px), the part of the screen the camera panel leaves free.
+ * stops while the page is hidden, when frames stop too, so no pitch goes by unseen, and while it is `paused`, which the
+ * page sets only between pitches for a visitor out of the camera's view, so no ball stops in the air. The picture is
+ * centred in `band` (px), the part of the screen the camera panel leaves free.
  */
 export function DerbyDirector({
   run,
@@ -37,6 +38,7 @@ export function DerbyDirector({
   swings,
   onEvent,
   band,
+  paused,
   reducedMotion,
 }: {
   run: StageRunSetup | null
@@ -45,6 +47,7 @@ export function DerbyDirector({
   swings: MutableRefObject<RealTimeSwing[]>
   onEvent: (event: StageEvent) => void
   band: FreeBand
+  paused: boolean
   reducedMotion: boolean
 }) {
   const ball = useRef<BallParts>(null)
@@ -52,6 +55,7 @@ export function DerbyDirector({
   const stage = useRef<StageRun | null>(null)
   const lastGameMs = useRef(0)
   const listener = useRef(onEvent)
+  const pausedByPage = useRef(paused)
   const rig = useMemo(() => createCameraRig(), [])
   const outline = useMemo(() => createStrikeZoneOutline(), [])
   useEffect(() => () => disposeStrikeZoneOutline(outline), [outline])
@@ -61,10 +65,16 @@ export function DerbyDirector({
   useLayoutEffect(() => {
     stage.current = run ? createStageRun(run, performance.now()) : null
     lastGameMs.current = 0
+    if (stage.current && pausedByPage.current) setStageRunPaused(stage.current, performance.now(), true)
   }, [run])
+  useLayoutEffect(() => {
+    pausedByPage.current = paused
+    if (stage.current) setStageRunPaused(stage.current, performance.now(), paused || document.hidden)
+  }, [paused])
   useEffect(() => {
     const onVisibilityChange = () => {
-      if (stage.current) setStageRunPaused(stage.current, performance.now(), document.hidden)
+      const pausing = document.hidden || pausedByPage.current
+      if (stage.current) setStageRunPaused(stage.current, performance.now(), pausing)
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
     return () => document.removeEventListener('visibilitychange', onVisibilityChange)

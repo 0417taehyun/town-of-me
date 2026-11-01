@@ -1,7 +1,7 @@
 import type { BallparkRules } from '../../data/models'
 import { DIFFICULTY_RULES } from './difficulty'
-import { type PitchPlan, planPitch } from './pitch'
-import { createPitchSchedule, type ScheduledPitch } from './pitchSchedule'
+import { planPitch } from './pitch'
+import { createPitchSchedule, PRACTICE_SCHEDULE, type ScheduledPitch } from './pitchSchedule'
 import { createSeededRandom } from './seededRandom'
 
 /**
@@ -17,8 +17,26 @@ export function createRunPlan(rules: BallparkRules, seed: number): RunPlan {
   return { seed: unsignedSeed, rules: { ...rules }, schedule }
 }
 
-/** The flight of the run's pitch `pitchIndex`, at the pace of the run's difficulty. */
-export function planRunPitch(plan: RunPlan, pitchIndex: number): PitchPlan {
+/**
+ * The practice before a run, shaped like one: the practice pitches in their fixed order under the run's `rules`, whose
+ * timing windows judge it. It draws nothing at random, so its seed is 0, and it flies at the practice pace
+ * (PRACTICE_PITCH_FLIGHT_SECONDS) rather than the difficulty's. It is never scored: only its swings' timing and speed
+ * go into the log of the runs after it.
+ */
+export function createPracticePlan(rules: BallparkRules): RunPlan {
+  return { seed: 0, rules: { ...rules, pitchCount: PRACTICE_SCHEDULE.length }, schedule: [...PRACTICE_SCHEDULE] }
+}
+
+/** A fastball's flight from release to the plate (s) in the run: its difficulty's. */
+export function runPitchFlightSeconds(plan: RunPlan) {
+  return DIFFICULTY_RULES[plan.rules.difficulty].pitchFlightSeconds
+}
+
+/**
+ * The flight of the run's pitch `pitchIndex` at the pace `pitchFlightSeconds`: by default the run's own; only practice
+ * passes another.
+ */
+export function planRunPitch(plan: RunPlan, pitchIndex: number, pitchFlightSeconds = runPitchFlightSeconds(plan)) {
   const { type, target } = plan.schedule[pitchIndex]
-  return planPitch(type, DIFFICULTY_RULES[plan.rules.difficulty].pitchFlightSeconds, target)
+  return planPitch(type, pitchFlightSeconds, target)
 }

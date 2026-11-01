@@ -1,40 +1,8 @@
-import { effectiveBallparkRules, rankingMonth } from '../data/ballparkRules'
-import type { BallparkSettings } from '../data/models'
-import type { DerbyInput } from './game/derbyScore'
-import type { BattingSide } from './game/field'
-import { createRunPlan } from './game/runPlan'
-import type { RealTimeSwing, StageRunSetup } from './stage/stageRun'
+import type { RealTimeSwing } from './stage/stageRun'
 
-// A run's setup, and the keyboard's swings: a run played with the keyboard (or the on-screen swing button) has no
-// practice to calibrate from, and a key press is the moment the bat meets the ball. A camera run takes no key.
-
-/** The visitor bats right-handed until the setup screen lets them choose. */
-export const DEFAULT_BATTING_SIDE: BattingSide = 'right'
-
-/**
- * A run played with `input` under the rules `rulesFor` picks for the KST month of `now`: by default those in effect,
- * or in an admin's preview those planned next (data/ballparkRules.ts). Each run reads the month when it starts, so a
- * page left open into a new month plays the rules `ballpark` scheduled for it (as loaded with the page) from its next
- * run. Ranked runs will take their plan from the server instead.
- */
-export function createDerbyRun(
-  ballpark: BallparkSettings,
-  now: Date,
-  seed: number,
-  input: DerbyInput,
-  rulesFor = effectiveBallparkRules,
-): StageRunSetup {
-  const rules = rulesFor(ballpark, rankingMonth(now))
-  return {
-    plan: createRunPlan(rules, seed),
-    log: { input, side: DEFAULT_BATTING_SIDE, practice: [] },
-  }
-}
-
-/** A fresh 32-bit seed for a run; ranked runs will get theirs from the server instead. */
-export function randomRunSeed() {
-  return crypto.getRandomValues(new Uint32Array(1))[0]
-}
+// The keyboard's swings, until the camera-only change removes them: a run played with the keyboard (or the on-screen
+// swing button) has no practice to calibrate from, and a key press is the moment the bat meets the ball. A camera run
+// takes no key.
 
 /** A key press or button press as a swing; `timeStamp` is the event's, on the performance.now() clock. */
 export function keyboardSwing(timeStamp: number): RealTimeSwing {

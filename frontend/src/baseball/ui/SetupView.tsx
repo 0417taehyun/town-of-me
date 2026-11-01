@@ -1,22 +1,31 @@
+import type { Ref } from 'react'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import type { CameraStatus } from '../cameraTracking'
+import type { BattingSide } from '../game/field'
 import type { PanelSide } from './cameraPanelLayout'
+import { StanceGauge } from './StanceGauge'
+
+const BATTING_SIDES: readonly BattingSide[] = ['right', 'left']
 
 /**
  * The camera game's setup card beside the camera panel's stage: what the camera is doing (asking, loading the pose
- * task, timing this computer), the promise about its picture, how to lock what the visitor swings (or play without an
- * object) once the camera follows them, and the way on: play once this computer has been timed fast enough, or turn
- * the camera off. A camera problem takes its place with the cause and another try; there is no other way to play.
- * `cameraState` is the panel chip's words, which a screen reader hears from here. The lock button is the keyboard's way
- * to do what tapping the camera picture does.
+ * task, timing this computer), the promise about its picture, which side the visitor bats from (the batter, the
+ * camera panel, and where a swing loads follow it), how to lock what the visitor swings (or play without an object)
+ * once the camera follows them, and the way on once this computer has been timed fast enough: holding the batting
+ * stance fills `gauge` and starts practice, as the "start practice" button does. A camera problem takes its place with
+ * the cause and another try; there is no other way to play. `cameraState` is the panel chip's words, which a screen
+ * reader hears from here. The lock button is the keyboard's way to do what tapping the camera picture does.
  */
 export function SetupView({
   status,
   cameraState,
   panelSide,
+  side,
   freeMode,
+  gauge,
   language,
-  onPlay,
+  onSideChange,
+  onStart,
   onRetry,
   onTurnOff,
   onLockHeld,
@@ -25,9 +34,12 @@ export function SetupView({
   status: Exclude<CameraStatus, { kind: 'off' } | { kind: 'tooSlow' }>
   cameraState: string | null
   panelSide: PanelSide
+  side: BattingSide
   freeMode: boolean
+  gauge: Ref<HTMLDivElement>
   language: AppLanguage
-  onPlay: () => void
+  onSideChange: (side: BattingSide) => void
+  onStart: () => void
   onRetry: () => void
   onTurnOff: () => void
   onLockHeld: () => void
@@ -58,6 +70,21 @@ export function SetupView({
       <p className="derby-camera-state" role="status">
         {cameraState}
       </p>
+      <fieldset className="derby-side">
+        <legend>{copy.camera.side.legend}</legend>
+        {BATTING_SIDES.map((option) => (
+          <label key={option}>
+            <input
+              type="radio"
+              name="derby-batting-side"
+              value={option}
+              checked={side === option}
+              onChange={() => onSideChange(option)}
+            />
+            {copy.camera.side[option]}
+          </label>
+        ))}
+      </fieldset>
       {following && (
         <div className="derby-lock">
           <p className="baseball-note">{copy.camera.lockHint}</p>
@@ -73,12 +100,13 @@ export function SetupView({
           </div>
         </div>
       )}
+      {status.kind === 'ready' && <StanceGauge ref={gauge} label={copy.flow.stance} hint={copy.flow.toPractice} />}
       <p className="baseball-note">{copy.camera.notice}</p>
       <p className="baseball-note">{copy.camera.panelKey}</p>
       <div className="derby-actions">
         {status.kind === 'ready' && (
-          <button className="primary-button" type="button" autoFocus onClick={onPlay}>
-            {copy.play}
+          <button className="primary-button" type="button" autoFocus onClick={onStart}>
+            {copy.flow.startPractice}
           </button>
         )}
         <button className="derby-secondary" type="button" onClick={onTurnOff}>

@@ -48,16 +48,25 @@ export function seesVisitor(frame: PoseFrame) {
  */
 export const SIGHT_HOLD_MS = { lost: 1000, found: 500 }
 
+/**
+ * The same, held longer, before the visitor counts as away from the camera, which pauses practice or a run between
+ * pitches (flow/derbyFlow.ts pausedForAway), and back, which goes on.
+ */
+export const AWAY_HOLD_MS = { lost: 1500, found: 500 }
+
 /** Whether the camera sees the visitor, and since when (ms) frames have said otherwise, if they have. */
 export type Sight = { seen: boolean; changingSince: number | null }
 
 export const UNSEEN: Sight = { seen: false, changingSince: null }
 
-/** `sight` after a frame at `now` that does or does not show the visitor (`seenNow`). */
-export function nextSight(sight: Sight, seenNow: boolean, now: number): Sight {
+/**
+ * `sight` after a frame at `now` that does or does not show the visitor (`seenNow`), held through flickers as long as
+ * `holdMs` says: by default the camera panel's.
+ */
+export function nextSight(sight: Sight, seenNow: boolean, now: number, holdMs = SIGHT_HOLD_MS): Sight {
   if (seenNow === sight.seen) return { seen: sight.seen, changingSince: null }
   const changingSince = sight.changingSince ?? now
-  const hold = sight.seen ? SIGHT_HOLD_MS.lost : SIGHT_HOLD_MS.found
+  const hold = sight.seen ? holdMs.lost : holdMs.found
   if (now - changingSince < hold) return { seen: sight.seen, changingSince }
   return { seen: seenNow, changingSince: null }
 }

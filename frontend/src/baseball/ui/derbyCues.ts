@@ -1,5 +1,6 @@
 import type { DerbySound } from '../../audio/derbySounds'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
+import type { PracticeFeedback } from '../flow/derbyFlow'
 import type { DerbyPhase } from '../game/derby'
 import { homeRunTotals, type PitchResult } from '../game/derbyScore'
 import type { StageEvent } from '../stage/stageRun'
@@ -44,6 +45,15 @@ export function bannerResult(hud: DerbyHudState): PitchResult | null {
   return hud.phase === 'result' && settled ? (hud.results.at(-1) ?? null) : null
 }
 
+/**
+ * Whether no ball is in play and a pitch of the run's `pitchCount` is still to come: before the first windup, and once
+ * a result's ball is down until the next windup, but not after the last pitch, whose result goes on to the run's end.
+ */
+export function betweenPitches(hud: DerbyHudState, pitchCount: number) {
+  if (hud.phase === null) return true
+  return bannerResult(hud) !== null && hud.results.length < pitchCount
+}
+
 /** A home run's ball still in the air, which the camera chases: the camera panel steps aside to a corner meanwhile. */
 export function chasingHomeRun(hud: DerbyHudState) {
   const latest = hud.results.at(-1)
@@ -53,13 +63,27 @@ export function chasingHomeRun(hud: DerbyHudState) {
 /** A pitch let go by is a strike; one swung at and missed is a miss. */
 export type CaptionId = 'ready' | 'coming' | 'finished' | 'strike' | PitchResult['outcome']
 
+/** The latest pitch's result from when it is judged until the next windup; null before it and meanwhile. */
+export function judgedResult(hud: DerbyHudState): PitchResult | null {
+  return hud.phase === 'result' ? (hud.results.at(-1) ?? null) : null
+}
+
 /** The two or three words that say where the run is; the same for every pitch until its result. */
 export function captionId(hud: DerbyHudState): CaptionId {
-  const judged = hud.phase === 'result' ? hud.results.at(-1) : undefined
+  const judged = judgedResult(hud)
   if (judged) return judged.timing === null ? 'strike' : judged.outcome
   if (hud.phase === 'finished') return 'finished'
   if (hud.phase === null) return 'ready'
   return 'coming'
+}
+
+/** Practice's caption: before it, a pitch on its way, then the swing's word, or a nudge after a pitch let go by. */
+export type PracticeCaptionId = 'start' | 'coming' | 'letGo' | PracticeFeedback
+
+export function practiceCaptionId(hud: DerbyHudState, feedback: PracticeFeedback | null): PracticeCaptionId {
+  if (feedback) return feedback
+  if (hud.phase === null) return 'start'
+  return hud.phase === 'result' ? 'letGo' : 'coming'
 }
 
 /**
@@ -80,14 +104,16 @@ export function homeRunDistanceText(decimetres: number, language: AppLanguage, f
   return decimetres > 0 ? distanceText(decimetres, language, fractionDigits) : '—'
 }
 
-/** The banner under a result: how far a ball in play went, then how the swing was timed and what the pitch was. */
+/**
+ * The banner under a result: how far a ball in play went, and what the pitch was. It never says how the swing was
+ * timed or how hard it was: the outcome and the distance say how it went.
+ */
 export function bannerText(result: PitchResult, language: AppLanguage) {
   const copy = languageCopy[language].baseball.hud
   const inPlay = result.outcome === 'homeRun' || result.outcome === 'hit'
-  const timing = result.timing ? [copy.timings[result.timing]] : []
   return {
     distance: inPlay ? distanceText(result.distanceDecimetres, language) : null,
-    detail: [...timing, copy.pitchWas[result.pitchType]].join(' · '),
+    detail: copy.pitchWas[result.pitchType],
   }
 }
 

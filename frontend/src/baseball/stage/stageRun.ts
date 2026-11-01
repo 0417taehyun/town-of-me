@@ -3,13 +3,13 @@ import { lerp } from '../../motionMath'
 import {
   advanceDerby,
   createDerby,
+  LATE_SWING_MARGIN_MS,
   latestContactMs,
   RESULT_HOLD_MS,
   type Derby,
   type DerbyEvent,
   type DerbySwing,
   type DerbyUpdate,
-  swingDeadlineForPitch,
   swingDerby,
 } from '../game/derby'
 import type { DerbyInputLog } from '../game/derbyScore'
@@ -29,11 +29,15 @@ import { MITT_DEPTH } from './stageLayout'
 // frame, a camera swing up to the derby's late margin after it), so the mitt never catches a ball the bat then hits;
 // a ball in play leaves the bat where and when the bat met it and flies to the landing the judge already decided. The
 // stage changes the clock's pace (hit-stop at contact, holding the moment the bat met the ball even when the swing came
-// late; slow motion at a showcase home run's peak; a pause while the page is hidden) but never an outcome. Every
-// function here mutates the run it is given; the director keeps it in a ref and reads it each frame.
+// late; slow motion at a showcase home run's peak; a pause while the page is hidden, or between pitches while the
+// visitor is away) but never an outcome. Every function here mutates the run it is given; the director keeps it in a
+// ref and reads it each frame.
 
-/** A run for the stage to play: its plan, and how the visitor plays it (input, batting side, practice). */
-export type StageRunSetup = { plan: RunPlan; log: Omit<DerbyInputLog, 'swings'> }
+/**
+ * A run for the stage to play: its plan, how the visitor plays it (input, batting side, practice), and whether it is
+ * the practice before a camera run, which keeps its own pace and late limit (createDerby).
+ */
+export type StageRunSetup = { plan: RunPlan; log: Omit<DerbyInputLog, 'swings'>; practice?: boolean }
 
 /** A swing as input reports it, on the real clock: performance.now() ms, the clock of `event.timeStamp`. */
 export type RealTimeSwing = Omit<DerbySwing, 'contactAtMs' | 'startedAtMs'> & {
@@ -109,11 +113,11 @@ export type StageRun = {
   slowMotionEndsRealMs: number | null
 }
 
-export function createStageRun({ plan, log }: StageRunSetup, realMs: number): StageRun {
+export function createStageRun({ plan, log, practice }: StageRunSetup, realMs: number): StageRun {
   const clock = createGameClock(realMs)
   return {
     clock,
-    derby: createDerby(plan, log, gameTime(clock, realMs)),
+    derby: createDerby(plan, log, gameTime(clock, realMs), practice),
     pitch: null,
     batted: null,
     slowMotionEndsRealMs: null,
@@ -142,7 +146,10 @@ export function advanceStageRun(run: StageRun, realMs: number, reducedMotion: bo
   return [...derbyEvents, ...cues, ...flyBall(run, realMs, reducedMotion)]
 }
 
-/** Stops the game clock while the page is hidden and starts it again after, so no pitch goes by unseen. */
+/**
+ * Stops the game clock while the page is hidden (frames stop too, so no pitch goes by unseen) or while the page pauses
+ * the run, which it does only between pitches (flow/derbyFlow.ts pausedForAway), and starts it again after.
+ */
 export function setStageRunPaused(run: StageRun, realMs: number, paused: boolean) {
   run.clock = setClockRate(run.clock, realMs, paused ? 0 : 1)
   run.slowMotionEndsRealMs = null
@@ -156,12 +163,13 @@ export function takeDerbyUpdate(run: StageRun, update: DerbyUpdate, nowMs: numbe
 }
 
 /**
- * A release puts the next pitch on its way, waiting until the derby's deadline for a swing at it; a result, taken at
- * game time `nowMs`, sets up its batted ball, if any, and may end the pitch's wait.
+ * A release puts the next pitch on its way, waiting as long as a swing that touches it could still be reported (in
+ * practice the derby takes later swings too, which can no longer touch it); a result, taken at game time `nowMs`, sets
+ * up its batted ball, if any, and may end the pitch's wait.
  */
 export function stageDerbyEvent(run: StageRun, event: DerbyEvent, nowMs: number) {
   if (event.type === 'release') {
-    const holdSeconds = swingDeadlineForPitch(run.derby, event.pitch) / 1000
+    const holdSeconds = (latestContactMs(run.derby, event.pitch) + LATE_SWING_MARGIN_MS) / 1000
     run.pitch = { index: event.pitchIndex, plan: event.pitch, releasedMs: event.releasedMs, holdSeconds, caught: false }
     run.batted = null
     return

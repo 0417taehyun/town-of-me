@@ -3,8 +3,8 @@ import { DIFFICULTY_RULES } from './difficulty'
 import type { BattingSide } from './field'
 import { judgeTiming, KEYBOARD_POWER, swingPower, timingErrorMs, type TimingId } from './judging'
 import { type JudgedSwing, type Landing, landingFor, MISSED } from './landing'
-import type { PitchTypeId } from './pitch'
-import { planRunPitch, type RunPlan } from './runPlan'
+import type { PitchPlan, PitchTypeId } from './pitch'
+import { planRunPitch, runPitchFlightSeconds, type RunPlan } from './runPlan'
 
 // The leaderboard seam: a run's plan and its raw input log score it, with nothing the client worked out in between.
 // The live game scores each pitch with these same functions and shows the replayed result at the end, so the numbers
@@ -62,10 +62,19 @@ export type DerbyResult = {
   longestHomeRunDecimetres: number
 }
 
-/** The whole run judged again from its plan and raw log, starting with the calibration. */
-export function replayDerby(plan: RunPlan, log: DerbyInputLog): DerbyResult {
+/**
+ * The whole run judged again from its plan and raw log, starting with the calibration. Every pitch flies at
+ * `pitchFlightSeconds`, the run's own pace unless it is the practice (runPlan.ts createPracticePlan).
+ */
+export function replayDerby(
+  plan: RunPlan,
+  log: DerbyInputLog,
+  pitchFlightSeconds = runPitchFlightSeconds(plan),
+): DerbyResult {
   const calibration = calibrate(log.practice)
-  const pitches = plan.schedule.map((_, pitchIndex) => scorePitch(plan, calibration, log, pitchIndex))
+  const pitches = plan.schedule.map((_, pitchIndex) =>
+    scorePitch(plan, calibration, log, pitchIndex, pitchFlightSeconds),
+  )
   return summarizeDerby(plan, runInput(log), pitches)
 }
 
@@ -74,18 +83,23 @@ export function runInput(log: DerbyInputLog): DerbyInput {
   return keyed ? 'keyboard' : 'camera'
 }
 
-/** Pitch `pitchIndex` judged from the log's swing at it; `calibration` is `calibrate(log.practice)`, made once. */
+/**
+ * Pitch `pitchIndex`, flying at `pitchFlightSeconds`, judged from the log's swing at it; `calibration` is
+ * `calibrate(log.practice)`, made once.
+ */
 export function scorePitch(
   plan: RunPlan,
   calibration: Calibration,
   log: DerbyInputLog,
   pitchIndex: number,
+  pitchFlightSeconds = runPitchFlightSeconds(plan),
 ): PitchResult {
   const pitchType = plan.schedule[pitchIndex].type
   const swing = log.swings[pitchIndex] ?? null
   if (swing === null) return { ...MISSED, pitchType, timing: null, errorMs: null, power: null }
   const windows = DIFFICULTY_RULES[plan.rules.difficulty].timingWindows
-  const judged = toJudgedSwing(plan, calibration, log.input, pitchIndex, swing)
+  const pitch = planRunPitch(plan, pitchIndex, pitchFlightSeconds)
+  const judged = toJudgedSwing(pitch, calibration, log.input, swing)
   const landing = landingFor(judged, windows, log.side)
   return {
     ...landing,
@@ -97,17 +111,17 @@ export function scorePitch(
 }
 
 /**
- * A raw swing as the judge sees it. A keyboard swing hits at a fixed power with the bat level with the ball, so a key
- * timed like the plan carries like it; only a camera swing whose tracking lost the bat is judged at the unknown height.
+ * A raw swing at `pitch` as the judge sees it. A keyboard swing hits at a fixed power with the bat level with the
+ * ball, so a key timed like the plan carries like it; only a camera swing whose tracking lost the bat is judged at the
+ * unknown height.
  */
 export function toJudgedSwing(
-  plan: RunPlan,
+  pitch: PitchPlan,
   calibration: Calibration,
   input: DerbyInput,
-  pitchIndex: number,
   swing: SwingEvent,
 ): JudgedSwing {
-  const errorMs = timingErrorMs(planRunPitch(plan, pitchIndex), swing.contactMs, calibration.offsetMs)
+  const errorMs = timingErrorMs(pitch, swing.contactMs, calibration.offsetMs)
   if (input === 'keyboard' || swing.source === 'keyboard') return { errorMs, power: KEYBOARD_POWER, heightError: 0 }
   return { errorMs, power: swingPower(swing.speed, calibration.peakSpeed), heightError: swing.heightError }
 }

@@ -224,8 +224,9 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   color: var(--muted);
 }
 
-/* The camera's state where the panel shows it already: for a screen reader only. */
-.derby-camera-state {
+/* The camera's state where the panel shows it already, and what a step that waits asks: for a screen reader only. */
+.derby-camera-state,
+.derby-step-caption {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -245,7 +246,7 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
  * of the top).
  */
 .derby-screen .derby-setup {
-  width: min(440px, calc(100% - var(--camera-stage-width) - 64px));
+  width: min(500px, calc(100% - var(--camera-stage-width) - 64px));
   max-height: calc(100% - 128px);
   overflow-y: auto;
   padding: 32px 32px 28px;
@@ -261,6 +262,113 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   font-size: 1.1rem;
   font-weight: 700;
   line-height: 1.45;
+}
+/* The setup card holds the most; it keeps its notes closer and its two actions on one row to fit a laptop screen. */
+.derby-screen .derby-setup h1 {
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+}
+.derby-setup .baseball-note {
+  margin-top: 14px;
+}
+.derby-setup .derby-actions {
+  margin-top: 20px;
+}
+.derby-setup .derby-actions .primary-button {
+  min-width: 0;
+}
+
+/* Which side the visitor bats from, a pair of radio buttons the arrow keys move between. */
+.derby-side {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin: 18px 0 0;
+  padding: 0;
+  border: 0;
+}
+.derby-side legend {
+  margin-bottom: 4px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.derby-side label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.derby-side input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--leaf-dark);
+}
+
+/*
+ * The stance hold's ring (ui/StanceGauge.tsx) beside what holding starts. The vision loop sets --stance-progress (0..1)
+ * on the ring whenever the hold changes; a path length of 1 makes it the share of the circle drawn.
+ */
+.stance-gauge {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 22px;
+}
+.stance-gauge-ring {
+  --stance-progress: 0;
+  flex: none;
+  width: clamp(64px, 12vh, 140px);
+  aspect-ratio: 1;
+}
+.stance-gauge-ring svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.stance-gauge-track,
+.stance-gauge-fill {
+  fill: none;
+  stroke-width: 11;
+}
+.stance-gauge-track {
+  stroke: rgba(51, 101, 86, 0.16);
+}
+.stance-gauge-fill {
+  stroke: var(--leaf);
+  stroke-dasharray: 1;
+  stroke-dashoffset: calc(1 - var(--stance-progress));
+}
+.stance-gauge p {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+.stance-gauge strong {
+  font-size: clamp(1.2rem, 3.6vh, 2.2rem);
+  font-weight: 800;
+  line-height: 1.1;
+}
+.stance-gauge span {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+/* After practice, the card that waits for the run stands in the band the camera panel leaves the play. */
+.derby-screen .derby-practice-done {
+  left: var(--play-centre, 50%);
+  width: min(520px, calc(var(--play-width, 100vw) - 32px));
+}
+/* Practice's caption says how a swing was timed in a word, tinted so the word reads at a glance. */
+.derby-caption[data-feedback='good'] {
+  color: var(--leaf-dark);
+}
+.derby-caption:is([data-feedback='early'], [data-feedback='late']) {
+  color: #7a3524;
 }
 
 /* The feed the vision loop reads, rendered so its frames keep coming even while the panel is hidden, but unseen. */

@@ -3,6 +3,7 @@ import {
   type CameraPanelState,
   cameraPanelLayout,
   cameraScreen,
+  derbyKeyAction,
   MIN_PANEL_WIDTH,
   nextPanelSize,
   PANEL_EDGE,
@@ -30,14 +31,10 @@ const blockedStore = {
 }
 
 describe('the camera panel layout', () => {
-  it('is the stage while the camera sets up, beside the play during a run, a chip in a home run chase, hidden after', () => {
-    const screens = [
-      cameraScreen(true, false, false),
-      cameraScreen(true, true, false),
-      cameraScreen(true, true, true),
-      cameraScreen(false, true, false),
-    ]
-    expect(screens).toEqual(['setup', 'play', 'result', null])
+  it('is the stage while the camera sets up, beside the play from practice on, a chip in a chase, hidden after', () => {
+    const steps = ['setup', 'practice', 'practiceDone', 'play', 'result'] as const
+    expect(steps.map((step) => cameraScreen(true, step))).toEqual(['setup', 'play', 'play', 'play', 'result'])
+    expect(cameraScreen(false, 'play')).toBe(null)
     expect(placementOf({ screen: 'setup', size: 'off' })).toBe('stage')
     expect(placementOf({})).toBe('side')
     expect(placementOf({ chasing: true })).toBe('chip')
@@ -90,5 +87,24 @@ describe('the camera panel layout', () => {
     expect(readPanelSize(blockedStore)).toBe('medium')
     expect(() => savePanelSize('large', blockedStore)).not.toThrow()
     expect(readPanelSize(null)).toBe('medium')
+  })
+
+  it('takes no key as a swing or a go: Space and Enter press the focused button, Esc leaves, V sizes the panel', () => {
+    const keys = [' ', 'Enter', 'v', 'Escape', 'ArrowUp', 's'].map((key) => ({
+      key,
+      code: key === 'v' ? 'KeyV' : key,
+      repeat: false,
+      altKey: false,
+      ctrlKey: false,
+      metaKey: false,
+    }))
+    const screens = ['setup', 'play', 'result', null] as const
+    const actions = screens.map((screen) => keys.map((event) => derbyKeyAction(event, screen)))
+    expect(actions).toEqual([
+      [null, null, null, 'leave', null, null],
+      [null, null, 'cameraPanel', 'leave', null, null],
+      [null, null, null, 'leave', null, null],
+      [null, null, null, 'leave', null, null],
+    ])
   })
 })

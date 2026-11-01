@@ -13,19 +13,22 @@ import {
  * things a run ranks by, each counting a home run as its banner shows) and a two- or three-word caption in the top
  * band, and once a result's ball is down, its distance and details under the play. It knows only what the stage's
  * events told it (derbyCues.ts), never the pitches to come. The caption and banner are one live region, so a screen
- * reader hears each cue and result; `cameraState`, what the camera panel's chip shows, is another, heard only. In a
- * keyboard run Space and Enter swing anywhere (BaseballApp) and `onSwing` gives a pointer a button; a camera run has
- * none.
+ * reader hears each cue and result; `cameraState`, what the camera panel's chip shows, is another, heard only. While
+ * the run is `paused` for a visitor out of the camera's view, the caption says so. Results show the outcome, the
+ * distance, and the pitch type, never how the swing was timed or its power. In a keyboard run Space and Enter swing
+ * anywhere (BaseballApp) and `onSwing` gives a pointer a button; a camera run has none.
  */
 export function DerbyHud({
   hud,
   pitchCount,
+  paused,
   language,
   cameraState,
   onSwing,
 }: {
   hud: DerbyHudState
   pitchCount: number
+  paused: boolean
   language: AppLanguage
   cameraState: string | null
   onSwing: ((timeStamp: number) => void) | null
@@ -55,7 +58,7 @@ export function DerbyHud({
         </div>
       </div>
       <div className="derby-callout" aria-live="polite" aria-atomic="true">
-        <p className="derby-caption">{copy.captions[captionId(hud)]}</p>
+        <p className="derby-caption">{paused ? copy.paused : copy.captions[captionId(hud)]}</p>
         {banner && (
           <p className={`derby-banner ${shown.outcome}`}>
             {banner.distance && <strong>{banner.distance}</strong>}
