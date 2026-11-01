@@ -159,7 +159,12 @@ stands where a home run lands or the landing camera stands (`bowlLayout.test.ts`
 pitch only once its ball is down, as the HUD does (`scoreboard.ts`). The crowd (`crowdLayout.ts`, `Crowd.tsx`) is one
 instanced mesh whose vertex shader turns each fan toward the ball and makes it hop and wave as a result asks, so it costs
 one draw call and no per-fan work on the main thread; fans take approved guestbook looks, padded with random ones and
-never a name (`guestLooks.ts`), and a reduced performance tier draws half of them.
+never a name (`guestLooks.ts`), and a reduced performance tier draws half of them. The rest of the field
+(`fielderLayout.ts`, `fieldCrewPlay.ts`, `FieldCrew.tsx`) is the other team's seven fielders, the plate umpire under the
+batting shot, our runner on second, and our teammates in our dugout, on the players' rig (`stage/actors/fieldPlayer.ts`)
+and drawn as a few instanced meshes (`stage/actors/rigBatch.ts`). They watch the ball, and for a ball in play the
+fielder nearest its landing runs for it, always to fair ground inside the hedge (`fielderLayout.test.ts`); they only
+show where the derby already sent it.
 
 `stage/actors/` builds the players in plain Three.js. `ballplayerRig.ts` is the town character's body, look, and
 proportions posed by joints (two-bone IK legs on planted feet, a chest turning about a tilted spine, elbow arms); the

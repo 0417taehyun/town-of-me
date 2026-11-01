@@ -2,6 +2,7 @@ import { useFrame } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useMemo, useRef, type MutableRefObject } from 'react'
 import type { PerspectiveCamera } from 'three'
 import type { PlayerProfile } from '../../data/playerProfile'
+import { FieldCrew } from '../stadium/FieldCrew'
 import type { BattingSide } from '../game/field'
 import { gameTime } from '../game/gameClock'
 import { Ball } from './Ball'
@@ -35,7 +36,9 @@ import { createStrikeZoneOutline, disposeStrikeZoneOutline, drawStrikeZoneOutlin
  * ignored like any swing with no pitch on its way. The run's clock stops while the page is hidden, when frames stop
  * too, so no pitch goes by unseen, and while it is `paused`, which the page sets only between pitches for a visitor out
  * of the camera's view, so no ball stops in the air. The picture is centred in `band` (px), the part of the screen the
- * camera panel leaves free. Each frame's ball goes to `ballViewRef` for the stadium's watchers.
+ * camera panel leaves free. Each frame's ball goes to `ballViewRef` for the stadium's watchers, and the rest of the
+ * field plays along (FieldCrew.tsx, fieldCrewPlay.ts) in `approved` guestbook looks, fewer of them on a `reducedTier`
+ * computer.
  */
 export function DerbyDirector({
   run,
@@ -48,6 +51,8 @@ export function DerbyDirector({
   paused,
   reducedMotion,
   ballViewRef,
+  approved,
+  reducedTier,
 }: {
   run: StageRunSetup | null
   profile: PlayerProfile
@@ -59,6 +64,8 @@ export function DerbyDirector({
   paused: boolean
   reducedMotion: boolean
   ballViewRef: MutableRefObject<BallView | null>
+  approved: readonly PlayerProfile[]
+  reducedTier: boolean
 }) {
   const ball = useRef<BallParts>(null)
   const players = useRef<BallplayerCast>(null)
@@ -122,6 +129,13 @@ export function DerbyDirector({
   return (
     <>
       <Ballplayers ref={players} profile={profile} side={side} />
+      <FieldCrew
+        stageRef={stage}
+        ballViewRef={ballViewRef}
+        approved={approved}
+        reduced={reducedTier}
+        reducedMotion={reducedMotion}
+      />
       <Ball ref={ball} />
       <primitive object={outline} />
       <primitive object={flashes.group} />

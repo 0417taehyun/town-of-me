@@ -1,11 +1,16 @@
 import { DEFAULT_PLAYER_PROFILE, type PlayerProfile } from '../../../data/playerProfile'
 
 // The other team's uniform: brick red tops with charcoal caps, trousers, and shoes, against the cream and navy of ours.
-// The visitor bats in their own town clothes; the pitcher and catcher wear this over faces of their own, all fictional.
+// The visitor bats in their own town clothes; the other players wear their team's over faces of their own, the
+// pitcher's and catcher's fictional, the rest the town's visitors' (stadium/guestLooks.ts).
 
 export type TeamUniform = { cap: string; top: string; bottom: string; shoes: string }
 
 export const AWAY_UNIFORM: TeamUniform = { cap: '#2f2b2a', top: '#b0503f', bottom: '#3a3533', shoes: '#2f2b2a' }
+/** Our team's: cream tops and trousers under navy caps and shoes. */
+export const HOME_UNIFORM: TeamUniform = { cap: '#374b65', top: '#f4efe2', bottom: '#f4efe2', shoes: '#374b65' }
+/** The umpire's: a navy shirt, grey trousers, and a charcoal cap and shoes. */
+export const UMPIRE_UNIFORM: TeamUniform = { cap: '#272525', top: '#374b65', bottom: '#5f6670', shoes: '#272525' }
 
 /** `player` in a cap, tee, trousers, and sneakers in `uniform`'s colors, keeping their own face, hair, and skin. */
 export function wearUniform(player: PlayerProfile, uniform: TeamUniform): PlayerProfile {

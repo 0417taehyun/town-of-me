@@ -142,6 +142,8 @@ export function BaseballStage({
         paused={paused}
         reducedMotion={reducedMotion}
         ballViewRef={ballView}
+        approved={approvedLooks}
+        reducedTier={reducedTier}
       />
     </GraphicsCanvas>
   )
