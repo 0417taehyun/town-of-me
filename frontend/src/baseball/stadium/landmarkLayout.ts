@@ -159,9 +159,14 @@ export function treehouseWallParts(): PlacedPart[] {
   return [{ geometry: getRoundedBox(4.2, 3.6, 4, 0.25), at: [10.5, 13.1, 2] }]
 }
 
-/** The cabin's round window frame and the lanterns round the deck. */
+/** The cabin's round window frame. */
 export function treehouseTrimParts(): PlacedPart[] {
-  const lanterns = Array.from({ length: 9 }, (_, index) => {
+  return [{ geometry: new TorusGeometry(0.78, 0.12, 8, 24), at: [10.5, 13.4, 4.05] }]
+}
+
+/** The lanterns round the deck, lamps that light up with the towers' at night. */
+export function treehouseLanternParts(): PlacedPart[] {
+  return Array.from({ length: 9 }, (_, index) => {
     const angle = -1.3 + (index / 8) * 2.6
     return {
       geometry: unitSphere,
@@ -169,7 +174,6 @@ export function treehouseTrimParts(): PlacedPart[] {
       size: 0.42,
     }
   })
-  return [{ geometry: new TorusGeometry(0.78, 0.12, 8, 24), at: [10.5, 13.4, 4.05] }, ...lanterns]
 }
 
 export function treehouseGlassParts(): PlacedPart[] {
@@ -363,12 +367,18 @@ export function landmarkFootprints(): Clearing[] {
   ]
 }
 
+/** Stacked topiary balls round the foot of each foul pole, biggest at the bottom. */
+export const POLE_TOPIARY_RADII = [1.7, 1.45, 1.2, 0.95, 0.7, 0.5]
+
+export const FENCE_SIGN = { width: 1.8, height: 1.35, label: [1.6, 1.05] as const, up: 1.7 }
+/** A foul pole's sign hangs half a meter clear of the pole's lowest topiary ball, as seen from home plate too. */
+export const POLE_SIGN_SPRAY =
+  FOUL_ANGLE - (POLE_TOPIARY_RADII[0] + FENCE_SIGN.width / 2 + 0.5) / fenceDistance(FOUL_ANGLE)
 /**
- * The distance signs on the hedge's face: at both foul poles, and either side of and at dead center. Each reads the
+ * The distance signs on the hedge's face: by both foul poles, and either side of and at dead center. Each reads the
  * judge's fence distance where it hangs (game/field.ts), rounded to the meter.
  */
-export const FENCE_SIGN_SPRAYS = [-(FOUL_ANGLE - 0.012), -0.42, 0, 0.42, FOUL_ANGLE - 0.012]
-export const FENCE_SIGN = { width: 1.8, height: 1.35, label: [1.6, 1.05] as const, up: 1.7 }
+export const FENCE_SIGN_SPRAYS = [-POLE_SIGN_SPRAY, -0.42, 0, 0.42, POLE_SIGN_SPRAY]
 /** Pixels per label row in the labels' texture, 256 across, so a label keeps its plane's shape. */
 export const FENCE_LABEL_ROW = Math.round((256 * FENCE_SIGN.label[1]) / FENCE_SIGN.label[0])
 
@@ -376,10 +386,14 @@ export function fenceSignLabel(spray: number) {
   return `${Math.round(fenceDistance(spray))}m`
 }
 
-/** Where a sign's board hangs, `inset` m in front of the hedge face, turned to face home. */
+/**
+ * Where a sign's board hangs, `inset` m in front of the hedge face and square to it: the hedge comes in toward the
+ * poles, so off center its face turns from home, by over 20° at the poles.
+ */
 export function fenceSignPart(spray: number, inset: number): Omit<PlacedPart, 'geometry'> {
   const [x, y, z] = sweptPoint(spray, fenceDistance(spray) - inset, FENCE_SIGN.up)
-  return { at: [x, y, z], turn: [0, -spray, 0] }
+  const slope = (fenceDistance(spray + 0.001) - fenceDistance(spray - 0.001)) / 0.002
+  return { at: [x, y, z], turn: [0, Math.atan2(slope, fenceDistance(spray)) - spray, 0] }
 }
 
 /** All the labels as one geometry: each a plane showing its own row of a `labels.length`-row texture. */
@@ -412,9 +426,6 @@ export function drawFenceLabels(context: CanvasRenderingContext2D) {
     context.fillText(fenceSignLabel(spray), width / 2, top + rowHeight * 0.54)
   })
 }
-
-/** Stacked topiary balls round the foot of each foul pole, biggest at the bottom. */
-export const POLE_TOPIARY_RADII = [1.7, 1.45, 1.2, 0.95, 0.7, 0.5]
 
 export function poleTopiaryParts(pole: { x: number; z: number }): PlacedPart[] {
   const heights = POLE_TOPIARY_RADII.map((_, index) =>
@@ -598,7 +609,7 @@ export function createLandmarkGeometries() {
       ...LIGHT_TOWERS.flatMap((tower) => towerBlossomParts(tower, false)),
     ]),
     glass: mergeParts(treehouseGlassParts(), oak),
-    lamps: mergeParts(LIGHT_TOWERS.flatMap(towerLampParts)),
+    lamps: mergeParts([...LIGHT_TOWERS.flatMap(towerLampParts), ...placeInFrame(treehouseLanternParts(), oak)]),
     screen: mergeParts([{ geometry: new PlaneGeometry(SCOREBOARD.width, SCOREBOARD.height), at: SCOREBOARD.at }], oak),
     hedge: mergeParts([
       ...placeInFrame(corgi.hedge, corgiFrame),

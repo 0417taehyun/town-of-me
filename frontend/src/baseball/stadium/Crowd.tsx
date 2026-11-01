@@ -4,7 +4,7 @@ import { type InstancedMesh, MeshStandardMaterial, Object3D } from 'three'
 import type { PlayerProfile } from '../../data/playerProfile'
 import { writeInstanceMatrices } from '../../scene/instancedMeshes'
 import type { BallView } from '../stage/ballMeshes'
-import { standSeats } from './bowlLayout'
+import { standSeats, terraceSeats } from './bowlLayout'
 import {
   addCrowdShader,
   advanceCrowd,
@@ -18,9 +18,9 @@ import {
 import { pickLooks } from './guestLooks'
 
 /**
- * The fans in the stands (crowdLayout.ts), looking like the town's visitors (`approved` guestbook looks, then random
- * ones): they follow `ballViewRef`'s ball and cheer as much as `cheer` asks; a `reduced` tier draws half of them. Under
- * reduced motion they raise their arms for a cheer but neither hop nor wave.
+ * The fans in the stands and on the outfield terrace (crowdLayout.ts), looking like the town's visitors (`approved`
+ * guestbook looks, then random ones): they follow `ballViewRef`'s ball and cheer as much as `cheer` asks; a `reduced`
+ * tier draws half of them. Under reduced motion they raise their arms for a cheer but neither hop nor wave.
  */
 export function Crowd({
   approved,
@@ -35,7 +35,7 @@ export function Crowd({
   reduced: boolean
   reducedMotion: boolean
 }) {
-  const seats = useMemo(() => crowdSeats(standSeats()), [])
+  const seats = useMemo(() => crowdSeats([...standSeats(), ...terraceSeats()]), [])
   const looks = useMemo(() => pickLooks(approved, seats.length, 17), [approved, seats.length])
   const geometry = useMemo(() => createFanGeometry(), [])
   const uniforms = useMemo(() => createCrowdUniforms(), [])

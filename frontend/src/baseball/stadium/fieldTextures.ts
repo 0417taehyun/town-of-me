@@ -22,6 +22,18 @@ export function createCanvasTexture(
   return texture
 }
 
+/** Draws on `texture`'s canvas again and has the texture uploaded again. */
+export function redrawCanvasTexture(
+  texture: CanvasTexture,
+  draw: (context: CanvasRenderingContext2D, size: number) => void,
+) {
+  const canvas = texture.image as HTMLCanvasElement
+  const context = canvas.getContext('2d')
+  if (!context) return
+  draw(context, canvas.width)
+  texture.needsUpdate = true
+}
+
 /** Two mowing stripes, light and dark, flecked with light and shadow. */
 export function drawLawn(context: CanvasRenderingContext2D, size: number) {
   context.fillStyle = '#ffffff'

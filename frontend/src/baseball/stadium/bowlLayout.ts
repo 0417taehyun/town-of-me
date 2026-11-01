@@ -238,6 +238,76 @@ export function isOnHomeRunLawn(x: number, z: number) {
   return Math.abs(sprayOf(x, z)) <= HOME_RUN_LAWN.spray && Math.hypot(x, z) <= HOME_RUN_LAWN.reach
 }
 
+/**
+ * A low terrace of bleachers just past the home-run lawn's reach, a wing either side of the oak inside the outer
+ * hedge: `tiers` steps of `depth` × `rise` from a `base` wall, high enough for its back rows to show over the outfield
+ * hedge from the batting view, under a `back` rest `wall` m thick.
+ */
+export const TERRACE = {
+  front: HOME_RUN_LAWN.reach + 1,
+  inner: 0.09,
+  outer: 0.36,
+  tiers: 4,
+  depth: 1.25,
+  rise: 0.9,
+  base: 1.8,
+  back: 0.8,
+  wall: 0.3,
+}
+
+/**
+ * The terrace's cross-section, from its back's foot along the ground, up its front, step by step to the back rest, and
+ * down its back. As every step rises away from the field, each corner can be seen from that first point, so the sweep
+ * can close both ends with triangles from it.
+ */
+export function terraceProfile(): SweepProfile {
+  const { tiers, depth, rise, base, back, wall } = TERRACE
+  const steps = Array.from({ length: tiers }, (_, tier) => [
+    [tier * depth, base + tier * rise] as const,
+    [(tier + 1) * depth, base + tier * rise] as const,
+  ]).flat()
+  const top = base + (tiers - 1) * rise + back
+  const behind = tiers * depth + wall
+  return [[behind, 0], [0, 0], ...steps, [tiers * depth, top], [behind, top], [behind, 0]]
+}
+
+/** Both wings of the terrace as one geometry, flat-shaded like the stands. */
+export function createTerraceGeometry() {
+  const profile = terraceProfile()
+  const wings = [-1, 1].map((side) => {
+    const sprays = [side * TERRACE.inner, side * TERRACE.outer].sort((first, second) => first - second)
+    const arc = {
+      from: sprays[0],
+      to: sprays[1],
+      steps: 16,
+      radiusAt: () => TERRACE.front,
+      textureRadius: TERRACE.front,
+    }
+    return createArcSweep(profile, arc, { caps: true }).toNonIndexed()
+  })
+  const geometry = mergeGeometries(wings) ?? new BufferGeometry()
+  geometry.computeVertexNormals()
+  return geometry
+}
+
+/** The terrace's seats, on both wings: a seat every `SEATING.spacing` m along each step, all facing the infield. */
+export function terraceSeats(): Seat[] {
+  return [-1, 1].flatMap((side) =>
+    Array.from({ length: TERRACE.tiers }, (_, tier) => terraceTierSeats(side, tier)).flat(),
+  )
+}
+
+export function terraceTierSeats(side: number, tier: number): Seat[] {
+  const radius = TERRACE.front + (tier + 0.55) * TERRACE.depth
+  const span = TERRACE.outer - TERRACE.inner
+  const count = Math.floor((span * radius) / SEATING.spacing)
+  return Array.from({ length: count }, (_, index) => {
+    const [x, , z] = sweptPoint(side * (TERRACE.inner + ((index + 0.5) / count) * span), radius, 0)
+    const yaw = Math.atan2(SEATING.facing.x - x, SEATING.facing.z - z)
+    return { x, y: TERRACE.base + tier * TERRACE.rise, z, yaw, section: 0 }
+  })
+}
+
 /** The tall hedge round the whole park: a circle about a point out toward center field. */
 export const OUTER_HEDGE = { centerZ: -45, radius: 155 }
 export const OUTER_HEDGE_PROFILE: SweepProfile = [
@@ -274,14 +344,15 @@ export const TREE_ROOM = 8
 export type Clearing = { x: number; z: number; radius: number }
 
 /**
- * True where the garden has no room for a tree: the field and the hedge, the home-run lawn, the stands and the foul
- * ground in front of them, behind home, past the outer hedge, and in `clearings`.
+ * True where the garden has no room for a tree: the field and the hedge, the home-run lawn and the terrace past it, the
+ * stands and the foul ground in front of them, behind home, past the outer hedge, and in `clearings`.
  */
 export function isBuiltUp(x: number, z: number, clearings: readonly Clearing[]) {
   const spray = sprayOf(x, z)
   const distance = Math.hypot(x, z)
   if (Math.abs(spray) <= FOUL_ANGLE + 0.05 && distance < fenceDistance(spray) + 8) return true
   if (isOnHomeRunLawn(x, z) || distance < 48 || distance > outerHedgeDistance(spray) - 7) return true
+  if (Math.abs(spray) < TERRACE.outer + 0.05 && distance > TERRACE.front - TREE_ROOM) return true
   if ([-1, 1].some((side) => isInStands(x, z, side))) return true
   return clearings.some((clearing) => Math.hypot(clearing.x - x, clearing.z - z) < clearing.radius + TREE_ROOM)
 }

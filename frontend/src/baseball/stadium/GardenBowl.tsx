@@ -29,6 +29,7 @@ import {
   createConservatoryGlass,
   createOuterHedgeSweep,
   createStandsGeometry,
+  createTerraceGeometry,
   FLOWER_BED,
   flowerBeds,
   gardenFlowers,
@@ -56,9 +57,9 @@ const hillColors = getSeasonColors('hills')
 const CLOUD_DRIFT = 0.004
 
 /**
- * The garden bowl around the field (bowlLayout.ts). The stands and the conservatory's ribs take the ballpark's building
- * colors; the hedge, trees, hills, and flowers follow the visitor's season like the town's, with its snow. The
- * conservatory glows warm while the town's lamps are on (`lampsOn`).
+ * The garden bowl around the field (bowlLayout.ts). The stands, the outfield terrace, and the conservatory's ribs take
+ * the ballpark's building colors; the hedge, trees, hills, and flowers follow the visitor's season like the town's,
+ * with its snow. The conservatory glows warm while the town's lamps are on (`lampsOn`).
  */
 export function GardenBowl({
   materials,
@@ -76,6 +77,7 @@ export function GardenBowl({
   const geometries = useMemo(
     () => ({
       stands: createStandsGeometry(),
+      terrace: createTerraceGeometry(),
       glass: createConservatoryGlass(),
       rib: new TubeGeometry(
         new CatmullRomCurve3(conservatoryRibPoints().map(([x, y, z]) => new Vector3(x, y, z))),
@@ -171,6 +173,7 @@ export function GardenBowl({
   return (
     <group>
       <mesh geometry={geometries.stands} material={[materials.walls, materials.roof]} castShadow receiveShadow />
+      <mesh geometry={geometries.terrace} material={materials.walls} />
       {layout.seats.map((seats, index) => (
         <instancedMesh
           key={index}

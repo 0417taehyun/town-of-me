@@ -1,6 +1,6 @@
 import {
   type BufferGeometry,
-  CapsuleGeometry,
+  CircleGeometry,
   Color,
   Float32BufferAttribute,
   InstancedBufferAttribute,
@@ -82,23 +82,30 @@ export function crowdCheer(result: PitchResult | null) {
 /** A part of a fan's body: its geometry in fan space, which color it takes, and the arm's side (0 for no arm). */
 export type FanPart = { geometry: BufferGeometry; part: number; arm: number }
 
+/**
+ * A fan in under a hundred triangles, since a thousand of them are seen from afar: a round body, a face only below the
+ * hairline its hair or hat covers, flat eyes, and spindle arms.
+ */
 export function fanParts(): FanPart[] {
   const { bodyY, shoulderX, shoulderY, shoulderZ, armHang } = FAN
   const eyes = [-1, 1].map((side) => ({
-    geometry: new SphereGeometry(0.038, 4, 2).translate(side * 0.095, bodyY + 0.52, 0.27),
+    geometry: new CircleGeometry(0.045, 4).rotateY(side * 0.35).translate(side * 0.095, bodyY + 0.51, 0.275),
     part: FAN_PARTS.eyes,
     arm: 0,
   }))
   const arms = [-1, 1].map((side) => ({
-    geometry: new CapsuleGeometry(0.075, 0.24, 1, 5).translate(side * shoulderX, shoulderY - armHang, shoulderZ),
+    geometry: new SphereGeometry(1, 4, 2)
+      .scale(0.08, 0.19, 0.08)
+      .translate(side * shoulderX, shoulderY - armHang, shoulderZ),
     part: FAN_PARTS.top,
     arm: side,
   }))
+  const face = new SphereGeometry(0.27, 8, 2, 0, Math.PI * 2, Math.PI * 0.42, Math.PI * 0.58)
   return [
-    { geometry: new CapsuleGeometry(0.23, 0.12, 2, 8).scale(1.05, 1, 0.85).translate(0, bodyY, 0), part: 0, arm: 0 },
-    { geometry: new SphereGeometry(0.27, 10, 7).translate(0, bodyY + 0.5, 0.02), part: FAN_PARTS.skin, arm: 0 },
+    { geometry: new SphereGeometry(0.25, 6, 3).scale(1.05, 1.15, 0.85).translate(0, bodyY, 0), part: 0, arm: 0 },
+    { geometry: face.translate(0, bodyY + 0.5, 0.02), part: FAN_PARTS.skin, arm: 0 },
     {
-      geometry: new SphereGeometry(0.29, 10, 3, 0, Math.PI * 2, 0, Math.PI * 0.52).translate(0, bodyY + 0.54, -0.01),
+      geometry: new SphereGeometry(0.29, 8, 2, 0, Math.PI * 2, 0, Math.PI * 0.52).translate(0, bodyY + 0.54, -0.01),
       part: FAN_PARTS.crown,
       arm: 0,
     },

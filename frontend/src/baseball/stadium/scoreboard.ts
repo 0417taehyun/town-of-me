@@ -1,25 +1,25 @@
 import type { CanvasTexture } from 'three'
-import type { DerbyHudState } from '../ui/derbyCues'
+import { type DerbyHudState, scoreboardTotals } from '../ui/derbyCues'
+import { redrawCanvasTexture } from './fieldTextures'
 
 // The treehouse scoreboard over center field. It counts only pitches whose balls have come down, as the HUD's figures
 // do, so it never tells a pitch's result (let alone its type, which it never shows) while the ball is still in play.
 
-/** A star per pitch, filled once that pitch is over; the home runs so far and how far the latest went. */
+/** A star per pitch, filled once that pitch is over; the home runs so far and their summed distance, as the HUD's. */
 export type ScoreboardSummary = {
   pitches: number
   played: number
   homeRuns: number
-  lastHomeRunDecimetres: number | null
+  homeRunDistanceDecimetres: number
 }
 
 export function scoreboardSummary(hud: DerbyHudState, pitchCount: number): ScoreboardSummary {
-  const settled = hud.results.slice(0, hud.settledPitch + 1)
-  const homeRuns = settled.filter((result) => result.outcome === 'homeRun')
+  const { homeRuns, homeRunDistanceDecimetres } = scoreboardTotals(hud)
   return {
     pitches: pitchCount,
-    played: settled.length,
-    homeRuns: homeRuns.length,
-    lastHomeRunDecimetres: homeRuns.at(-1)?.distanceDecimetres ?? null,
+    played: Math.min(hud.results.length, hud.settledPitch + 1),
+    homeRuns,
+    homeRunDistanceDecimetres,
   }
 }
 
@@ -32,7 +32,7 @@ const CREAM = '#f8f3e7'
 const BUTTER = '#f2dc92'
 const BLUSH = '#f3c6d0'
 
-/** Draws the board on a 1024 × 512 canvas: the title, a row of stars, the home runs, and the latest distance. */
+/** Draws the board on a 1024 × 512 canvas: the title, a row of stars, the home runs, and their summed distance. */
 export function drawScoreboard(context: CanvasRenderingContext2D, summary: ScoreboardSummary, text: ScoreboardText) {
   const { width, height } = context.canvas
   context.fillStyle = BOARD_GREEN
@@ -77,8 +77,5 @@ export function drawStar(context: CanvasRenderingContext2D, x: number, y: number
 
 /** Draws the board on its texture's canvas and has the texture uploaded again. */
 export function redrawScoreboard(texture: CanvasTexture, summary: ScoreboardSummary, text: ScoreboardText) {
-  const context = (texture.image as HTMLCanvasElement).getContext('2d')
-  if (!context) return
-  drawScoreboard(context, summary, text)
-  texture.needsUpdate = true
+  redrawCanvasTexture(texture, (context) => drawScoreboard(context, summary, text))
 }

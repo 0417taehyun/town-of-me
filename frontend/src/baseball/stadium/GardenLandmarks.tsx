@@ -1,5 +1,5 @@
 import { useFrame } from '@react-three/fiber'
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { MutableRefObject } from 'react'
 import {
   AdditiveBlending,
@@ -18,21 +18,22 @@ import { writeInstanceMatrices } from '../../scene/instancedMeshes'
 import { createGradientMap } from '../../scene/objects/foliageMaterial'
 import type { BallparkPalette } from '../../scene/venues/ballpark/ballparkThemes'
 import type { VenueMaterials } from '../../scene/venues/venueMaterials'
-import { type DerbyHudState, distanceText } from '../ui/derbyCues'
+import { type DerbyHudState, homeRunDistanceText } from '../ui/derbyCues'
 import { coverWithSnow } from './fieldLayout'
-import { createCanvasTexture, drawLeaves } from './fieldTextures'
+import { createCanvasTexture, drawLeaves, redrawCanvasTexture } from './fieldTextures'
 import {
   createLandmarkGeometries,
   drawFenceLabels,
   FENCE_LABEL_ROW,
   FENCE_SIGN_SPRAYS,
+  fenceSignLabel,
   glowPositions,
   landmarkLights,
   OAK,
   OAK_SNOW,
   towerLampGlowSpots,
 } from './landmarkLayout'
-import { redrawScoreboard, scoreboardSummary } from './scoreboard'
+import { redrawScoreboard, SCOREBOARD_FONT, scoreboardSummary } from './scoreboard'
 
 const hedgeColors = getSeasonColors('hedge')
 const SEASONS: Season[] = ['spring', 'summer', 'autumn', 'winter']
@@ -45,8 +46,9 @@ const oakCrownColors = Object.fromEntries(
  * The garden's landmarks (landmarkLayout.ts). Their buildings and the towers' blossoms take the ballpark's colors; the
  * oak's crown, the topiaries' hedge, and the towers' stems follow the season. The scoreboard shows the run as the HUD
  * does, a pitch at a time once its ball is down. While the town's lamps are on (`lampsOn`), the towers' lamps, the
- * string lights, and the treehouse's window glow, with painted halos rather than lights, and the scoreboard brightens.
- * Nothing here casts a shadow: it all stands far outside the sun's shadow frame round the plate and the mound.
+ * treehouse's lanterns and window, and the string lights glow, with painted halos rather than lights, and the
+ * scoreboard brightens. Nothing here casts a shadow: it all stands far outside the sun's shadow frame round the plate
+ * and the mound.
  */
 export function GardenLandmarks({
   materials,
@@ -88,19 +90,36 @@ export function GardenLandmarks({
   )
   const summary = scoreboardSummary(hud, pitchCount)
   const copy = languageCopy[language].baseball
-  const { pitches, played, homeRuns, lastHomeRunDecimetres } = summary
+  const { pitches, played, homeRuns, homeRunDistanceDecimetres } = summary
+  // The font's subsets load by unicode-range, and `document.fonts.ready` does not wait for glyphs only a canvas uses,
+  // so the board and the signs wait for every glyph they can show in this language and are drawn again once those are
+  // in (or the load fails and the fallback stays).
+  const glyphs = `${copy.title}${copy.hud.homeRuns}${FENCE_SIGN_SPRAYS.map(fenceSignLabel).join('')}0123456789 m—`
+  const [fontGlyphs, setFontGlyphs] = useState<string>()
+  useEffect(() => {
+    let active = true
+    const redraw = () => active && setFontGlyphs(glyphs)
+    void document.fonts?.load(`900 64px ${SCOREBOARD_FONT}`, glyphs).then(redraw, redraw)
+    return () => {
+      active = false
+    }
+  }, [glyphs])
+  const webFontReady = fontGlyphs === glyphs
+  useEffect(() => {
+    if (webFontReady) redrawCanvasTexture(textures.labels, drawFenceLabels)
+  }, [textures, webFontReady])
   useEffect(
     () =>
       redrawScoreboard(
         textures.scoreboard,
-        { pitches, played, homeRuns, lastHomeRunDecimetres },
+        { pitches, played, homeRuns, homeRunDistanceDecimetres },
         {
           title: copy.title,
           homeRuns: `${copy.hud.homeRuns} ${homeRuns}`,
-          distance: lastHomeRunDecimetres === null ? '—' : distanceText(lastHomeRunDecimetres, language),
+          distance: homeRunDistanceText(homeRunDistanceDecimetres, language),
         },
       ),
-    [copy, homeRuns, language, lastHomeRunDecimetres, pitches, played, textures],
+    [copy, homeRunDistanceDecimetres, homeRuns, language, pitches, played, textures, webFontReady],
   )
 
   const hedge = useRef<MeshStandardMaterial>(null)
