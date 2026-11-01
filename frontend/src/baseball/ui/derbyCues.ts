@@ -111,7 +111,7 @@ export function judgedResult(hud: DerbyHudState): PitchResult | null {
 /** The two or three words that say where the run is; the same for every pitch until its result. */
 export function captionId(hud: DerbyHudState): CaptionId {
   const judged = judgedResult(hud)
-  if (judged) return judged.timing === null ? 'strike' : judged.outcome
+  if (judged) return pitchOutcome(judged)
   if (hud.phase === 'finished') return 'finished'
   if (hud.phase === null) return 'ready'
   return 'coming'
@@ -119,6 +119,11 @@ export function captionId(hud: DerbyHudState): CaptionId {
 
 /** The outcomes a big title pops up for: a ball in play's, a pitch let go by (a strike), or a swing that missed it. */
 export type OutcomeTitleId = 'homeRun' | 'hit' | 'foul' | 'strike' | 'miss'
+
+/** How a pitch ended, as the caption, the big title, and the result card name it: one let go by is a strike. */
+export function pitchOutcome(result: PitchResult): OutcomeTitleId {
+  return result.timing === null ? 'strike' : result.outcome
+}
 
 /**
  * The big title over the play for the latest pitch, once its outcome is seen: a ball in play's as the camera starts
@@ -131,7 +136,7 @@ export function outcomeTitle(hud: DerbyHudState): OutcomeTitleId | null {
   const latest = hud.results.length - 1
   const seen = judged.outcome === 'miss' ? hud.settledPitch === latest : hud.chasedPitch === latest
   if (!seen) return null
-  return judged.timing === null ? 'strike' : judged.outcome
+  return pitchOutcome(judged)
 }
 
 /** Practice's caption: before it, a pitch on its way, then the swing's word, or a nudge after a pitch let go by. */
@@ -161,15 +166,29 @@ export function homeRunDistanceText(decimetres: number, language: AppLanguage, f
   return decimetres > 0 ? distanceText(decimetres, language, fractionDigits) : '—'
 }
 
+/** How far a ball in play went, to `fractionDigits` of a meter; a foul's, a strike's, or a miss's distance says nothing. */
+export function inPlayDistance(result: PitchResult, language: AppLanguage, fractionDigits = 0) {
+  const inPlay = result.outcome === 'homeRun' || result.outcome === 'hit'
+  return inPlay ? distanceText(result.distanceDecimetres, language, fractionDigits) : null
+}
+
+/**
+ * A pitch's row on the result card: how it ended and, for a ball in play, how far it went, to the decimeter the run's
+ * total is scored in. Like the banner, it never says how the swing was timed or how hard it was, and unlike the banner,
+ * not what the pitch was either.
+ */
+export function resultRow(result: PitchResult, language: AppLanguage) {
+  return { outcome: pitchOutcome(result), distance: inPlayDistance(result, language, 1) }
+}
+
 /**
  * The banner under a result: how far a ball in play went, and what the pitch was. It never says how the swing was
  * timed or how hard it was: the outcome and the distance say how it went.
  */
 export function bannerText(result: PitchResult, language: AppLanguage) {
   const copy = languageCopy[language].baseball.hud
-  const inPlay = result.outcome === 'homeRun' || result.outcome === 'hit'
   return {
-    distance: inPlay ? distanceText(result.distanceDecimetres, language) : null,
+    distance: inPlayDistance(result, language),
     detail: copy.pitchWas[result.pitchType],
   }
 }

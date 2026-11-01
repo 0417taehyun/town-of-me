@@ -458,6 +458,8 @@ export function DerbyScreen({
         reducedMotion={reducedMotion}
         onUnavailable={onGraphicsUnavailable}
       />
+      {/* The result card's figures stand out against the stadium dimmed behind them; the camera panel stays clear. */}
+      {step === 'result' && <div className="derby-result-scrim" aria-hidden="true" />}
       <p className="derby-step-caption" role="status">
         {waitsForStance ? copy.baseball.flow.stance : null}
       </p>

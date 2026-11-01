@@ -657,7 +657,9 @@ export const languageCopy = {
         title: (homeRuns: number) => (homeRuns === 1 ? '1 home run' : `${homeRuns} home runs`),
         homeRuns: 'Home runs',
         homeRunDistance: 'Home run distance',
-        longest: 'Longest home run',
+        pitches: 'Pitch by pitch',
+        /** How each pitch ended, in its row on the result card (derbyCues.ts resultRow). */
+        outcomes: { homeRun: 'Home run', hit: 'Hit', foul: 'Foul', strike: 'Strike', miss: 'Miss' },
         playAgain: 'Play again',
       },
       blocked: {
@@ -1451,7 +1453,8 @@ export const languageCopy = {
         title: (homeRuns: number) => `홈런 ${homeRuns}개`,
         homeRuns: '홈런',
         homeRunDistance: '홈런 총 비거리',
-        longest: '최장 홈런',
+        pitches: '공별 결과',
+        outcomes: { homeRun: '홈런', hit: '안타', foul: '파울', strike: '스트라이크', miss: '헛스윙' },
         playAgain: '다시 하기',
       },
       blocked: {

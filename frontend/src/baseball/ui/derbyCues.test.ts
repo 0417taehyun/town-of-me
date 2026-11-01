@@ -19,6 +19,7 @@ import {
   outcomeTitle,
   pitchDots,
   pitchInPlay,
+  resultRow,
   scoreboardTotals,
   seenCameraState,
   stanceNeedText,
@@ -251,6 +252,27 @@ describe('the derby HUD', () => {
   it('shows distances in whole meters, spaced in English and not in Korean, and a total to the decimeter', () => {
     expect([distanceText(1324, 'en'), distanceText(1324, 'ko')]).toEqual(['132 m', '132m'])
     expect([homeRunDistanceText(2170, 'en', 1), homeRunDistanceText(2174, 'en', 1)]).toEqual(['217 m', '217.4 m'])
+  })
+})
+
+describe('the result card', () => {
+  it('names how each pitch ended, with a distance to the decimeter only for a ball in play, never its timing', () => {
+    const landing = { outcome: 'homeRun', distanceDecimetres: 1324, spray: 0.1, launchDegrees: 28 } as const
+    const homeRun: PitchResult = { ...landing, pitchType: 'curve', timing: 'perfect', errorMs: 3 }
+    const pitches: PitchResult[] = [
+      homeRun,
+      { ...homeRun, outcome: 'hit', distanceDecimetres: 612, timing: 'late', errorMs: 90 },
+      { ...homeRun, outcome: 'foul', distanceDecimetres: 380 },
+      { ...homeRun, outcome: 'miss', distanceDecimetres: 0, timing: 'early', errorMs: -260 },
+      { ...homeRun, outcome: 'miss', distanceDecimetres: 0, timing: null, errorMs: null },
+    ]
+    expect(pitches.map((pitch) => resultRow(pitch, 'en'))).toEqual([
+      { outcome: 'homeRun', distance: '132.4 m' },
+      { outcome: 'hit', distance: '61.2 m' },
+      { outcome: 'foul', distance: null },
+      { outcome: 'miss', distance: null },
+      { outcome: 'strike', distance: null },
+    ])
   })
 })
 

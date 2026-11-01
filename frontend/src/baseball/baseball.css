@@ -574,29 +574,104 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   }
 }
 
+/* The stadium dimmed and softened behind the result card, under the camera panel the stance hold is watched in. */
+.derby-result-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(45, 69, 61, 0.4);
+  backdrop-filter: blur(6px);
+}
+
+/*
+ * The result, read from where the visitor bats to hold the stance again: the home runs and their summed distance side
+ * by side at 14vh, the design's key-number size, then a row per pitch in two columns at up to 5.5vh, smaller for a
+ * longer run (--pitch-rows) so the card stays within the screen, and the stance gauge under them. Both sizes also follow
+ * the card's width (--row-fit, wider in English, whose words and spaced units run longer), so a narrow play band beside
+ * a large camera panel still holds them.
+ */
+.derby-screen .derby-result {
+  --row-fit: 4cqi;
+  container-type: inline-size;
+  /* Centred in the room above the links along the bottom. */
+  top: calc(50% - 3vh);
+  width: min(1180px, calc(var(--play-width, 100vw) - 32px));
+  padding: 3vh 4vh;
+}
+html[lang='ko'] .derby-screen .derby-result {
+  --row-fit: 5cqi;
+}
 .derby-result-stats {
-  display: grid;
-  /* Each column as wide as its figure, so a total to the decimeter never runs into the next. */
-  grid-template-columns: repeat(3, auto);
-  justify-content: start;
-  gap: 20px 28px;
-  margin: 24px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1vh 7cqi;
+  margin: 1.5vh 0 0;
 }
 .derby-result-stats div {
   display: grid;
-  align-content: start;
-  gap: 4px;
+  gap: 0.5vh;
 }
 .derby-result-stats dt {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: max(0.95rem, 3vh);
   font-weight: 700;
 }
 .derby-result-stats dd {
   margin: 0;
-  font-size: clamp(1.4rem, 4vh, 2.2rem);
-  font-weight: 800;
+  font-size: min(14vh, 14cqi);
+  font-weight: 900;
+  line-height: 1;
   white-space: nowrap;
+}
+/* A row per pitch: its number, how it ended, and a ball in play's distance; home runs in gold, fouls and outs muted. */
+.derby-result-pitches {
+  columns: 2;
+  column-gap: 6cqi;
+  margin: 2.5vh 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: pitch;
+  font-size: min(5.5vh, 40vh / var(--pitch-rows, 5) / 1.45, var(--row-fit));
+  font-weight: 800;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.derby-result-pitches li {
+  display: grid;
+  grid-template-columns: 0.8em auto 1fr;
+  align-items: baseline;
+  column-gap: 0.45em;
+  margin-bottom: 0.2em;
+  padding: 0 0.35em;
+  border-radius: 0.3em;
+  break-inside: avoid;
+  counter-increment: pitch;
+}
+.derby-result-pitches li::before {
+  content: counter(pitch);
+  color: var(--muted);
+  font-size: 0.6em;
+  text-align: end;
+}
+/* A row with no distance lets its word run on into the distance's column. */
+.derby-result-pitches li > :only-child {
+  grid-column: span 2;
+}
+.derby-result-pitches li > :last-child:not(:only-child) {
+  text-align: end;
+}
+.derby-result-pitches li:is([data-outcome='foul'], [data-outcome='strike'], [data-outcome='miss']) {
+  color: var(--muted);
+}
+.derby-result-pitches li[data-outcome='homeRun'] {
+  color: #7f5600;
+  background: rgba(244, 197, 66, 0.3);
+}
+.derby-result .stance-gauge {
+  --stance-ring: clamp(80px, 15vh, 190px);
+  margin-top: 2vh;
+}
+.derby-result .derby-actions {
+  margin-top: 2vh;
 }
 
 /*
