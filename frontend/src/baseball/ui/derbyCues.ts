@@ -63,6 +63,16 @@ export function betweenPitches(hud: DerbyHudState, pitchCount: number) {
 }
 
 /**
+ * Whether a pitch is in play: from its windup until it is judged and its ball is down, in the mitt or on the grass, so
+ * the swing, the bat's last stretch to the ball, and the ball's flight play out. The object detector rests meanwhile,
+ * since a run of it holds up the camera's frames and the page's drawing alike.
+ */
+export function pitchInPlay(hud: DerbyHudState) {
+  if (hud.phase === 'windup' || hud.phase === 'pitch') return true
+  return hud.phase === 'result' && hud.settledPitch !== hud.results.length - 1
+}
+
+/**
  * A home run's ball still in the air, once the camera chases it: the camera panel steps aside to a corner meanwhile.
  * Not sooner, so the play does not slide aside while the hit-stop holds the bat on the ball.
  */

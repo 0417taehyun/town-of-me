@@ -50,6 +50,7 @@ function sweepFrom(side: Side, measured: Partial<Sweep> = {}): Sweep {
   const grip = { x: 0.5, y: 0.5 }
   return {
     arm: { side, depth: 0.5, time: 0, grip, deepest: { depth: 0.5, grip, time: 0 } },
+    cued: false,
     startedAt: 0,
     from: grip,
     head: null,

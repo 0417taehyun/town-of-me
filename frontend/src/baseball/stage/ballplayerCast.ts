@@ -7,40 +7,40 @@ import { contactSeconds, pitchPosition, RELEASE_POINT } from '../game/pitch'
 import {
   type Batter,
   batterPoseAt,
+  beginSwing,
+  checkSwing,
+  judgeSwing,
   NO_SWING,
   poseBatter,
-  startSwing,
   swingHeadWeight,
   turnHeadClearOfBat,
 } from './actors/batter'
 import { type Catcher, createCatcher, disposeCatcher, poseCatcher } from './actors/catcher'
 import { easeLook, fieldToRig, type HeadLook, type HeadRange, lookToward, watch } from './actors/headLook'
 import { createPitcher, disposePitcher, type Pitcher, posePitcher } from './actors/pitcher'
-import { CONTACT_DELAY_MS, FINISH_HOLD_MS, RETURN_MS, SWING_MS } from './actors/swingMotion'
+import { FINISH_HOLD_MS, FOLLOW_MS, RETURN_MS } from './actors/swingMotion'
 import type { BallView } from './ballMeshes'
 import { MITT_DEPTH } from './stageLayout'
-import { ballIsThePitchers, judgedContactMs, mittSeconds, type PitchOnStage, type StageRun } from './stageRun'
+import { ballIsThePitchers, mittSeconds, type PitchOnStage, type ShownSwing, type StageRun } from './stageRun'
 
 // The three players on the derby's clock: the pitcher throws on the derby's windup and release, the batter loads with
-// the windup and swings each judged swing so its bat meets the ball where and when the stage sends it off, and the
+// the windup and swings the swing the stage shows (stageRun.ts ShownSwing): begun as the camera sees the visitor begin
+// one, judged so its bat meets the ball where and when the stage sends it off, or checked short of the plate. The
 // catcher's mitt goes where a pitch will end up. Every head follows the ball, the pitcher's watching the mitt while the
 // ball is still his and as it leaves his hand. They only show what the derby decided; nothing here changes a run.
 
 export type Fielders = { pitcher: Pitcher; catcher: Catcher }
 
 /**
- * The players and what they remember between frames: where the batter's eyes are, and the run and the pitch the batter
- * last swung at, so each judged swing starts once.
+ * The players and what they remember between frames: where the batter's eyes are, and the run and the swing the stage
+ * showed the batter last, so each of its changes plays once.
  */
 export type BallplayerCast = Fielders & {
   batter: Batter
   batterLook: HeadLook
   run: StageRun | null
-  swungAt: PitchOnStage | null
+  shown: ShownSwing | null
 }
-
-/** A swing the batter shows: when it starts (game ms) and the ball it meets (field meters; null for a miss). */
-export type BatterSwingCue = { pitch: PitchOnStage; startMs: number; point: Vec3 | null }
 
 /** How far each head turns (degrees in its rig frame, yaw from its +z toward +x, pitch down). */
 export const HEAD_RANGES = {
@@ -68,7 +68,7 @@ export function disposeFielders({ pitcher, catcher }: Fielders) {
 }
 
 export function createCast(batter: Batter, fielders: Fielders): BallplayerCast {
-  return { ...fielders, batter, batterLook: { yaw: 85, pitch: 5 }, run: null, swungAt: null }
+  return { ...fielders, batter, batterLook: { yaw: 85, pitch: 5 }, run: null, shown: null }
 }
 
 /** Seconds from a release the pitcher is at: winding up toward the next, or on from the last; before any, his set. */
@@ -85,23 +85,6 @@ export function posePitcherAt(cast: BallplayerCast, run: StageRun | null, nowMs:
   return cast.pitcher.ballPoint
 }
 
-/**
- * The swing the batter shows for the pitch on stage once the derby has judged one, or null: onto the ball where the
- * stage sends it off, or for a miss through the contact point at the swing's judged contact, though never before the
- * camera reported it. Nothing steps the clock back for a miss, and a camera the calibration finds late reports the
- * swing after its judged contact, so starting there would skip the swing and show the batter already in its finish.
- */
-export function batterSwingCue(run: StageRun | null): BatterSwingCue | null {
-  if (!run?.pitch) return null
-  const { pitch, batted } = run
-  const swing = run.derby.log.swings[pitch.index]
-  if (!swing) return null
-  if (batted?.pitchIndex === pitch.index)
-    return { pitch, startMs: batted.meetMs - CONTACT_DELAY_MS, point: batted.start }
-  const contactMs = Math.max(swing.contactMs, judgedContactMs(run.derby, swing))
-  return { pitch, startMs: pitch.releasedMs + contactMs - CONTACT_DELAY_MS, point: null }
-}
-
 /** The batter's load `ms` (game ms) into a pitch: the toe lifted at the release, the front foot down before contact. */
 export function strideLoad(pitch: PitchOnStage, ms: number) {
   const footDownMs = contactSeconds(pitch.plan) * 1000 - FOOT_DOWN_LEAD_MS
@@ -109,12 +92,12 @@ export function strideLoad(pitch: PitchOnStage, ms: number) {
 }
 
 /**
- * How far back into its stance (0..1) the batter has settled during a result: from the start of a swing's return, or
- * for a pitch let go from the result's start, over RETURN_MS.
+ * How far back into its stance (0..1) the batter has settled during a result: from the start of a judged swing's
+ * return, or for a pitch let go (or a swing checked) from the result's start, over RETURN_MS.
  */
 export function settledAmount(run: StageRun, nowMs: number) {
-  const cue = batterSwingCue(run)
-  const fromMs = cue ? cue.startMs + SWING_MS + FINISH_HOLD_MS : run.derby.phaseStartedMs
+  const judged = run.shown?.pitchIndex === run.pitch?.index ? run.shown?.judged : null
+  const fromMs = judged ? judged.contactMs + FOLLOW_MS + FINISH_HOLD_MS : run.derby.phaseStartedMs
   return smoothstep(clamp01((nowMs - fromMs) / RETURN_MS))
 }
 
@@ -138,17 +121,38 @@ export function mittTarget(run: StageRun | null): Vec3 {
   return pitchPosition(run.pitch.plan, mittSeconds(run.pitch.plan))
 }
 
-/** A new run starts the batter afresh; each judged swing starts the batter's swing once. */
+/** Where the pitch on its way meets a PERFECT swing (field meters), which a swing begun leans toward; null between. */
+export function perfectMeetPoint(run: StageRun) {
+  return run.pitch && pitchPosition(run.pitch.plan, contactSeconds(run.pitch.plan))
+}
+
+/** A new run starts the batter afresh; each change of the swing the stage shows plays on the batter once. */
 export function cueBatter(cast: BallplayerCast, run: StageRun | null) {
   if (cast.run !== run) {
     cast.run = run
-    cast.swungAt = null
+    cast.shown = null
     cast.batter.swing = NO_SWING
   }
-  const cue = batterSwingCue(run)
-  if (!cue || cue.pitch === cast.swungAt) return
-  cast.swungAt = cue.pitch
-  startSwing(cast.batter, cue.startMs, strideLoad(cue.pitch, cue.startMs), cue.point)
+  const shown = run?.shown ?? null
+  if (!run || !shown || shown === cast.shown) return
+  showSwing(cast.batter, run, shown, cast.shown)
+  cast.shown = shown
+}
+
+/**
+ * Plays on `batter` what changed in the swing the stage shows since `before`, in order: its start, its check, its
+ * judgment, each from where the batter is drawn then. A judged swing meets the ball in play where the stage sends it
+ * off; a miss goes through the contact point.
+ */
+export function showSwing(batter: Batter, run: StageRun, shown: ShownSwing, before: ShownSwing | null) {
+  const { begun, checkedMs, judged } = shown
+  if (begun && begun !== before?.begun)
+    beginSwing(batter, begun.startedMs, begun.readyMs, batterLoad(run, begun.startedMs), perfectMeetPoint(run))
+  if (checkedMs !== null && checkedMs !== before?.checkedMs) checkSwing(batter, checkedMs, batterLoad(run, checkedMs))
+  if (!judged || judged === before?.judged) return
+  const point = run.batted?.pitchIndex === shown.pitchIndex ? run.batted.start : null
+  const { takenMs, throughMs, contactMs } = judged
+  judgeSwing(batter, takenMs, throughMs, contactMs, point, batterLoad(run, throughMs))
 }
 
 const batterBall = new Vector3()

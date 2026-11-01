@@ -1,6 +1,6 @@
 import { MathUtils } from 'three'
 import type { Vec3 } from '../../../data/models'
-import { clamp01, lerp, wrapAngle } from '../../../motionMath'
+import { clamp01, lerp, smoothstep, wrapAngle } from '../../../motionMath'
 import { keyedTracks, type MonotoneTrack, sampleTrack, sampleTracks } from './keyframes'
 
 // The batter's swing as data: the pose lab's pick, "레퍼런스형 · 웅크린 컴팩트". It is the median of 649 measured swings
@@ -98,11 +98,29 @@ export const SWING_CONSTANTS = { pelvisTilt: 6, frontFootZ: -0.05, backFootZ: 0.
 export const SWING_WAGGLE = { azimuth: 2.5, elevation: 4, gripY: 0.007, rate: 1.5 }
 
 /**
- * The bat meets the ball this long after a swing starts (ms): the research's launch-to-contact compressed to the
- * game's trigger-to-contact time. The rest of SWING_MS plays on to the finish, slowing from the contact's speed.
+ * A judged swing's last stretch to the ball takes this long (ms) from the windup's end, for a swing the camera saw no
+ * start of: the research's launch-to-contact compressed to the game's trigger-to-contact time. One the camera saw
+ * begin, nearer the ball, takes less (lastStretchMs). The rest of SWING_MS plays on to the finish, slowing from the
+ * contact's speed.
  */
 export const CONTACT_DELAY_MS = 46
 export const SWING_MS = 380
+
+/**
+ * A swing the camera saw begin reaches swing second `readyAt` by the moment the camera expects its grip to cross the
+ * midline, still moving at about the data's own pace (a swing second a second), and eases on into the slot over
+ * `easeMs` (ms), where the bat still points back behind the batter and no aim has turned it yet, so a ball judged in
+ * play can aim it without a jump. Unless it is judged by then, it goes back to the windup from there as a checked
+ * swing does.
+ */
+export const BEGUN_SWING = { readyAt: -0.086, easeMs: 100 }
+
+/**
+ * A checked swing: the bat stops over `stopMs` (ms), stays a moment (`holdMs`), then goes back to the windup over
+ * `backMs`. A bat moving slower than `fullStopRate` (swing seconds per ms: the data's own pace) stops and stays for
+ * that much less, so one already at rest goes straight back.
+ */
+export const CHECK_SWING_MS = { stopMs: 70, holdMs: 120, backMs: 380, fullStopRate: 0.001 }
 
 // After the finish the batter comes back to its stance along keys of its own, a path the research does not measure.
 // Every turn unwinds one way, the way it came, but low and in front: the chest turns back first and the hands drop to
@@ -272,17 +290,60 @@ export function windupSeconds(load: number) {
   return lerp(stride, footStrike, (amount - 0.75) / 0.25)
 }
 
+/** How long (ms) a swing plays on from the ball to its finish. */
+export const FOLLOW_MS = SWING_MS - CONTACT_DELAY_MS
+
 /**
- * Swing seconds `elapsedMs` into a swing that left the windup at second `from` and meets the ball at second
- * `contactAt`: that stretch compressed into CONTACT_DELAY_MS, so the bat answers at once, then on to the finish over
- * the rest of SWING_MS, slowing from the contact's own speed to a stop the way a bat decelerates after the ball, about
- * three times as long as it took to get there.
+ * The pace (swing seconds per ms) a judged swing meets the ball at second `contactAt` with when it comes from the
+ * windup's end, the whole way in CONTACT_DELAY_MS.
  */
-export function swingSeconds(from: number, contactAt: number, elapsedMs: number) {
-  const rate = (contactAt - from) / CONTACT_DELAY_MS
-  if (elapsedMs <= CONTACT_DELAY_MS) return from + rate * Math.max(0, elapsedMs)
+export function windupPace(contactAt: number) {
+  return (contactAt - windupSeconds(1)) / CONTACT_DELAY_MS
+}
+
+/**
+ * How long (ms) the last stretch of a swing on its way takes from swing second `seconds`, moving at `rate` (swing
+ * seconds per ms): as long as it takes to the contact key speeding up smoothly from that rate to three quarters of
+ * windupPace there, so a ball met further on, out in front of the plate, still meets a bat no faster than one from the
+ * windup. From near the slot that is about half as long as from the windup, and it is never longer.
+ */
+export function lastStretchMs(seconds: number, rate: number) {
+  const { contact } = SWING_KEY_TIMES
+  return Math.min(CONTACT_DELAY_MS, (3 * (contact - seconds)) / (rate + 1.5 * windupPace(contact)))
+}
+
+/**
+ * About where (swing seconds) a swing the camera saw begin at `startedMs` (game ms), to reach BEGUN_SWING's `readyAt`
+ * by `readyMs`, is drawn at `nowMs`, the windup's end where it left from, and how fast it moves on (swing seconds per
+ * ms; none counted before `readyMs`): on its way there, easing on into the slot, then back to the windup as a checked
+ * swing goes (CHECK_SWING_MS). The stage times a last stretch from it (lastStretchMs).
+ */
+export function begunSwingState(startedMs: number, readyMs: number, nowMs: number) {
+  const { footStrike, slot } = SWING_KEY_TIMES
+  const { readyAt, easeMs } = BEGUN_SWING
+  const toReady = clamp01((nowMs - startedMs) / (readyMs - startedMs))
+  if (nowMs < readyMs) return { seconds: lerp(footStrike, readyAt, toReady), rate: 0 }
+  const easing = 1 - clamp01((nowMs - readyMs) / easeMs)
+  const back = smoothstep(clamp01((nowMs - readyMs - easeMs) / CHECK_SWING_MS.backMs))
+  const seconds = lerp(slot - (slot - readyAt) * easing ** 3, footStrike, back)
+  return { seconds, rate: (3 * easing ** 2 * (slot - readyAt)) / easeMs }
+}
+
+/**
+ * How fast (swing seconds per ms) a bat that came at `pace` (swing seconds per ms) over its last stretch meets the ball
+ * at second `contactAt`: that pace, but never slower than the follow-through's, so the bat only slows after the ball.
+ */
+export function contactRate(contactAt: number, pace: number) {
+  return Math.max(pace, (SWING_KEY_TIMES.finish - contactAt) / FOLLOW_MS)
+}
+
+/**
+ * Swing seconds `sinceContactMs` after a swing met the ball at second `contactAt` moving at `rate` (swing seconds per
+ * ms): on to the finish over FOLLOW_MS, slowing from that speed to a stop the way a bat decelerates after the ball,
+ * from the windup about three times as long as it took to get there.
+ */
+export function followSeconds(contactAt: number, rate: number, sinceContactMs: number) {
   const span = SWING_KEY_TIMES.finish - contactAt
-  const onwardMs = SWING_MS - CONTACT_DELAY_MS
-  const onward = Math.min(1, (elapsedMs - CONTACT_DELAY_MS) / onwardMs)
-  return contactAt + span * (1 - (1 - onward) ** ((rate * onwardMs) / span))
+  const onward = Math.min(1, Math.max(0, sinceContactMs) / FOLLOW_MS)
+  return contactAt + span * (1 - (1 - onward) ** ((rate * FOLLOW_MS) / span))
 }

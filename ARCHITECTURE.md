@@ -132,35 +132,40 @@ late as the calibration still counts one, so a server needs none of it.
 The stage draws a run on its own flat canvas: `BaseballStage.tsx` never installs the world curve. `DerbyDirector.tsx`
 plays the run in one `useFrame`: `stageRun.ts` keeps the derby, its game clock, the ball, and the camera's choice in a
 ref and reports only events to React. The ball is the pitcher's until the derby releases it; a pitch then waits at the
-back of the batter's reach while a swing that touches it could still be reported (a camera swing comes up to the
-derby's late margin after it), so the mitt never catches a ball the bat then hits. A
-ball in play leaves the bat where the bat met it and flies to the landing the judge already decided, fast enough to
-come down before its result ends; the stage changes the clock's pace (a hit-stop that holds the moment the bat met the
-ball, even for a swing reported late; slow motion at a showcase home run's peak; a pause while the page is hidden) but
-never an outcome. `cameraShots.ts` frames the batting shot between the HUD's bands at any aspect. The pitcher throws
-only strikes: every pitch passes through the zone whole (`game/pitchSchedule.test.ts`), and `strikeZoneOutline.ts` draws
-the zone as a faint box from the windup until the pitch is judged. The batting shot looks down, so a ball farther off
-is drawn higher and one flat frame would show strikes nearer the pitcher above it; the box runs from where the bat meets
-the ball, over the plate, to where a pitch let go by waits, so a strike is drawn inside it as the visitor swings, as it
-crosses the plate, and while it waits. Its opening is the zone grown by the drawn ball's extra size. The stadium's lawn
-and hedge take the visitor's season like the town's (`scene/environment`), the sky and light the time of day, and its
-dugouts and foul poles the ballpark palette; none of this reaches the score.
+back of the batter's reach while a swing that touches it could still be reported (a camera swing comes up to the derby's
+late margin after it), so the mitt never catches a ball the bat then hits. A ball in play leaves the bat where the bat
+met it and flies to the landing the judge already decided, fast enough to come down before its result ends. The batter's
+swing is the stage's too (`ShownSwing`): it begins when the camera cues the visitor's swing starting, eases into the
+slot short of the plate until the derby judges it, and a judged swing gets its last stretch to the ball, timed from
+where it is drawn (`lastStretchFor`: a frame or two from near the slot, the whole `CONTACT_DELAY_MS` from the windup).
+The stage changes the clock's pace (a step back for a hit reported late, so the bat swings that stretch into the ball; a
+hit-stop that holds them together; slow motion at a showcase home run's peak; a pause while the page is hidden) but
+never an outcome, and no cue reaches the derby. `cameraShots.ts` frames the batting shot between the HUD's bands at any
+aspect. The pitcher throws only strikes: every pitch passes through the zone whole (`game/pitchSchedule.test.ts`), and
+`strikeZoneOutline.ts` draws the zone as a faint box from the windup until the pitch is judged. The batting shot looks
+down, so a ball farther off is drawn higher and one flat frame would show strikes nearer the pitcher above it; the box
+runs from where the bat meets the ball, over the plate, to where a pitch let go by waits, so a strike is drawn inside it
+as the visitor swings, as it crosses the plate, and while it waits. Its opening is the zone grown by the drawn ball's
+extra size. The stadium's lawn and hedge take the visitor's season like the town's (`scene/environment`), the sky and
+light the time of day, and its dugouts and foul poles the ballpark palette; none of this reaches the score.
 
 `stage/actors/` builds the players in plain Three.js. `ballplayerRig.ts` is the town character's body, look, and
 proportions posed by joints (two-bone IK legs on planted feet, a chest turning about a tilted spine, elbow arms); the
 batter (`batter.ts`) is the visitor's character with a bat and mitten hands, playing the pose lab's swing as monotone
 keyframe tracks (`keyframes.ts`, `swingMotion.ts`). It reads the contact point from `game/field.ts` and aims at it, so a
-PERFECT swing squares the bat there, and each swing meets its ball `CONTACT_DELAY_MS` after it starts; a left-handed
-batter is the mirror image. A swing turns its bat and leans toward its ball, holds its finish, and comes back to the
-stance along keys of its own, low and in front of the body. Its keys keep the bat out of the body, and the elbows are
-solved against the body's simple solids (`bodyVolumes.ts`), so the forearms and the mittens stay out of the body and the
-forearms off the bat and each other.
-The other team's pitcher (`pitcher.ts`) and catcher (`catcher.ts`) wear its brick red and
-charcoal (`teamUniforms.ts`); the pitcher's throw is keyed on the same tracks with its release key at `game/pitch.ts`'s
-`RELEASE_POINT`, and the catcher's mitt reaches for where each pitch ends up. `ballplayerCast.ts` drives all three from
-the stage run: the pitcher throws on the derby's windup and release, the batter loads with them and swings each judged
-swing so its bat meets the ball where and when the stage sends it off, and every head follows the ball (`headLook.ts`),
-the batter's only as far as its bat lets a hat brim or hair turn. Nothing in `game/` reads the rigs.
+PERFECT swing squares the bat there. A swing the camera saw begin leans toward the pitch and eases into the slot, the
+bat still behind the batter, and goes back to the windup by itself unless it is judged by then; once judged it speeds up
+onto its ball, as fast at the ball as a swing from the windup, or it is checked short of the plate and goes back, each
+stretch starting where and as fast as the last left the bat; a left-handed batter is the mirror image. A swing turns its
+bat and leans toward its ball, holds its finish, and comes back to the stance along keys of its own, low and in front of
+the body. Its keys keep the bat out of the body, and the elbows are solved against the body's simple solids
+(`bodyVolumes.ts`), so the forearms and the mittens stay out of the body and the forearms off the bat and each other.
+The other team's pitcher (`pitcher.ts`) and catcher (`catcher.ts`) wear its brick red and charcoal (`teamUniforms.ts`);
+the pitcher's throw is keyed on the same tracks with its release key at `game/pitch.ts`'s `RELEASE_POINT`, and the
+catcher's mitt reaches for where each pitch ends up. `ballplayerCast.ts` drives all three from the stage run: the
+pitcher throws on the derby's windup and release, the batter loads with them and swings the swing the stage shows, a
+judged one's bat meeting the ball where and when the stage sends it off, and every head follows the ball
+(`headLook.ts`), the batter's only as far as its bat lets a hat brim or hair turn. Nothing in `game/` reads the rigs.
 
 ### `baseball/vision/`
 
@@ -183,13 +188,17 @@ lets a detected one go after enough misses while they stand still. When nothing 
 the detector looking, and nothing is by the hands, `swingTracker.ts` plays free mode from the next moment the hands are
 still (while the visitor sets up, a real object that locks later still takes over, and one lost then hands back to free
 mode at once, so a stance held through it goes on). The detector waits until the computer is timed, then runs about 9
-times a second while looking for an object and 4 once locked, and rests during each windup and pitch (the cadence is
-`heldObject.ts`'s, the pause the page's, since both follow the tracker and the derby rather than the camera).
+times a second while looking for an object and 4 once locked, and rests from each windup until the pitch's ball is
+down (the cadence is `heldObject.ts`'s, the pause the page's, since both follow the tracker and the derby rather than
+the camera).
 `swingTracker.ts` follows the grip against the shoulders of frontal frames only (a turned torso narrows them), arms on a
 load, and fires at the interpolated midline crossing once the sweep is fast and long enough, the head
 stayed (a visitor walking by moves both), and `motionEnergy.ts` saw the band it swept through change; a swing whose
-wrists blur out just before the midline still counts, with its bat height unknown. It confirms a swing within 150 ms of
-the crossing, and the derby waits long enough past the last touching moment for that, a 15 fps frame, and the frame's
+wrists blur out just before the midline still counts, with its bat height unknown. It reports a swing on the first
+frame that meets every rule, usually the crossing's own. Before that, once a sweep toward the batting side closes on
+the midline fast, it cues the stage that a swing has begun and when it should cross, and if the sweep then ends without
+a swing, that it was checked; only the batter's look follows a cue. It confirms a swing within 150 ms of the crossing,
+and the derby waits long enough past the last touching moment for that, a 15 fps frame, and the frame's
 trip to the stage (`LATE_SWING_MARGIN_MS`, tied to it in `stage/stageRun.test.ts`), so a slow camera or computer never
 loses a swing. The bat's height comes from where the grip crossed against the shoulders. `SWING_RULES` and
 `CONTACT_HEIGHT` come from the drafts' synthetic swings and one webcam log and still need tuning on a real webcam; the
@@ -200,8 +209,9 @@ or failed; tracking could not start), which the page shows with another try; a c
 to track is blocked like a phone. `cameraTracking.ts` runs the camera for the page, loading the pose task and the object
 detector while the browser asks for the camera, and draws each frame mirrored with the upper body on the camera panel's
 canvas (`ui/cameraOverlay.ts`) with the object it marks: a found one's box, name, and lock progress, or a locked one's
-box. It reads swings on the same frames and hands each to the page the moment it is seen, so React hears only status
-changes, whether the camera sees the visitor, and the tracker's two- or three-word caption: where the tracker is, held
+box. It reads swings and their cues on the same frames and hands each to the page the moment it is seen, so React
+hears only status changes, whether the camera sees the visitor, and the tracker's two- or three-word caption: where
+the tracker is, held
 at least 0.7 s so it never flickers, or at once what just happened (a lock, a swing, a sweep that was not one). Once the
 camera is off, the motion sampler's last picture and the tracked body are wiped along with the panel's.
 

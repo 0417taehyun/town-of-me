@@ -15,6 +15,7 @@ import {
   homeRunDistanceText,
   hudAfterEvent,
   NEW_RUN_HUD,
+  pitchInPlay,
   scoreboardTotals,
   seenCameraState,
   stanceNeedText,
@@ -142,6 +143,25 @@ describe('the derby HUD', () => {
         ['result', false],
         ['chase', false],
         ['landed', another],
+      ]),
+      ['finished', false],
+    ])
+  })
+
+  it('keeps a pitch in play from its windup until its ball is down, through the swing it was judged by', () => {
+    let hud = NEW_RUN_HUD
+    expect(pitchInPlay(hud)).toBe(false)
+    const inPlay = deadOnRun(createRunPlan({ pitchCount: 3, difficulty: 'normal' }, 11)).map((event) => {
+      hud = hudAfterEvent(hud, event)
+      return [event.type, pitchInPlay(hud)]
+    })
+    expect(inPlay).toEqual([
+      ...[0, 1, 2].flatMap(() => [
+        ['windup', true],
+        ['release', true],
+        ['result', true],
+        ['chase', true],
+        ['landed', false],
       ]),
       ['finished', false],
     ])

@@ -40,8 +40,12 @@ import {
 // one motion; it re-arms only once the grip is back on a load side, so the bat coming back is never a second swing.
 // The midline is the body's, measured from frontal frames only: turning the torso to load narrows the shoulders and
 // drags their midpoint, which would inflate every distance and speed. The contact moment is when the grip crosses that
-// midline, between the two frames either side of it. The camera panel's caption says where the tracker is, and for a
-// moment what just happened (a lock, a swing, a sweep that was not one); its picture marks the object (objectMark).
+// midline, between the two frames either side of it, and the swing is reported on the first frame that meets every
+// rule, often the crossing's own. Before that, once a sweep toward the batting side closes on the midline fast, the
+// tracker cues the stage that a swing has begun and when it should cross, and if the sweep then ends without a swing,
+// that it was checked (SwingCue): the batter starts its swing then, and nothing of a cue reaches the derby. The
+// camera panel's caption says where the tracker is, and for a moment what just happened (a lock, a swing, a sweep that
+// was not one); its picture marks the object (objectMark).
 //
 // Units: lengths in shoulder widths (SW), speeds in SW/s, times in ms on the frames' capture clock, energy as
 // motionEnergy.ts measures it. Raw (unmirrored) image, the visitor facing the camera: a right-handed batter's back
@@ -83,6 +87,14 @@ export const SWING_RULES = {
   dropoutTravel: 0.4,
   dropoutHorizonMs: 200,
   predictedCrossingCapMs: 300,
+  /**
+   * A sweep closing on the midline at `startSpeed` or faster, to cross it within `startHorizonMs`, cues the batter's
+   * swing (SwingCue). Replayed, the drafts' real webcam log cues 6 of its 11 swings a frame or more before they are
+   * reported, closing at 9–17 SW/s (the rest cross on their first fast frame), and 4 sweeps that were no swing in a
+   * minute of moving about, which the batter checks.
+   */
+  startSpeed: 8,
+  startHorizonMs: 100,
   /** The band must change `energyRatio` times its resting noise (at least `energyFloor`) over `energyArea` of it. */
   energyRatio: 2,
   energyFloor: 1.5,
@@ -159,9 +171,10 @@ export type Arm = {
   deepest: { depth: number; grip: Point; time: number }
 }
 
-/** A sweep from a load toward the midline and across it: what has been measured of it so far. */
+/** A sweep from a load toward the midline and across it: what has been measured of it, and if it cued a swing. */
 export type Sweep = {
   arm: Arm
+  cued: boolean
   startedAt: number
   from: Point
   head: Point | null
@@ -182,6 +195,13 @@ export type Sweep = {
 
 export type SweepFailure = 'cross' | 'speed' | 'travel' | 'energy' | 'body'
 
+/**
+ * What a frame tells the stage of a sweep toward the batting side before any swing is reported: it has begun a swing
+ * whose grip should cross the midline at `crossingAtMs` (capture clock), or it ended without one. Only the batter's
+ * look follows it.
+ */
+export type SwingCue = { kind: 'started'; crossingAtMs: number } | { kind: 'checked' }
+
 /** The best object a detector run found next to the hands: when, and where the grip was then. */
 export type Candidate = MeasuredDetection & { seenAt: number; grip: Point }
 
@@ -190,7 +210,7 @@ export type Candidate = MeasuredDetection & { seenAt: number; grip: Point }
  * `candidate` is the best object the detector lately found next to the hands, `search` the sightings toward its lock,
  * and `searchSince` when the detector first looked at the hands with nothing locked. `reason` is where the tracker is
  * and `notice` the latest thing that happened; `followingThrough` says the grip is on its way out of a swing toward the
- * far side, where its finish is no wrong-side load.
+ * far side, where its finish is no wrong-side load. `cue` is what the latest frame cued the stage, if anything.
  */
 export type SwingTracker = {
   state: TrackerState
@@ -208,6 +228,7 @@ export type SwingTracker = {
   reason: TrackerReason | null
   notice: TrackerNotice | null
   followingThrough: boolean
+  cue: SwingCue | null
   last: { grip: Point; source: GripSource; time: number } | null
   speed: number
   smoothedSpeed: number
@@ -253,6 +274,7 @@ export function createSwingTracker(battingSide: BattingSide): SwingTracker {
     reason: null,
     notice: null,
     followingThrough: false,
+    cue: null,
     last: null,
     speed: 0,
     smoothedSpeed: 0,
@@ -288,13 +310,16 @@ export function setTrackerSide(tracker: SwingTracker, battingSide: BattingSide) 
 }
 
 /**
- * Feeds one camera frame and returns the swing it completed, if any. `energy` is measured in the band the previous
- * frame left in `tracker.band`; `detections` come only on frames the object detector ran.
+ * Feeds one camera frame and returns the swing it completed, if any; `tracker.cue` says what else it cued the stage.
+ * `energy` is measured in the band the previous frame left in `tracker.band`; `detections` come only on frames the
+ * object detector ran.
  */
 export function updateSwingTracker(
   tracker: SwingTracker,
   { time, body, detections, energy }: TrackerFrame,
 ): TrackedSwing | null {
+  const cued = tracker.sweep?.cued ? tracker.sweep : null
+  tracker.cue = null
   tracker.energy = energy
   if (body) tracker.aspect = body.aspect
   if (body?.shoulders) tracker.frame = withShoulders(tracker.frame, body.shoulders)
@@ -309,6 +334,8 @@ export function updateSwingTracker(
   if (detections && view) readDetections(tracker, detections, view, time)
   const swing = TRACKER_STEPS[tracker.state](tracker, view, time)
   tracker.band = swingBand(tracker, tracker.view)
+  // A cued sweep that ended this frame without a swing, however it ended (no swing, wobble, a lost lock), was checked.
+  if (cued && tracker.sweep !== cued && !swing) tracker.cue = { kind: 'checked' }
   return swing
 }
 
@@ -594,6 +621,7 @@ export function startSweep(tracker: SwingTracker, arm: Arm, view: TrackerView) {
   tracker.arm = null
   tracker.sweep = {
     arm,
+    cued: false,
     startedAt: arm.time,
     from: arm.deepest.grip,
     head: view.head,
@@ -631,7 +659,26 @@ export function stepSweeping(tracker: SwingTracker, view: TrackerView | null, ti
   Object.assign(sweep, { previousDepth: depth, previousTime: time, lastGrip: view.grip })
   if (sweepFailures(tracker, sweep).length === 0) return completeSweep(tracker, sweep, time, sweep.crossY)
   if (sweepIsLate(sweep, time)) abortSweep(tracker, sweep)
+  if (tracker.sweep === sweep) cueSwingStart(tracker, sweep, time)
   return null
+}
+
+/** Cues the stage, once a sweep, that it has begun a swing (SwingCue), when it closes on the midline as one does. */
+export function cueSwingStart(tracker: SwingTracker, sweep: Sweep, time: number) {
+  const crossingAtMs = sweep.crossTime ?? predictCrossing(sweep)
+  if (sweep.cued || !beginsSwing(tracker, sweep, crossingAtMs - time)) return
+  sweep.cued = true
+  tracker.cue = { kind: 'started', crossingAtMs }
+}
+
+/**
+ * Whether `sweep` has begun a swing, its grip due to cross the midline in `untilCrossingMs` (or past it): toward the
+ * batting side, closing at `startSpeed` or faster to cross within `startHorizonMs`, and the head staying put.
+ */
+export function beginsSwing(tracker: SwingTracker, sweep: Sweep, untilCrossingMs: number) {
+  const { startSpeed, startHorizonMs } = SWING_RULES
+  const closing = -sweep.velocity >= startSpeed && untilCrossingMs <= startHorizonMs
+  return sweep.arm.side === tracker.side && closing && !movedWithHands(sweep)
 }
 
 /** How far (SW) the head has moved the way the sweep goes since it began; 0 unless the head shows both times. */

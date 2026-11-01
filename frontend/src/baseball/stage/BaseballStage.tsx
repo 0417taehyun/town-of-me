@@ -17,7 +17,7 @@ import { Dugouts } from '../stadium/Dugouts'
 import { StadiumField } from '../stadium/StadiumField'
 import type { FreeBand } from './cameraShots'
 import { DerbyDirector } from './DerbyDirector'
-import type { RealTimeSwing, StageEvent, StageRunSetup } from './stageRun'
+import type { RealTimeSwing, RealTimeSwingCue, StageEvent, StageRunSetup } from './stageRun'
 
 /** Petals and leaves fall from trees, and the stadium has none yet: only winter's snow falls here. */
 const NO_TREES: TownObject[] = []
@@ -38,6 +38,7 @@ export function BaseballStage({
   side,
   run,
   swings,
+  swingCues,
   onEvent,
   band,
   paused,
@@ -53,6 +54,7 @@ export function BaseballStage({
   side: BattingSide
   run: StageRunSetup | null
   swings: MutableRefObject<RealTimeSwing[]>
+  swingCues: MutableRefObject<RealTimeSwingCue[]>
   onEvent: (event: StageEvent) => void
   band: FreeBand
   paused: boolean
@@ -97,6 +99,7 @@ export function BaseballStage({
         profile={profile}
         side={side}
         swings={swings}
+        swingCues={swingCues}
         onEvent={onEvent}
         band={band}
         paused={paused}

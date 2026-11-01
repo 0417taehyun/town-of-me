@@ -21,7 +21,7 @@ import {
 } from './ballplayerRig'
 import { BAT, batRadiusAt, createBat } from './bat'
 import { bodyVolumes, deepestPenetration, headVolumes } from './bodyVolumes'
-import { type MonotoneTrack, monotoneTrack, sampleTrack } from './keyframes'
+import { limitTangents, type MonotoneTrack, monotoneTrack, sampleTrack, sampleTrackRate } from './keyframes'
 import { fieldToRig, type HeadLook } from './headLook'
 import {
   type ArmSegment,
@@ -33,9 +33,14 @@ import {
   settleMitten,
 } from './mittenHands'
 import {
+  BEGUN_SWING,
+  CHECK_SWING_MS,
   CONTACT_DELAY_MS,
+  contactRate,
   createSwingMotion,
   FINISH_HOLD_MS,
+  FOLLOW_MS,
+  followSeconds,
   nearestTurn,
   RETURN_KEY_MS,
   RETURN_MS,
@@ -43,20 +48,23 @@ import {
   sampleSwingPose,
   SWING_CONSTANTS,
   SWING_KEY_TIMES,
-  SWING_MS,
   type SwingMotion,
   type SwingPose,
-  swingSeconds,
   WAGGLE_FADE_MS,
+  windupPace,
   windupSeconds,
 } from './swingMotion'
 
 // The visitor's own town character at bat (ballplayerRig.ts) with mitten hands, posed from the swing's data
-// (swingMotion.ts). The game drives the windup with a load from 0 to 1; a swing then plays the data compressed so the
-// bat meets the ball CONTACT_DELAY_MS after it starts, aimed at where the ball is at that moment: a ball deeper along
-// the pitch line is met earlier in the swing (hips less open, bat still lagging), one further out later, and the grip
-// shifts by what is left. A left-handed batter is the mirror image. The rig reads the game core's contact point and
-// never the other way round: the judge decides, the batter shows it.
+// (swingMotion.ts). The game drives the windup with a load from 0 to 1. A swing the camera saw begin plays the data
+// from the windup and eases into the slot (BEGUN_SWING), the bat still behind the batter, until the stage judges it or
+// the visitor checks it, and goes back by itself if neither comes. A judged swing then plays its last stretch, as long
+// as the stage gives it (stageRun.ts lastStretchFor), so the bat meets the ball where it is at that moment: a ball
+// deeper along the pitch line is met earlier in the swing (hips less open, bat still lagging), one further out later,
+// and the grip shifts by what is left. Each stretch starts where and as fast as the one before left the bat, so the bat
+// never jumps or goes back. A checked swing stops short of the plate and goes back to the windup. A left-handed batter
+// is the mirror image. The rig reads the game core's contact point and never the other way round: the judge decides,
+// the batter shows it.
 
 export type Batter = {
   rig: BallplayerRig
@@ -75,20 +83,29 @@ export type Batter = {
 export type AimTurn = { azimuth: number; elevation: number; lean: number }
 
 /**
- * The swing under way: when it started (game ms), the windup second it left from, the swing second its bat meets the
- * ball, its turn toward the ball then and the grip shift (rig frame) that puts the sweet spot on it, how far the head
- * tips up (degrees) to keep its eyes on that ball, and each elbow's swivel [back, front] off the swing's own by swing
- * second, solved for this aim.
+ * The swing under way. Its aim: the swing second its lean eases in from (the windup second it left, or where it was
+ * aimed anew), the swing second its bat meets the ball, its turn toward the ball then and the grip shift (rig frame)
+ * that puts the sweet spot on it, how far the head tips up (degrees) to keep its eyes on that ball, and each elbow's
+ * swivel [back, front] off the swing's own by swing second, solved for this aim. Its timing (game ms): when it left the
+ * windup; its way to the ball as legs of swing seconds in the order they begin, the latest one begun applying; when the
+ * bat meets the ball once it is judged, the follow-through running on from there; and for a swing checked, or begun and
+ * to go back unless judged, which of its legs stops the bat, and when the bat starts back to the windup and is there.
  */
 export type BatterSwing = {
-  startMs: number
   from: number
   contactAt: number
   aimTurn: AimTurn
   aimShift: Vector3
   headLift: number
   swivelShift: [MonotoneTrack, MonotoneTrack]
+  startMs: number
+  legs: MonotoneTrack[]
+  contactMs: number | null
+  check: { leg: number; backFromMs: number; backMs: number } | null
 }
+
+/** Where a swing is drawn at a moment: its swing second, and how fast (swing seconds per ms) it moves on. */
+export type SwingState = { seconds: number; rate: number }
 
 /**
  * What the swing is aimed at before any pitch (field meters): the strike zone's center at the contact depth in front of
@@ -112,13 +129,16 @@ const UP = new Vector3(0, 1, 0)
 const NO_SWIVEL_SHIFT = monotoneTrack([0], [0])
 /** No swing under way: the batter stands in its windup. */
 export const NO_SWING: BatterSwing = {
-  startMs: -Infinity,
   from: 0,
   contactAt: 0,
   aimTurn: { azimuth: 0, elevation: 0, lean: 0 },
   aimShift: new Vector3(),
   headLift: 0,
   swivelShift: [NO_SWIVEL_SHIFT, NO_SWIVEL_SHIFT],
+  startMs: Infinity,
+  legs: [],
+  contactMs: null,
+  check: null,
 }
 
 export function mirrorOf(side: BattingSide) {
@@ -474,12 +494,14 @@ export function solveAimedSwivels(batter: Batter): [MonotoneTrack, MonotoneTrack
 }
 
 /**
- * Starts a swing at `startMs` (game ms) from a windup at `load` whose bat meets `point` (field meters; the contact
- * point when null) CONTACT_DELAY_MS later. The start may be past: a swing reported after it was made catches up. The
- * bat turns toward the ball and the grip shifts for the rest; the head follows with its eyes, which also keeps a cap's
- * brim off a bat meeting a high pitch.
+ * Aims the swing under way at `point` (field meters; the contact point when null), its lean (`lean` degrees, or what
+ * the ball takes when null) easing in from swing second `from`: the swing second its bat meets the ball there, its turn
+ * toward it, the grip shift that puts the sweet spot on it, the head's lift, and the elbows' swivels for that aim. Only
+ * the lean shows before the slot, from `from` on, so a swing waiting there may be aimed anew. The bat turns toward the
+ * ball and the grip shifts for the rest; the head follows with its eyes, which also keeps a cap's brim off a bat meeting
+ * a high pitch.
  */
-export function startSwing(batter: Batter, startMs: number, load: number, point: Vec3 | null) {
+export function aimSwing(batter: Batter, point: Vec3 | null, from: number, lean: number | null = null) {
   const target = fieldToRig(batter.rig, point ?? CONTACT_POINT, aimTarget)
   const contactAt = contactMoment(batter, target.x)
   const pose = sampleSwingPose(batter.motion, contactAt)
@@ -489,14 +511,189 @@ export function startSwing(batter: Batter, startMs: number, load: number, point:
   pose.batAzimuth += aimTurn.azimuth
   pose.batElevation += aimTurn.elevation
   poseBody(batter, pose)
-  aimTurn.lean = aimLean(target.z - batter.sweetSpot.z, contactAt)
+  aimTurn.lean = lean ?? aimLean(target.z - batter.sweetSpot.z, contactAt)
   pose.chestTilt += aimTurn.lean
   poseBody(batter, pose)
   const aimShift = target.clone().sub(batter.sweetSpot)
   const { swivelShift } = NO_SWING
-  batter.swing = { startMs, from: windupSeconds(load), contactAt, aimTurn, aimShift, headLift, swivelShift }
+  batter.swing = { ...batter.swing, from, contactAt, aimTurn, aimShift, headLift, swivelShift }
   // The elbows are solved for this aim once it is set, from the swing's own swivels.
   batter.swing.swivelShift = solveAimedSwivels(batter)
+}
+
+/**
+ * A leg of a swing's way (game ms to swing seconds): from `from` moving at `fromRate` at `fromMs` to `to` moving at
+ * `toRate` at `toMs`, eased between without overshooting either end, and held at `to` after.
+ */
+export function swingLeg(fromMs: number, toMs: number, from: number, to: number, fromRate: number, toRate: number) {
+  const tangents = to === from ? [0, 0] : [fromRate, toRate]
+  limitTangents(tangents, (to - from) / (toMs - fromMs), 0)
+  return { times: [fromMs, toMs], values: [from, to], tangents }
+}
+
+/** When (game ms) the swing under way is back in the windup: after its return once judged, else a checked one's. */
+export function swingBackMs({ contactMs, check }: BatterSwing) {
+  if (contactMs !== null) return contactMs + FOLLOW_MS + FINISH_HOLD_MS + RETURN_MS
+  return check?.backMs ?? Infinity
+}
+
+/**
+ * Where the swing under way is drawn at `nowMs` (game ms), the windup at `load` then, on its way to the ball: in the
+ * windup before it starts and once it is back, along the latest leg begun, and after a checked swing's stop, on its
+ * way back to the windup. A judged swing past its contact is posed from there instead (batterPoseAt).
+ */
+export function drawnState(batter: Batter, nowMs: number, load: number): SwingState {
+  const { startMs, legs, check } = batter.swing
+  const windup = { seconds: windupSeconds(load), rate: 0 }
+  const index = legs.filter((candidate) => candidate.times[0] <= nowMs).length - 1
+  const leg = legs.at(index)
+  if (nowMs < startMs || !leg || nowMs >= swingBackMs(batter.swing)) return windup
+  const onLeg = { seconds: sampleTrack(leg, nowMs), rate: sampleTrackRate(leg, nowMs) }
+  if (!check || index !== check.leg || nowMs <= check.backFromMs) return onLeg
+  const back = smoothstep(clamp01((nowMs - check.backFromMs) / (check.backMs - check.backFromMs)))
+  return { seconds: lerp(onLeg.seconds, windup.seconds, back), rate: 0 }
+}
+
+/** The legs of a swing's way that begin before `atMs` (game ms), so a leg begun then is the latest one. */
+export function legsBefore(legs: MonotoneTrack[], atMs: number) {
+  return legs.filter((leg) => leg.times[0] < atMs)
+}
+
+/**
+ * Begins the swing the camera saw start at `startMs` (game ms), the windup at `load` then: from where the batter is
+ * drawn then, on to BEGUN_SWING's `readyAt` by `readyMs`, still moving, then easing into the slot, so a swing judged a
+ * little after the camera expected it is still on its way. The visitor's swing is well under way by the time the
+ * camera cues it, so the bat answers at once, half again as fast as the way's own pace. Neither judged nor checked by
+ * the end of its easing, it goes back to the windup from there. It is aimed at `aim` (field meters; the contact point
+ * when null), where the pitch meets a PERFECT swing, so it leans toward the ball from the start, until a ball in play
+ * aims it anew (judgeSwing).
+ */
+export function beginSwing(batter: Batter, startMs: number, readyMs: number, load: number, aim: Vec3 | null) {
+  const { seconds, rate } = drawnState(batter, startMs, load)
+  const { readyAt, easeMs } = BEGUN_SWING
+  const { slot } = SWING_KEY_TIMES
+  const ready = Math.max(readyAt, seconds)
+  const answer = Math.max(rate, (1.5 * (ready - seconds)) / (readyMs - startMs))
+  const toReady = swingLeg(startMs, readyMs, seconds, ready, answer, (3 * (slot - ready)) / easeMs)
+  const easing = swingLeg(readyMs, readyMs + easeMs, ready, Math.max(slot, ready), toReady.tangents[1], 0)
+  const backFromMs = readyMs + easeMs
+  const check = { leg: 1, backFromMs, backMs: backFromMs + CHECK_SWING_MS.backMs }
+  batter.swing = { ...NO_SWING, startMs, legs: [toReady, easing], check }
+  aimSwing(batter, aim, seconds)
+}
+
+/**
+ * Checks the swing under way at `checkedMs` (game ms), the windup at `load` then: the bat slows to a stop no further
+ * than the slot, before the plate, stays a moment, and goes back to the windup; the slower it was moving, the sooner it
+ * goes back. One already on its way back goes on.
+ */
+export function checkSwing(batter: Batter, checkedMs: number, load: number) {
+  const { check, legs } = batter.swing
+  if (check && checkedMs > check.backFromMs) return
+  const { seconds, rate } = drawnState(batter, checkedMs, load)
+  const { stopMs, holdMs, backMs, fullStopRate } = CHECK_SWING_MS
+  const moving = Math.max(0, rate)
+  const share = clamp01(moving / fullStopRate)
+  const stoppedMs = checkedMs + Math.max(1, stopMs * share)
+  const stopAt = Math.min(SWING_KEY_TIMES.slot, seconds + (moving * (stoppedMs - checkedMs)) / 3)
+  const kept = legsBefore(legs, checkedMs)
+  const backFromMs = stoppedMs + holdMs * share
+  batter.swing = {
+    ...batter.swing,
+    legs: [...kept, swingLeg(checkedMs, stoppedMs, seconds, stopAt, moving, 0)],
+    check: { leg: kept.length, backFromMs, backMs: backFromMs + backMs },
+  }
+}
+
+/** Moves every moment of the swing under way `byMs` (game ms) earlier, as the stage's clock was stepped back. */
+export function shiftSwing(batter: Batter, byMs: number) {
+  const { swing } = batter
+  const legs = swing.legs.map((leg) => ({ ...leg, times: leg.times.map((time) => time - byMs) }))
+  const check = swing.check && {
+    ...swing.check,
+    backFromMs: swing.check.backFromMs - byMs,
+    backMs: swing.check.backMs - byMs,
+  }
+  batter.swing = { ...swing, startMs: swing.startMs - byMs, legs, check }
+}
+
+/**
+ * Keeps the swing under way, judged at `atMs` (game ms), from going back to the windup (at `load` then): one begun or
+ * checked goes on its way, and one already going back is held where it is drawn then, its last stretch to the ball
+ * starting from rest instead of turning back in a ms.
+ */
+export function keepSwingOn(batter: Batter, atMs: number, load: number) {
+  const { swing } = batter
+  const { seconds } = drawnState(batter, atMs, load)
+  const goingBack = swing.check !== null && atMs > swing.check.backFromMs
+  const held = { ...swing, legs: [...swing.legs, swingLeg(atMs, atMs + 1, seconds, seconds, 0, 0)] }
+  batter.swing = goingBack ? held : { ...swing, check: null }
+}
+
+/**
+ * Aims the swing under way, judged as it is drawn at swing second `seconds`, at `point` (as aimSwing): one the camera
+ * saw no start of from there, and one already on its way only anew at a ball in play, keeping the lean it has eased in
+ * with as far as it has (leanFromFor), so only its turn and its grip shift change, which show from the slot on.
+ */
+export function aimJudgedSwing(batter: Batter, point: Vec3 | null, seconds: number) {
+  const { swing } = batter
+  if (swing.legs.length === 0) return aimSwing(batter, point, seconds)
+  if (!point) return
+  const contactAt = contactMoment(batter, fieldToRig(batter.rig, point, aimTarget).x)
+  aimSwing(batter, point, leanFromFor(swing, seconds, contactAt), swing.aimTurn.lean)
+}
+
+/**
+ * The swing second a swing met at `contactAt` eases its lean in from, so that at swing second `seconds` it has leaned
+ * as far as `swing` has: aimed anew there, the lean neither jumps nor stops.
+ */
+export function leanFromFor(swing: BatterSwing, seconds: number, contactAt: number) {
+  const share = clamp01((seconds - swing.from) / Math.max(swing.contactAt - swing.from, 1e-6))
+  return (seconds - share * contactAt) / Math.max(1 - share, 1e-6)
+}
+
+/**
+ * How fast (swing seconds per ms) a last stretch at `slope` on average leaves and meets the ball at swing second
+ * `contactAt`, the bat moving at `rate` as it starts. From the windup it answers at once at its own pace and keeps it.
+ * A swing on its way goes on as fast as it was going and speeds up smoothly, never past its speed at the ball, which is
+ * at least one from the windup's (windupPace), so the swing the camera saw first is no weaker. Either way it is not so
+ * fast at the start of so short a stretch that it would overshoot the ball.
+ */
+export function lastStretchRates(contactAt: number, slope: number, rate: number, onItsWay: boolean) {
+  const speedingUp = Math.max(slope, windupPace(contactAt), (3 * slope - rate) / 2)
+  const toRate = contactRate(contactAt, onItsWay ? speedingUp : slope)
+  const answer = onItsWay ? rate : Math.max(rate, slope)
+  return { fromRate: Math.min(answer, Math.sqrt(Math.max(0, 9 - (toRate / slope) ** 2)) * slope), toRate }
+}
+
+/**
+ * Judges the swing under way: the stage took it at `takenMs` (game ms), and its bat meets `point` (field meters; null
+ * for a miss, which goes where it is aimed) at `contactMs`, after a last stretch from `throughMs` (stageRun.ts
+ * lastStretchFor) from where it is drawn then (the windup at `load`), as fast as it was going or faster. A stage that
+ * took it later than that stretch's start stepped its clock back to it, so every earlier moment moves back with it and
+ * the stretch goes on from where the bat was drawn when the stage took it; a swing going back to the windup waits
+ * where it was then, and one already back is done with. A ball in play aims the swing anew (aimJudgedSwing).
+ */
+export function judgeSwing(
+  batter: Batter,
+  takenMs: number,
+  throughMs: number,
+  contactMs: number,
+  point: Vec3 | null,
+  load: number,
+) {
+  shiftSwing(batter, Math.max(0, takenMs - throughMs))
+  const takenAtMs = Math.min(takenMs, throughMs)
+  if (takenAtMs >= swingBackMs(batter.swing)) batter.swing = NO_SWING
+  keepSwingOn(batter, takenAtMs, load)
+  const state = drawnState(batter, throughMs, load)
+  aimJudgedSwing(batter, point, state.seconds)
+  const { contactAt, startMs } = batter.swing
+  const legs = legsBefore(batter.swing.legs, throughMs)
+  const slope = (contactAt - state.seconds) / (contactMs - throughMs)
+  const { fromRate, toRate } = lastStretchRates(contactAt, slope, state.rate, legs.length > 0)
+  const through = swingLeg(throughMs, contactMs, state.seconds, contactAt, fromRate, toRate)
+  batter.swing = { ...batter.swing, startMs: Math.min(startMs, throughMs), legs: [...legs, through], contactMs }
 }
 
 /**
@@ -522,34 +719,54 @@ export function aimedSwingPose(batter: Batter, time: number) {
 /**
  * How much of the head's turn at `nowMs` (game ms) is the swing's own, 0..1, rather than its eyes following the ball:
  * all of it from contact through the held finish, where the swing keeps the head clear of the bat, fading in from the
- * swing's start and out over its return.
+ * swing's start and out over its return, or a checked swing's way back.
  */
 export function swingHeadWeight(batter: Batter, nowMs: number) {
-  const elapsed = nowMs - batter.swing.startMs
-  const held = SWING_MS + FINISH_HOLD_MS
-  if (elapsed < 0 || elapsed > held + RETURN_MS) return 0
-  return smoothstep(Math.min(elapsed / CONTACT_DELAY_MS, 1, (held + RETURN_MS - elapsed) / RETURN_MS))
+  const { startMs, check, contactMs } = batter.swing
+  const backMs = swingBackMs(batter.swing)
+  if (nowMs < startMs || nowMs > backMs) return 0
+  const returnMs = check && contactMs === null ? check.backMs - check.backFromMs : RETURN_MS
+  return smoothstep(Math.min((nowMs - startMs) / CONTACT_DELAY_MS, 1, (backMs - nowMs) / returnMs))
 }
 
-/** How much of the stance's waggle plays `elapsed` ms into a swing: none until it is back, then fading in. */
-export function waggleAfterSwing(elapsed: number) {
-  if (elapsed < 0) return 1
-  return smoothstep(clamp01((elapsed - SWING_MS - FINISH_HOLD_MS - RETURN_MS) / WAGGLE_FADE_MS))
+/** How much of the stance's waggle plays at `nowMs` (game ms): all before a swing, none until it is back, then more. */
+export function waggleAfterSwing(swing: BatterSwing, nowMs: number) {
+  if (nowMs < swing.startMs) return 1
+  return smoothstep(clamp01((nowMs - swingBackMs(swing)) / WAGGLE_FADE_MS))
+}
+
+/** The windup at `load` at `nowMs` (game ms), its waggle (when `waggle` says it plays) fading as the batter loads. */
+export function windupPose(batter: Batter, nowMs: number, load: number, waggle: boolean) {
+  const amount = waggle ? Math.max(0, 1 - load * 2) * waggleAfterSwing(batter.swing, nowMs) : 0
+  return sampleSwingPose(batter.motion, windupSeconds(load), { at: nowMs / 1000, amount })
+}
+
+/**
+ * The judged swing's pose `sinceContact` ms after its bat met the ball: on through the finish at the pace its last
+ * stretch met the ball at, its held finish and its return to the stance, then the windup at `load` at `nowMs`.
+ */
+export function afterContactPose(batter: Batter, sinceContact: number, nowMs: number, load: number, waggle: boolean) {
+  const { contactAt, legs } = batter.swing
+  const rate = legs.at(-1)?.tangents[1] ?? 0
+  if (sinceContact <= FOLLOW_MS) return aimedSwingPose(batter, followSeconds(contactAt, rate, sinceContact))
+  const sinceFinish = sinceContact - FOLLOW_MS
+  if (sinceFinish < FINISH_HOLD_MS + RETURN_MS) return sampleReturnPose(batter.motion, sinceFinish)
+  return windupPose(batter, nowMs, load, waggle)
 }
 
 /**
  * The batter's pose at `nowMs` (game ms): the windup at `load` (0 stance, 0.5 toe lift, 1 front foot down) with the
- * stance's waggle fading as it loads, or the swing under way, then its held finish and its return to the stance, where
- * the game has brought the load back to 0 by then.
+ * stance's waggle fading as it loads, or the swing under way: on its way to the ball as drawn, then from the ball
+ * through its held finish and its return to the stance, where the game has brought the load back to 0 by then; a
+ * checked swing goes back to the windup instead.
  */
 export function batterPoseAt(batter: Batter, nowMs: number, load: number, waggle: boolean): SwingPose {
-  const { startMs, from, contactAt } = batter.swing
-  const elapsed = nowMs - startMs
-  if (elapsed >= 0 && elapsed <= SWING_MS) return aimedSwingPose(batter, swingSeconds(from, contactAt, elapsed))
-  const sinceFinish = elapsed - SWING_MS
-  if (sinceFinish > 0 && sinceFinish < FINISH_HOLD_MS + RETURN_MS) return sampleReturnPose(batter.motion, sinceFinish)
-  const amount = waggle ? Math.max(0, 1 - load * 2) * waggleAfterSwing(elapsed) : 0
-  return sampleSwingPose(batter.motion, windupSeconds(load), { at: nowMs / 1000, amount })
+  const { swing } = batter
+  const sinceContact = nowMs - (swing.contactMs ?? Infinity)
+  if (sinceContact >= 0) return afterContactPose(batter, sinceContact, nowMs, load, waggle)
+  const drawn = nowMs >= swing.startMs && nowMs < swingBackMs(swing)
+  if (drawn) return aimedSwingPose(batter, drawnState(batter, nowMs, load).seconds)
+  return windupPose(batter, nowMs, load, waggle)
 }
 
 const alongBat = new Vector3()

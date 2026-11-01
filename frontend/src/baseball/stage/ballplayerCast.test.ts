@@ -11,6 +11,7 @@ import { createRunPlan } from '../game/runPlan'
 import { type BallplayerRig, turnHead } from './actors/ballplayerRig'
 import { BAT } from './actors/bat'
 import { batInHead, batterPoseAt, CONTACT_POINT, createBatter, poseBatter, swingHeadWeight } from './actors/batter'
+import { CONTACT_DELAY_MS } from './actors/swingMotion'
 import type { BallView } from './ballMeshes'
 import {
   type BallplayerCast,
@@ -27,6 +28,7 @@ import {
   createStageRun,
   playStageFrame,
   type RealTimeSwing,
+  type RealTimeSwingCue,
   type StageEvent,
   type StageRun,
   stageBallView,
@@ -131,6 +133,52 @@ function playWithCast(
   }
 }
 
+/**
+ * A one-pitch normal run on the right played with `cast` a frame every FRAME_MS, the way the director plays it: the
+ * camera cues the swing's start `cueLeadMs` before its PERFECT contact, expecting it then (null: no cue), and reports
+ * the swing `reportMs` after it. `contactAtMs` is that contact (game ms, which is real time until the bat meets the
+ * ball), once the pitch is on its way.
+ */
+type CuedPlay = {
+  cast: BallplayerCast
+  run: StageRun
+  cueLeadMs: number | null
+  reportMs: number
+  contactAtMs: number | null
+  cued: boolean
+  reported: boolean
+}
+
+/** One frame of `play` at `realMs`: game time, whether the bat met the ball, the bat's azimuth, and the sweet spot. */
+function cuedFrame(play: CuedPlay, realMs: number) {
+  const { cast, run, contactAtMs } = play
+  const due = contactAtMs ?? Infinity
+  const cueDue = play.cueLeadMs !== null && !play.cued && realMs >= due - play.cueLeadMs
+  const cues: RealTimeSwingCue[] = cueDue ? [{ kind: 'started', crossingAtRealMs: due }] : []
+  const swingDue = run.pitch !== null && !play.reported && realMs >= due + play.reportMs
+  const swings = swingDue && run.pitch ? [levelSwing(run.pitch.plan, due)] : []
+  play.cued = play.cued || cueDue
+  play.reported = play.reported || swingDue
+  const events = playStageFrame(run, swings, realMs, false, cues)
+  const release = events.find((event) => event.type === 'release')
+  if (release?.type === 'release') play.contactAtMs = release.releasedMs + contactSeconds(release.pitch) * 1000
+  const nowMs = gameTime(run.clock, realMs)
+  posePlayers(cast, run, nowMs, stageBallView(run, nowMs, posePitcherAt(cast, run, nowMs)), FRAME_MS / 1000)
+  const azimuth = batterPoseAt(cast.batter, nowMs, batterLoad(run, nowMs), true).batAzimuth
+  const met = events.some((event) => event.type === 'contact')
+  return { nowMs, cued: cueDue, met, azimuth, sweetSpot: worldSweetSpot(cast) }
+}
+
+/** Plays a one-pitch run (CuedPlay) until its result is a second old: each frame, and the run. */
+function playCued(cueLeadMs: number | null, reportMs: number) {
+  const cast = createCast(createBatter(DEFAULT_PLAYER_PROFILE, 'right'), createFielders())
+  const plan = createRunPlan({ pitchCount: 1, difficulty: 'normal' }, 7)
+  const run = createStageRun({ plan, log: { side: 'right', practice: [] } }, 0)
+  const play: CuedPlay = { cast, run, cueLeadMs, reportMs, contactAtMs: null, cued: false, reported: false }
+  const frames = Array.from({ length: 360 }, (_, frame) => cuedFrame(play, (frame + 1) * FRAME_MS))
+  return { frames, run }
+}
+
 describe('ballplayer cast', () => {
   it('swings the batter so its bat meets each ball in play where and when the stage sends it off', () => {
     const sides: BattingSide[] = ['right', 'left']
@@ -141,14 +189,16 @@ describe('ballplayer cast', () => {
     expect(Math.max(...misses)).toBeLessThan(0.002)
   })
 
-  it('swings the batter through the contact point at a miss’s judged moment, never before the camera reported it', () => {
+  it('swings the batter through the contact point at a miss’s judged moment, never before its last stretch', () => {
     const contactPoint = new Vector3(CONTACT_POINT.x, CONTACT_POINT.y, CONTACT_POINT.z)
-    // Uncalibrated; an early swinger's, judged 150 ms after the report, still to come when the stage takes it; and a
-    // late camera's, judged 300 ms before its report, which the stage takes only a frame after the report.
+    // The stage takes each swing 17 ms after its report. Uncalibrated, judged when reported, so the bat gets there its
+    // last stretch after the stage took it; an early swinger's, judged 150 ms after the report, still to come then; and
+    // a late camera's, judged 300 ms before its report, as late as the uncalibrated one.
+    const lastStretchMs = 17 + CONTACT_DELAY_MS
     const misses = [
-      { practiceOffsetMs: 0, afterReportMs: 0 },
+      { practiceOffsetMs: 0, afterReportMs: lastStretchMs },
       { practiceOffsetMs: -150, afterReportMs: 150 },
-      { practiceOffsetMs: 300, afterReportMs: 0 },
+      { practiceOffsetMs: 300, afterReportMs: lastStretchMs },
     ].map(({ practiceOffsetMs, afterReportMs }) => {
       const cast = createCast(createBatter(DEFAULT_PLAYER_PROFILE, 'right'), createFielders())
       const { run, contactAtMs } = swungRun('right', practiceOffsetMs + 200, practiceOffsetMs)
@@ -160,6 +210,27 @@ describe('ballplayer cast', () => {
     })
     expect(misses.map(({ outcome }) => outcome)).toEqual(['miss', 'miss', 'miss'])
     expect(Math.max(...misses.map(({ offPoint }) => offPoint))).toBeLessThan(0.002)
+  })
+
+  it('starts the batter as the camera cues a swing, then carries it onto the ball without a jump or going back', () => {
+    // Cued 60 ms before a PERFECT contact and reported 40 ms after it, or reported alone.
+    const cued = playCued(60, 40)
+    const reportedOnly = playCued(null, 40)
+    const cueFrame = cued.frames.findIndex((frame) => frame.cued)
+    expect(cueFrame).toBeGreaterThan(0)
+    // A frame after the cue, the batter has left the windup it still stands in when the camera cues nothing.
+    const moved = cued.frames[cueFrame + 1].sweetSpot.distanceTo(reportedOnly.frames[cueFrame + 1].sweetSpot)
+    expect(moved).toBeGreaterThan(0.01)
+    // It meets the ball where the stage sends it off, the hit-stop holding them together.
+    const { start } = cued.run.batted!
+    const metFrame = cued.frames.find((frame) => frame.met)!
+    expect(metFrame.nowMs).toBe(cued.run.batted!.meetMs)
+    expect(metFrame.sweetSpot.distanceTo(new Vector3(start.x, start.y, start.z))).toBeLessThan(0.002)
+    // From the cue to the finish the bat only goes on, and no faster a frame than a swing the camera cued nothing of.
+    const turns = (frames: typeof cued.frames) =>
+      frames.slice(cueFrame + 1, cueFrame + 50).map(({ azimuth }, frame) => azimuth - frames[cueFrame + frame].azimuth)
+    expect(Math.min(...turns(cued.frames))).toBeGreaterThan(-1e-6)
+    expect(Math.max(...turns(cued.frames))).toBeLessThanOrEqual(Math.max(...turns(reportedOnly.frames)))
   })
 
   it('holds the ball in the pitcher’s hand up to the release point as the derby releases it', () => {

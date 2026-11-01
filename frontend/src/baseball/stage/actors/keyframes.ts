@@ -47,6 +47,21 @@ export function sampleTrack({ times, values, tangents }: MonotoneTrack, time: nu
   )
 }
 
+/** How fast (value per unit of time) a track moves at `time`; still before its first key and after its last. */
+export function sampleTrackRate({ times, values, tangents }: MonotoneTrack, time: number) {
+  const last = times.length - 1
+  if (time <= times[0] || time >= times[last]) return 0
+  const index = times.findIndex((at) => at > time) - 1
+  const span = times[index + 1] - times[index]
+  const amount = (time - times[index]) / span
+  const squared = amount * amount
+  return (
+    ((6 * squared - 6 * amount) * (values[index] - values[index + 1])) / span +
+    (3 * squared - 4 * amount + 1) * tangents[index] +
+    (3 * squared - 2 * amount) * tangents[index + 1]
+  )
+}
+
 /** A track per channel of `keys`, each keyed at `times`. */
 export function keyedTracks<Channel extends string>(times: number[], keys: Record<Channel, number[]>) {
   return Object.fromEntries(

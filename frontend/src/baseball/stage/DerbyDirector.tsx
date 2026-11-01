@@ -14,6 +14,7 @@ import {
   directedShot,
   playStageFrame,
   type RealTimeSwing,
+  type RealTimeSwingCue,
   setStageRunPaused,
   type StageEvent,
   type StageRun,
@@ -26,7 +27,8 @@ import { createStrikeZoneOutline, disposeStrikeZoneOutline, drawStrikeZoneOutlin
  * Plays a run in one frame loop: the derby on its game clock, the players, the ball, the strike zone's box, and the
  * camera, all in refs. React hears only the events. The pitcher is posed first, since the ball is in his hand until it
  * is released. A new `run` starts over. Swings pushed onto `swings` are taken every frame and played at the moment they
- * report; one from before the run's first pitch is ignored like any swing with no pitch on its way. The run's clock
+ * report, after the cues of swings begun or checked pushed onto `swingCues`, which only the batter shows; one from
+ * before the run's first pitch is ignored like any swing with no pitch on its way. The run's clock
  * stops while the page is hidden, when frames stop too, so no pitch goes by unseen, and while it is `paused`, which the
  * page sets only between pitches for a visitor out of the camera's view, so no ball stops in the air. The picture is
  * centred in `band` (px), the part of the screen the camera panel leaves free.
@@ -36,6 +38,7 @@ export function DerbyDirector({
   profile,
   side,
   swings,
+  swingCues,
   onEvent,
   band,
   paused,
@@ -45,6 +48,7 @@ export function DerbyDirector({
   profile: PlayerProfile
   side: BattingSide
   swings: MutableRefObject<RealTimeSwing[]>
+  swingCues: MutableRefObject<RealTimeSwingCue[]>
   onEvent: (event: StageEvent) => void
   band: FreeBand
   paused: boolean
@@ -84,7 +88,8 @@ export function DerbyDirector({
     const realMs = performance.now()
     const current = stage.current
     const reported = swings.current.splice(0)
-    const events = current ? playStageFrame(current, reported, realMs, reducedMotion) : []
+    const cues = swingCues.current.splice(0)
+    const events = current ? playStageFrame(current, reported, realMs, reducedMotion, cues) : []
     events.forEach((event) => listener.current(event))
     const nowMs = current ? gameTime(current.clock, realMs) : 0
     const gameDelta = Math.max(0, nowMs - lastGameMs.current) / 1000

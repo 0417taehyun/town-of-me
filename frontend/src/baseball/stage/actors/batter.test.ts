@@ -22,16 +22,31 @@ import { BATTER_LOAD_START } from '../ballplayerCast'
 import { PLAYER_SCALE } from '../stageLayout'
 import { ARM_BONES, ARM_RADII, BALLPLAYER_BODY, FOREARM_RADIUS, shoulderPoint } from './ballplayerRig'
 import { BAT, batPenetration, batRadiusAt } from './bat'
-import { type Batter, batterPoseAt, createBatter, NO_SWING, poseBatter, startSwing } from './batter'
+import {
+  type Batter,
+  batterPoseAt,
+  beginSwing,
+  checkSwing,
+  createBatter,
+  judgeSwing,
+  NO_SWING,
+  poseBatter,
+} from './batter'
 import { type BodyVolume, bodyVolumes, deepestPenetration, segmentDistance } from './bodyVolumes'
 import { FOREARM_FREE_SPAN, MITTEN } from './mittenHands'
 import {
+  BEGUN_SWING,
+  begunSwingState,
   CONTACT_DELAY_MS,
   FINISH_HOLD_MS,
+  FOLLOW_MS,
+  lastStretchMs,
   RETURN_KEY_IDS,
   RETURN_KEY_MS,
   RETURN_MS,
+  SWING_KEY_IDS,
   SWING_KEY_TIMES,
+  SWING_KEYS,
   SWING_MS,
   type SwingPose,
   WAGGLE_FADE_MS,
@@ -81,6 +96,15 @@ const looks: Partial<PlayerProfile>[] = PROFILE_CHOICES.hat.options.flatMap((hat
     return { hat, hair, ...Object.fromEntries(spread.map((field) => [field, optionAt(field, index + hatIndex)])) }
   }),
 )
+
+/**
+ * Swings at `point` (the contact point when null) a swing the camera saw no start of, taken at `startMs` (game ms) from
+ * the windup at `load`: its bat meets the ball CONTACT_DELAY_MS later.
+ */
+function swingFromWindup(batter: Batter, startMs: number, load: number, point: Vec3 | null) {
+  batter.swing = NO_SWING
+  judgeSwing(batter, startMs, startMs, startMs + CONTACT_DELAY_MS, point, load)
+}
 
 function worldSweetSpot(batter: Batter) {
   batter.rig.root.updateMatrixWorld(true)
@@ -197,7 +221,7 @@ function swingFrames(full: boolean) {
 
 /** The deepest (m) a swing from `load` at `point` sinks the batter into itself, and where. */
 function deepestInSwing(batter: Batter, load: number, point: Vec3 | null, full: boolean) {
-  startSwing(batter, 0, load, point)
+  swingFromWindup(batter, 0, load, point)
   const depths = swingFrames(full).map((nowMs) => {
     poseAt(batter, nowMs, nowMs < RETURNED_MS ? load : 0, true)
     return { depth: deepestInItself(batter), at: `${point ? 'a hit' : 'a miss'} from load ${load} at ${nowMs} ms` }
@@ -229,7 +253,7 @@ function trackedPoints(batter: Batter) {
 
 /** Where the bat, the hands, the elbows, and the head are every ms of a swing at `point`, from its start to its finish. */
 function swingPath(batter: Batter, point: Vec3 | null) {
-  startSwing(batter, 0, 1, point)
+  swingFromWindup(batter, 0, 1, point)
   return Array.from({ length: SWING_MS + 1 }, (_, nowMs) => {
     poseAt(batter, nowMs, 1)
     return trackedPoints(batter)
@@ -241,6 +265,43 @@ function pathVelocities(path: Vector3[][]) {
   return path
     .slice(1)
     .map((points, ms) => points.map((point, part) => point.clone().sub(path[ms][part]).multiplyScalar(1000)))
+}
+
+/**
+ * The batter each ms from `fromMs` to `toMs` (game ms) at load 1: its tracked points, its bat's azimuth, and every
+ * other ms how deep (m) it sinks into itself.
+ */
+function drawnPath(batter: Batter, fromMs: number, toMs: number) {
+  return Array.from({ length: toMs - fromMs + 1 }, (_, ms) => {
+    const pose = poseAt(batter, fromMs + ms, 1)
+    const depth = ms % 2 === 0 ? deepestInItself(batter) : 0
+    return { points: trackedPoints(batter), azimuth: pose.batAzimuth, depth }
+  })
+}
+
+/**
+ * Along a path a ms apart: the most any tracked point but the head changes velocity (m/s) from one ms to the next, the
+ * head's most, and the head's top speed (m/s), the bounds a swing keeps to show no pop and a steady head.
+ */
+function popsAlong(path: { points: Vector3[] }[]) {
+  const head = 6
+  const velocities = pathVelocities(path.map(({ points }) => points))
+  const changes = velocities
+    .slice(1)
+    .map((now, ms) => now.map((velocity, part) => velocity.distanceTo(velocities[ms][part])))
+  return {
+    body: Math.max(...changes.flatMap((change) => change.slice(0, head))),
+    head: Math.max(...changes.map((change) => change[head])),
+    headSpeed: Math.max(...velocities.map((velocity) => velocity[head].length())),
+  }
+}
+
+/** How far (m) the sweet spot moves in the ms before `atMs` (game ms) at load 1: as it meets a ball then, how fast. */
+function lastMsTravel(batter: Batter, atMs: number) {
+  poseAt(batter, atMs - 1, 1)
+  const before = worldSweetSpot(batter)
+  poseAt(batter, atMs, 1)
+  return worldSweetSpot(batter).distanceTo(before)
 }
 
 /** The tracked points' velocities (m/s) over `stepMs` from `nowMs`. */
@@ -290,7 +351,7 @@ describe('batter', () => {
     const cases = sides.flatMap((side) => [0, 0.5, 1].flatMap((load) => points.map((point) => ({ side, load, point }))))
     for (const { side, load, point } of cases) {
       const batter = batters[side]
-      startSwing(batter, 2000, load, point)
+      swingFromWindup(batter, 2000, load, point)
       poseAt(batter, 2000 + CONTACT_DELAY_MS, load)
       const ball = new Vector3(point.x, point.y, point.z)
       expect(worldSweetSpot(batter).distanceTo(ball)).toBeLessThan(0.002)
@@ -303,7 +364,7 @@ describe('batter', () => {
     const batter = createBatter(DEFAULT_PLAYER_PROFILE, 'right')
     const perfect = PITCH_TYPE_IDS.flatMap((type) => corners.map((corner) => meetPoint(type, corner, 0)))
     for (const point of perfect) {
-      startSwing(batter, 0, 1, point)
+      swingFromWindup(batter, 0, 1, point)
       expect(Math.abs(batter.swing.contactAt - SWING_KEY_TIMES.contact)).toBeLessThan(0.001)
     }
   })
@@ -312,8 +373,8 @@ describe('batter', () => {
     const right = createBatter(DEFAULT_PLAYER_PROFILE, 'right')
     const left = createBatter(DEFAULT_PLAYER_PROFILE, 'left')
     const point = meetPoint('curve', corners[1], 0.05)
-    startSwing(right, 0, 1, point)
-    startSwing(left, 0, 1, { ...point, x: -point.x })
+    swingFromWindup(right, 0, 1, point)
+    swingFromWindup(left, 0, 1, { ...point, x: -point.x })
     const times = [-300, 20, CONTACT_DELAY_MS, 150, 700, 1100, 1500, 1900, RETURNED_MS + 100]
     const gaps = times.flatMap((nowMs) => mirrorGaps(right, left, nowMs))
     expect(Math.max(...gaps)).toBeLessThan(1e-6)
@@ -346,7 +407,7 @@ describe('batter', () => {
     const batter = createBatter(DEFAULT_PLAYER_PROFILE, 'right')
     const outside = [meetPoint('changeup', corners[1], 0), meetPoint('fastball', corners[3], 0)]
     for (const point of [null, meetPoint('fastball', corners[0], 0), ...outside]) {
-      startSwing(batter, 0, 1, point)
+      swingFromWindup(batter, 0, 1, point)
       const frames = Array.from({ length: RETURNED_MS + WAGGLE_FADE_MS }, (_, ms) => ms + 1)
       const poses = frames.map((nowMs) => ({ nowMs, pose: poseAt(batter, nowMs, nowMs < RETURNED_MS ? 1 : 0, true) }))
       const velocities = frames.map((nowMs) => ({ nowMs, velocities: velocitiesAt(batter, nowMs, 1) }))
@@ -392,9 +453,117 @@ describe('batter', () => {
     }
   })
 
+  it('swings a swing begun early on to its ball without a jump, a step back, a pop, or sinking into itself', () => {
+    const batter = createBatter(DEFAULT_PLAYER_PROFILE, 'right')
+    const readyMs = 90
+    const { easeMs } = BEGUN_SWING
+    // Through and well after the moment the camera expected the grip to cross, the bat is still on its way: it does not
+    // stop to wait for the swing to be judged.
+    beginSwing(batter, 0, readyMs, 1, meetPoint('fastball', corners[1], 0))
+    const waiting = pathVelocities(drawnPath(batter, readyMs - 10, readyMs + 80).map(({ points }) => points))
+    expect(Math.min(...waiting.map(([tip]) => tip.length()))).toBeGreaterThan(0.5)
+    // Begun at 0 toward where the pitch meets a PERFECT swing, then judged on its way, easing into the slot, and going
+    // back after it waited in vain: in time for its last stretch, or so late that the stage stepped its clock back to
+    // give it one (`afterMs` below none). It meets the ball PERFECT, at the back of the reach as early in the swing as
+    // any, or out in front.
+    const judgings = [
+      { takenMs: 30, afterMs: 20 },
+      { takenMs: readyMs + 40, afterMs: 0 },
+      { takenMs: readyMs + easeMs + 70, afterMs: 0 },
+      { takenMs: 60, afterMs: -40 },
+      { takenMs: readyMs + 70, afterMs: -70 },
+    ]
+    const pitches = [
+      { type: 'fastball', corner: corners[1], timing: 0 },
+      { type: 'curve', corner: corners[2], timing: 0.3 },
+      { type: 'changeup', corner: corners[3], timing: -0.2 },
+    ] as const
+    const cases = pitches.flatMap(({ type, corner, timing }) =>
+      judgings.map((judging) => ({
+        aim: meetPoint(type, corner, 0),
+        point: meetPoint(type, corner, timing),
+        ...judging,
+      })),
+    )
+    for (const { aim, point, takenMs, afterMs } of cases) {
+      batter.swing = NO_SWING
+      beginSwing(batter, 0, readyMs, 1, aim)
+      // As the stage times it: from about where the bat is drawn when the stage takes it (stageRun.ts lastStretchFor).
+      const { seconds, rate } = begunSwingState(0, readyMs, takenMs)
+      const stretchMs = lastStretchMs(seconds, rate)
+      const throughMs = takenMs + afterMs
+      const before = drawnPath(batter, 0, takenMs)
+      judgeSwing(batter, takenMs, throughMs, throughMs + stretchMs, point, 1)
+      // On the stage's clock, the swing goes on from where it was when the stage took it, and from there only on.
+      const onward = drawnPath(batter, Math.min(takenMs, throughMs) + 1, throughMs + FOLLOW_MS)
+      const path = [...before, ...onward]
+      const turns = onward.map(({ azimuth }, ms) => azimuth - path[before.length + ms - 1].azimuth)
+      expect(Math.min(...turns)).toBeGreaterThan(-1e-6)
+      const pops = popsAlong(path)
+      expect(pops.body).toBeLessThan(36)
+      expect(pops.head).toBeLessThan(5)
+      expect(pops.headSpeed).toBeLessThan(11)
+      expect(Math.max(...path.map(({ depth }) => depth))).toBeLessThan(TOLERANCE)
+      poseAt(batter, throughMs + stretchMs, 1)
+      expect(worldSweetSpot(batter).distanceTo(new Vector3(point.x, point.y, point.z))).toBeLessThan(0.002)
+      // It meets the ball about as fast as a swing the camera saw no start of: the swing seen first is no weaker.
+      const cued = lastMsTravel(batter, throughMs + stretchMs)
+      swingFromWindup(batter, 0, 1, point)
+      expect(cued).toBeGreaterThan(0.7 * lastMsTravel(batter, CONTACT_DELAY_MS))
+    }
+  })
+
+  it('checks a swing short of the plate and takes it back to the windup, or on to the ball, without a pop', () => {
+    const batter = createBatter(DEFAULT_PLAYER_PROFILE, 'right')
+    const readyMs = 90
+    const { easeMs } = BEGUN_SWING
+    const slotAzimuth = SWING_KEYS.batAzimuth[SWING_KEY_IDS.indexOf('slot')]
+    const aim = meetPoint('fastball', corners[1], 0)
+    // Checked on its way to the slot, easing into it, all but at rest there, and never: then it goes back by itself.
+    for (const checkedMs of [70, readyMs + 60, readyMs + easeMs - 5, Infinity]) {
+      batter.swing = NO_SWING
+      beginSwing(batter, 0, readyMs, 1, aim)
+      checkSwing(batter, checkedMs, 1)
+      const backAtMs = batter.swing.check!.backMs
+      const path = drawnPath(batter, 0, backAtMs + 20)
+      expect(Math.max(...path.map(({ azimuth }) => azimuth))).toBeLessThan(slotAzimuth + 1e-6)
+      const pops = popsAlong(path)
+      expect(pops.body).toBeLessThan(36)
+      expect(pops.head).toBeLessThan(5)
+      expect(Math.max(...path.map(({ depth }) => depth))).toBeLessThan(TOLERANCE)
+      // Back in the windup as if it had never swung.
+      const checked = path.at(-1)!.points
+      batter.swing = NO_SWING
+      poseAt(batter, backAtMs + 20, 1)
+      const standing = trackedPoints(batter)
+      expect(Math.max(...checked.map((part, index) => part.distanceTo(standing[index])))).toBeLessThan(1e-9)
+    }
+    // A bat checked as it eases slowly into the slot is soon on its way back, rather than standing still a while first.
+    beginSwing(batter, 0, readyMs, 1, aim)
+    checkSwing(batter, readyMs + 60, 1)
+    const [stopping, goingBack] = [readyMs + 90, readyMs + 180].map((nowMs) => drawnPath(batter, nowMs, nowMs)[0])
+    expect(goingBack.points[0].distanceTo(stopping.points[0])).toBeGreaterThan(0.02)
+    // A check that comes once the swing is on its way back by itself changes nothing.
+    beginSwing(batter, 0, readyMs, 1, aim)
+    const unchecked = drawnPath(batter, 0, 700)
+    checkSwing(batter, readyMs + easeMs + 30, 1)
+    expect(drawnPath(batter, 0, 700)).toEqual(unchecked)
+    // Judged after all on its way back, for a contact still to come: it waits where it was, then swings through.
+    const point = meetPoint('changeup', corners[0], 0)
+    beginSwing(batter, 0, readyMs, 1, point)
+    checkSwing(batter, 150, 1)
+    const takenMs = Math.round((batter.swing.check!.backFromMs + batter.swing.check!.backMs) / 2)
+    judgeSwing(batter, takenMs, takenMs + 80, takenMs + 80 + CONTACT_DELAY_MS, point, 1)
+    const path = drawnPath(batter, 0, takenMs + CONTACT_DELAY_MS + 80)
+    const pops = popsAlong(path)
+    expect(pops.body).toBeLessThan(36)
+    expect(pops.head).toBeLessThan(5)
+    expect(worldSweetSpot(batter).distanceTo(new Vector3(point.x, point.y, point.z))).toBeLessThan(0.002)
+  })
+
   it('never stretches an arm or slides its planted front foot through the held finish and the return', () => {
     const batter = createBatter(DEFAULT_PLAYER_PROFILE, 'right')
-    startSwing(batter, 0, 1, null)
+    swingFromWindup(batter, 0, 1, null)
     const frames = Array.from({ length: FINISH_HOLD_MS + RETURN_MS + 1 }, (_, ms) => {
       const pose = poseAt(batter, SWING_MS + ms, 0)
       const arms = [0, 1].map((index) => {
@@ -424,7 +593,7 @@ describe('batter', () => {
     const { ready, windup } = DERBY_PHASE_MS
     const nextLoadMs =
       CONTACT_DELAY_MS + Math.min(...Object.values(RESULT_HOLD_MS)) + ready + windup * BATTER_LOAD_START
-    startSwing(batter, 0, 1, null)
+    swingFromWindup(batter, 0, 1, null)
     poseAt(batter, nextLoadMs, 0, true)
     const swung = trackedPoints(batter)
     batter.swing = NO_SWING

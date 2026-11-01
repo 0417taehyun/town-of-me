@@ -14,6 +14,7 @@ import {
   notify,
   objectMark,
   SWING_RULES,
+  type SwingCue,
   type SwingTracker,
   type TrackedSwing,
   type TrackerReason,
@@ -60,9 +61,12 @@ type Pose = {
   gripSeen?: boolean
   armsApart?: number
 }
+/** What the stage heard of the tracker on a frame at `at`: a cue, or a swing reported. */
+type Heard = { at: number; heard: SwingCue | TrackedSwing }
 type Run = {
   tracker: SwingTracker
   swings: TrackedSwing[]
+  heard: Heard[]
   time: number
   frames: number
   shown: HeldCaption | null
@@ -97,7 +101,7 @@ function bottleAt({ offset, gripY = LEVEL_Y, centre = 0.5 }: Pose): Detection {
 }
 
 function camera(side: BattingSide = 'right'): Run {
-  return { tracker: createSwingTracker(side), swings: [], time: 1000, frames: 0, shown: null, captions: [] }
+  return { tracker: createSwingTracker(side), swings: [], heard: [], time: 1000, frames: 0, shown: null, captions: [] }
 }
 
 /** What the detector finds in a frame of `pose` when it runs: the bottle in the hands, or nothing. */
@@ -116,6 +120,8 @@ function step(run: Run, pose: Pose | null, { energy = QUIET, detector }: StepOpt
   const detections = pose && detector && run.frames % 3 === 0 ? detectionsFor(pose, detector) : null
   const swing = updateSwingTracker(run.tracker, { time: run.time, body, detections, energy })
   if (swing) run.swings.push(swing)
+  const heard = [run.tracker.cue, swing].filter((said) => said !== null)
+  run.heard.push(...heard.map((said) => ({ at: run.time, heard: said })))
   const shown = nextCaption(run.shown, run.tracker, run.time)
   if (shown !== run.shown) run.captions.push(shown.caption)
   run.shown = shown
@@ -459,6 +465,37 @@ describe('the camera swing tracker', () => {
     free.tracker.settingUp = true
     hold(free, { offset: LOAD }, 3, { detector: 'bottle' })
     expect(objectMark(free.tracker, free.time)).toMatchObject({ label: 'bottle', locked: false })
+  })
+
+  it('cues a swing as a fast sweep closes on the midline, reports it on the crossing frame, and cues a check', () => {
+    // From deep behind the body, the grip closes fast frames before it crosses: the swing is cued then, crossing about
+    // when it does (a little late, the grip still speeding up), and reported on the frame it crossed.
+    const swung = camera()
+    lockAndLoad(swung, -1)
+    const crossedAt = sweepAcross(swung, -1, 0.7, 0.2)
+    const [started, reported, ...after] = swung.heard
+    expect(started.heard).toMatchObject({ kind: 'started' })
+    expect(Math.abs((started.heard as { crossingAtMs: number }).crossingAtMs - crossedAt)).toBeLessThan(35)
+    expect(reported.heard).toBe(swung.swings[0])
+    expect(reported.at - started.at).toBeGreaterThan(FRAME_MS)
+    expect(reported.at - crossedAt).toBeLessThan(FRAME_MS)
+    expect(after).toEqual([])
+    // Stopped short of the midline and brought back to the load: checked as it gets there.
+    const checked = camera()
+    lockAndLoad(checked, -1)
+    moveStraight(checked, -1, -0.2, 2)
+    moveStraight(checked, -0.2, -1, 3)
+    hold(checked, { offset: -1 }, 10)
+    expect(checked.swings).toEqual([])
+    expect(checked.heard.map(({ heard }) => (heard as SwingCue).kind)).toEqual(['started', 'checked'])
+    // Wobble at the load, a slow wave across the body, and the bat coming back from the far side cue nothing.
+    const quiet = camera()
+    lockAndLoad(quiet)
+    Array.from({ length: 20 }, (_, index) => step(quiet, { offset: LOAD + (index % 2) * 0.12 }, { energy: LOUD }))
+    moveStraight(quiet, LOAD, 0.7, 13)
+    hold(quiet, { offset: 0.7 }, 20)
+    sweepAcross(quiet, 0.7, LOAD, 0.2)
+    expect(quiet.heard).toEqual([])
   })
 
   it('loads a left-handed batter on the picture’s right and takes only their swing toward the left', () => {

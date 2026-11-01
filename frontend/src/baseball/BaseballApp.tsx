@@ -53,7 +53,7 @@ import {
 import { keepScreenOn, requestFullscreen } from './flow/screenRequests'
 import type { StanceWatch } from './flow/stanceHold'
 import { BaseballStage } from './stage/BaseballStage'
-import type { RealTimeSwing, StageEvent } from './stage/stageRun'
+import type { RealTimeSwing, RealTimeSwingCue, StageEvent } from './stage/stageRun'
 import { CameraPanel } from './ui/CameraPanel'
 import {
   cameraPanelLayout,
@@ -73,6 +73,7 @@ import {
   hudAfterEvent,
   judgedResult,
   NEW_RUN_HUD,
+  pitchInPlay,
   seenCameraState,
   stanceNeedText,
 } from './ui/derbyCues'
@@ -223,11 +224,12 @@ const DerbyDiagnostics = import.meta.env.DEV ? DiagnosticsPanel : null
  * the camera is (flow/screenRequests.ts). From then on the visitor goes on by holding the batting stance about three
  * seconds (flow/stanceHold.ts) or by the step's button, which takes focus so Enter or Space presses it. No key and no
  * button swings: the swings are the ones the camera sees (cameraTracking.ts), handed to the stage the moment they are
- * seen. Practice tells each swing only a bit early, good, or a bit late, and calibrates the runs after it; practice and
- * a run pause between pitches while the visitor is out of the camera's view. A camera that fails names its cause and
- * offers another try, and the derby cannot be played without it. The camera locks what the visitor holds by itself (or
- * lets them swing with their hands), and its object detector rests from each windup until the pitch is judged. A
- * computer that tracks too slowly is blocked for the visit. Every run reads the KST month when it starts, never when
+ * seen, as is the moment it sees one begin, so the batter swings with the visitor. Practice tells each swing only a bit
+ * early, good, or a bit late, and calibrates the runs after it; practice and a run pause between pitches while the
+ * visitor is out of the camera's view. A camera that fails names its cause and offers another try, and the derby cannot
+ * be played without it. The camera locks what the visitor holds by itself (or lets them swing with their hands), and
+ * its object detector rests from each windup until the pitch's ball is down (derbyCues.ts pitchInPlay). A computer that
+ * tracks too slowly is blocked for the visit. Every run reads the KST month when it starts, never when
  * the page loaded. A `preview`, the admin's try of next month's rules, plays those scheduled (or this month's when none
  * are) and says so on every screen; it is never ranked. V (or the camera view button) resizes or hides the camera
  * panel beside the play, the result screen can turn the camera off, and Escape leaves from any of these screens: for
@@ -257,6 +259,7 @@ export function DerbyScreen({
   const batter = useMemo(() => normalizePlayerProfile(profile), [profile])
   const [sounds] = useState(() => createDerbySounds())
   const swings = useRef<RealTimeSwing[]>([])
+  const swingCues = useRef<RealTimeSwingCue[]>([])
   const gauge = useRef<HTMLDivElement>(null)
   const [flow, setFlow] = useState(RULES_FLOW)
   const [chosenSide, setChosenSide] = useState(DEFAULT_BATTING_SIDE)
@@ -271,12 +274,18 @@ export function DerbyScreen({
     },
     [cameraSwinging],
   )
-  const pitching = hud.phase === 'windup' || hud.phase === 'pitch'
+  const onCameraSwingCue = useCallback(
+    (cue: RealTimeSwingCue) => {
+      if (cameraSwinging) swingCues.current.push(cue)
+    },
+    [cameraSwinging],
+  )
   const rulesFor = preview ? plannedBallparkRules : effectiveBallparkRules
   const exit = baseballExit(preview)
 
   const begin = (next: DerbyFlow) => {
     swings.current = []
+    swingCues.current = []
     setHud(NEW_RUN_HUD)
     setFlow(next)
   }
@@ -298,8 +307,9 @@ export function DerbyScreen({
   const stance: StanceWatch = { wait: stanceWait(flow), onProgress: onStanceProgress, onHeld: start }
   const camera = useCameraTracking({
     side,
-    objectsPaused: cameraSwinging && pitching,
+    objectsPaused: cameraSwinging && pitchInPlay(hud),
     onSwing: onCameraSwing,
+    onSwingCue: onCameraSwingCue,
     stance,
     settingUp: flow.step === 'setup',
     objectNames: cameraCopy.objects,
@@ -400,6 +410,7 @@ export function DerbyScreen({
         side={side}
         run={run}
         swings={swings}
+        swingCues={swingCues}
         onEvent={onStageEvent}
         band={panel.band}
         paused={paused}

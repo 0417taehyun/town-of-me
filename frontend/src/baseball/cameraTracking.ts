@@ -1,7 +1,7 @@
 import type { ObjectDetectorResult, PoseLandmarkerResult } from '@mediapipe/tasks-vision'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { diagnosedCameraParts, diagnoseFrame, forgetDiagnosedCamera } from './devDiagnostics'
-import { devSwingSeen, devVisitorFrame } from './devSeam'
+import { devSwingCue, devSwingSeen, devVisitorFrame } from './devSeam'
 import { type CameraGameProblem, cameraProblem } from './deviceGate'
 import {
   nextShownNeed,
@@ -15,7 +15,7 @@ import {
   watchStance,
 } from './flow/stanceHold'
 import type { BattingSide } from './game/field'
-import type { RealTimeSwing } from './stage/stageRun'
+import type { RealTimeSwing, RealTimeSwingCue } from './stage/stageRun'
 import { clearCameraView, drawCameraView } from './ui/cameraOverlay'
 import { type CameraInput, type CameraStopReason, startCamera } from './vision/cameraInput'
 import { type Detection, type HeldObjectLabel, objectDetectionDue, objectDetections } from './vision/heldObject'
@@ -40,6 +40,7 @@ import {
   nextCaption,
   objectMark,
   setTrackerSide,
+  type SwingCue,
   type SwingTracker,
   type TrackedSwing,
   type TrackerReason,
@@ -49,11 +50,11 @@ import { createObjectDetector, createPoseTracker, type VisionTask } from './visi
 
 // The camera game's camera, on from the visitor's click until they turn it off, leave the page, stand still for two
 // minutes, or it turns out this computer is too slow. The vision loop (vision/poseLoop.ts) runs the pose task on each
-// camera frame, and from there this page reads swings and draws the camera panel's canvas: the object detector every
-// so often (vision/heldObject.ts), the motion where a swing goes (vision/motionEnergy.ts), and the swing tracker
-// (vision/swingTracker.ts), whose swings go straight to the page's callback, as does the held stance's progress
-// (flow/stanceHold.ts). React hears only when the camera's status changes, the visitor comes into or out of view, the
-// tracker's caption changes, or what the stance hold waits for does.
+// camera frame, and from there this page reads swings and draws the camera panel's canvas: the object detector every so
+// often (vision/heldObject.ts), the motion where a swing goes (vision/motionEnergy.ts), and the swing tracker
+// (vision/swingTracker.ts), whose swings and cues of a swing begun or checked go straight to the page's callbacks, as
+// does the held stance's progress (flow/stanceHold.ts). React hears only when the camera's status changes, the visitor
+// comes into or out of view, the tracker's caption changes, or what the stance hold waits for does.
 
 /**
  * `starting` waits for the browser's permission, `loading` for the pose task, and `measuring` times it on this
@@ -250,13 +251,23 @@ export function cameraSwing({ contactAtMs, startedAtMs, speed, batHeight }: Trac
   return { contactAtRealMs: contactAtMs, startedAtRealMs: startedAtMs, speed, batHeight }
 }
 
+/** A tracker's cue of a swing begun or checked for the stage, on the same clock as its swings. */
+export function cameraSwingCue(cue: SwingCue): RealTimeSwingCue {
+  return cue.kind === 'started' ? { kind: 'started', crossingAtRealMs: cue.crossingAtMs } : cue
+}
+
 export type CameraTrackingOptions = {
   /** The side the visitor bats from, which sets where a swing loads. */
   side: BattingSide
-  /** The object detector rests while this is true (a pitch on its way), so the frames that time a swing come on time. */
+  /**
+   * The object detector rests while this is true (a pitch in play), so the frames that time a swing come on time and
+   * the batter's swing plays without a held-up frame.
+   */
   objectsPaused: boolean
   /** Hears each swing the camera sees, the moment it is seen. */
   onSwing: (swing: RealTimeSwing) => void
+  /** Hears the moment the camera sees the visitor begin a swing, or end one without a swing, for the batter's look. */
+  onSwingCue: (cue: RealTimeSwingCue) => void
   stance: StanceWatch
   /** Whether the visitor is on the setup step, where a real object that locks replaces free mode. */
   settingUp: boolean
@@ -270,6 +281,7 @@ export type CameraTrackingOptions = {
  */
 const DEV_VISITOR = import.meta.env.DEV ? devVisitorFrame : null
 const DEV_SWING = import.meta.env.DEV ? devSwingSeen : null
+const DEV_SWING_CUE = import.meta.env.DEV ? devSwingCue : null
 
 /**
  * A dev build times the object detector and notes each frame for its diagnostics panel (devDiagnostics.ts), which
@@ -286,20 +298,21 @@ export function visitorFrame(frame: PoseFrame, tracker: SwingTracker): { seen: b
 }
 
 /**
- * The camera for a page: `turnOn` starts it into the `video` element the camera panel mounts, and the vision loop
- * draws on the panel's `canvas` (with the object it marks, named by `objectNames`), locks the held object by itself,
- * reads swings for `onSwing`, and follows the stance hold `stance` waits for. `seen` says whether the camera sees the
- * visitor, held through brief flickers (vision/poseLoop.ts), and `present` the same held longer, as long as practice
- * and a run wait before they pause (AWAY_HOLD_MS); `caption` is what the swing tracker says (nextCaption), and
- * `stanceNeed` what the stance hold waits for (nextShownNeed), null while none runs. `lockAt` locks what the visitor
- * tapped on the camera picture (a point in the raw image). The camera turns off on `turnOff`, when its status leaves it
- * off, and when the page's component unmounts; its last picture, the motion sampler's copy, and the tracked body are
- * wiped each time.
+ * The camera for a page: `turnOn` starts it into the `video` element the camera panel mounts, and the vision loop draws
+ * on the panel's `canvas` (with the object it marks, named by `objectNames`), locks the held object by itself, reads
+ * swings for `onSwing` and their cues for `onSwingCue`, and follows the stance hold `stance` waits for. `seen` says
+ * whether the camera sees the visitor, held through brief flickers (vision/poseLoop.ts), and `present` the same held
+ * longer, as long as practice and a run wait before they pause (AWAY_HOLD_MS); `caption` is what the swing tracker says
+ * (nextCaption), and `stanceNeed` what the stance hold waits for (nextShownNeed), null while none runs. `lockAt` locks
+ * what the visitor tapped on the camera picture (a point in the raw image). The camera turns off on `turnOff`, when its
+ * status leaves it off, and when the page's component unmounts; its last picture, the motion sampler's copy, and the
+ * tracked body are wiped each time.
  */
 export function useCameraTracking({
   side,
   objectsPaused,
   onSwing,
+  onSwingCue,
   stance,
   settingUp,
   objectNames,
@@ -307,7 +320,7 @@ export function useCameraTracking({
   const video = useRef<HTMLVideoElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const reading = useRef<SwingReading | null>(null)
-  const page = useRef({ objectsPaused, onSwing, stance, settingUp, objectNames })
+  const page = useRef({ objectsPaused, onSwing, onSwingCue, stance, settingUp, objectNames })
   const [request, setRequest] = useState<symbol | null>(null)
   const [status, setStatus] = useState<CameraStatus>(CAMERA_OFF)
   const [seen, setSeen] = useState(false)
@@ -316,9 +329,9 @@ export function useCameraTracking({
   const [stanceNeed, setStanceNeed] = useState<StanceNeed | null>(null)
 
   useLayoutEffect(() => {
-    page.current = { objectsPaused, onSwing, stance, settingUp, objectNames }
+    page.current = { objectsPaused, onSwing, onSwingCue, stance, settingUp, objectNames }
     if (reading.current) setTrackerSide(reading.current.tracker, side)
-  }, [objectsPaused, onSwing, stance, settingUp, objectNames, side])
+  }, [objectsPaused, onSwing, onSwingCue, stance, settingUp, objectNames, side])
 
   useEffect(() => {
     const feed = video.current
@@ -343,6 +356,8 @@ export function useCameraTracking({
     const onFrame = (frame: PoseFrame, objects: ObjectDetector | null, poseMs: number) => {
       current.tracker.settingUp = page.current.settingUp
       const tracked = readSwingFrame(current, frame, feed, objects, !timed || page.current.objectsPaused)
+      const cue = current.tracker.cue ?? DEV_SWING_CUE?.(frame.capturedAt)
+      if (cue) page.current.onSwingCue(cameraSwingCue(cue))
       const swing = tracked ?? DEV_SWING?.(frame.capturedAt)
       if (swing) page.current.onSwing(swing)
       const mark = objectMark(current.tracker, frame.capturedAt)

@@ -1,8 +1,9 @@
 import { type Mesh, type Object3D, Quaternion, Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PLAYER_PROFILE } from '../../../data/playerProfile'
-import { batterPoseAt, createBatter, poseBatter, startSwing } from './batter'
+import { batterPoseAt, createBatter, judgeSwing, poseBatter } from './batter'
 import { legVolumes, segmentDistance } from './bodyVolumes'
+import { CONTACT_DELAY_MS } from './swingMotion'
 
 /** `mesh`'s center and turn in its rig's frame, the space of its `root`. */
 function inRigFrame(mesh: Mesh, root: Object3D) {
@@ -15,7 +16,7 @@ function inRigFrame(mesh: Mesh, root: Object3D) {
 describe('body volumes', () => {
   it('put the hips, the legs, and the shoes where the rig draws them, however the legs are posed', () => {
     const batter = createBatter({ ...DEFAULT_PLAYER_PROFILE, bottom: 'relaxed trousers', shoes: 'boots' }, 'right')
-    startSwing(batter, 0, 1, null)
+    judgeSwing(batter, 0, 0, CONTACT_DELAY_MS, null, 1)
     for (const nowMs of [-500, 30, 200, 1300]) {
       poseBatter(batter, batterPoseAt(batter, nowMs, 1, false))
       const { rig } = batter
