@@ -8,12 +8,14 @@ import {
   type HeldObjectLabel,
   type HeldObjectLock,
   isLockedBy,
+  isLockUnderWay,
   lockCandidates,
   lockOn,
   lockProgress,
   manualLock,
   type MeasuredDetection,
   NO_SEARCH,
+  OBJECT_DETECTION_INTERVAL_MS,
   refreshLock,
   searchForLock,
   type LockSearch,
@@ -34,10 +36,11 @@ import {
 
 // The camera swing: searching → locked ⇄ loaded → sweeping → cooldown → locked. The held object is locked once
 // (heldObject.ts), by itself: what the detector finds next to the still hands, or after a while with nothing found,
-// none (free mode), which a real object that locks still replaces while the visitor sets up. A swing is then the
-// grip, loaded behind the body's midline on the batting side, sweeping fast across it while the band it sweeps
-// through lights up with motion (motionEnergy.ts). It needs no pause at the load, because batters wind up and swing in
-// one motion; it re-arms only once the grip is back on a load side, so the bat coming back is never a second swing.
+// none (free mode), which a real object that locks still replaces and which takes over at once from one lost, so the
+// tracker never searches again while the detector rests through a pitch. A swing is then the grip, loaded behind the
+// body's midline on the batting side, sweeping fast across it while the band it sweeps through lights up with motion
+// (motionEnergy.ts). It needs no pause at the load, because batters wind up and swing in one motion; it re-arms only
+// once the grip is back on a load side, so the bat coming back is never a second swing.
 // The midline is the body's, measured from frontal frames only: turning the torso to load narrows the shoulders and
 // drags their midpoint, which would inflate every distance and speed. The contact moment is when the grip crosses that
 // midline, between the two frames either side of it, and the swing is reported on the first frame that meets every
@@ -121,7 +124,8 @@ export type TrackerState = 'searching' | 'locked' | 'loaded' | 'sweeping' | 'coo
 
 /**
  * What the camera panel's caption says (i18n `camera.tracker`): where the tracker is, or a notice of what just
- * happened (a lock, free mode, a lost object, a tap it could not use, a swing, a sweep that was not one).
+ * happened (a lock, free mode, a lost object the hands stand in for, a tap it could not use, a swing, a sweep that was
+ * not one).
  */
 export type TrackerReason =
   | 'showHands'
@@ -211,11 +215,12 @@ export type SwingCue = { kind: 'started'; crossingAtMs: number } | { kind: 'chec
 export type Candidate = MeasuredDetection & { seenAt: number; grip: Point }
 
 /**
- * `settingUp` says the visitor is on the setup step (the page's), where a real object that locks replaces free mode.
- * `candidate` is the best object the detector lately found next to the hands, `search` the sightings toward its lock,
- * and `searchSince` when the detector first looked at the hands with nothing locked. `reason` is where the tracker is
- * and `notice` the latest thing that happened; `followingThrough` says the grip is on its way out of a swing toward the
- * far side, where its finish is no wrong-side load. `cue` is what the latest frame cued the stage, if anything.
+ * `settingUp` says the visitor is on the setup step (the page's), where free mode looks for a real object to replace it
+ * as often as a search does (objectDetectionInterval) and marks what it finds (marksCandidate). `candidate` is the best
+ * object the detector lately found next to the hands, `search` the sightings toward its lock, and `searchSince` when
+ * the detector first looked at the hands with nothing locked. `reason` is where the tracker is and `notice` the latest
+ * thing that happened; `followingThrough` says the grip is on its way out of a swing toward the far side, where its
+ * finish is no wrong-side load. `cue` is what the latest frame cued the stage, if anything.
  */
 export type SwingTracker = {
   state: TrackerState
@@ -290,13 +295,6 @@ export function createSwingTracker(battingSide: BattingSide): SwingTracker {
     band: null,
     cooldownUntil: -Infinity,
   }
-}
-
-/** Forgets a lost object, keeping the step, batting side, body frame, noise, and the caption's latest notice. */
-export function resetLock(tracker: SwingTracker) {
-  const { settingUp, side, frame, aspect, baseline, notice } = tracker
-  // A fresh tracker in every other respect, with its batting side put back.
-  Object.assign(tracker, createSwingTracker('right'), { settingUp, side, frame, aspect, baseline, notice })
 }
 
 /** Forgets everything the camera showed (it turned off), keeping only the step and the batting side. */
@@ -472,14 +470,30 @@ export function sightCandidate(tracker: SwingTracker, view: TrackerView, time: n
   lockTracker(tracker, { ...lockOn(view, best.imageBox, 'detected'), label: best.label })
 }
 
-/** Whether free mode stands in for an object while the visitor sets up, so a real one that locks may replace it. */
+/** Whether free mode stands in for an object, so a real one that locks may replace it. */
 export function standsInForObject(tracker: SwingTracker) {
-  return tracker.settingUp && tracker.lock?.kind === 'free'
+  return tracker.lock?.kind === 'free'
 }
 
-/** Whether the tracker looks for an object to lock: searching, or standing in for one while the visitor sets up. */
+/** Whether the tracker looks for an object to lock: searching, or standing in for one in free mode. */
 export function isLookingForObject(tracker: SwingTracker) {
   return tracker.state === 'searching' || standsInForObject(tracker)
+}
+
+/**
+ * How long (ms) the object detector waits between runs at `time`. Searching, setting up in free mode, or with something
+ * by the hands, as briefly as a search, and on while any sighting toward a lock is still in its window, so a detector
+ * that misses between sightings still locks the object; with a detected object locked, long enough to keep it fresh.
+ * Otherwise in free mode it only glances now and then for a real object, since each run holds up the pose frames on the
+ * main thread. Null with a tapped lock, which no run refreshes or replaces, so the detector need not run at all.
+ */
+export function objectDetectionInterval(tracker: SwingTracker, time: number) {
+  const { searching, locked, handsOnly } = OBJECT_DETECTION_INTERVAL_MS
+  if (tracker.lock?.kind === 'manual') return null
+  if (!isLookingForObject(tracker)) return locked
+  const { state, settingUp, candidate, search } = tracker
+  const earnest = state === 'searching' || settingUp || isFresh(candidate, time) || isLockUnderWay(search, time)
+  return earnest ? searching : handsOnly
 }
 
 export function refreshHeldObject(
@@ -495,9 +509,9 @@ export function refreshHeldObject(
   const refreshed = refreshLock(lock, candidates, view, time, watching)
   tracker.lock = refreshed
   if (refreshed) return
-  // Setting up, the hands take over at once, so a stance held while the detector lost the object goes on.
-  if (tracker.settingUp) return lockTracker(tracker, freeLock(view))
-  resetLock(tracker)
+  // The hands take over at once, so play goes on: a search would wait for the detector to look for `handsOnlyAfterMs`,
+  // and it rests through every pitch. The caption says the object was lost, and that the hands will do meanwhile.
+  lockTracker(tracker, freeLock(view))
   notify(tracker, 'lost')
 }
 
@@ -880,17 +894,26 @@ export function swingBand(tracker: SwingTracker, view: TrackerView | null): Box 
 
 /**
  * What the camera panel marks of the held object (image units): a locked object's box (with what the detector took it
- * for), or while the tracker looks for one, the best candidate the detector lately found next to the hands and how far
- * its lock has come by `time` (0..1). Both move with the hands between detector runs. Null with neither, as in free
- * mode with nothing found.
+ * for), or while the tracker marks what it looks for (marksCandidate), the best candidate the detector lately found
+ * next to the hands and how far its lock has come by `time` (0..1). Both move with the hands between detector runs.
+ * Null with neither, as in free mode with nothing found or off the setup step.
  */
 export type ObjectMark = { box: Box; label: HeldObjectLabel | null; locked: boolean; progress: number }
 
 export function objectMark(tracker: SwingTracker, time: number): ObjectMark | null {
   const { lock, view, candidate } = tracker
-  if (isLookingForObject(tracker)) return candidate && candidateMark(tracker, candidate, time)
+  if (marksCandidate(tracker)) return candidate && candidateMark(tracker, candidate, time)
   if (!lock || lock.kind === 'free') return null
   return { box: view ? currentBox(lock, view.grip) : lock.box, label: lock.label, locked: true, progress: 1 }
+}
+
+/**
+ * Whether the camera panel marks what the detector finds by the hands: while searching, or in free mode on the setup
+ * step. In practice and the run the visitor watches the pitch, and what the detector glimpses by empty hands now and
+ * then would only flash on the picture; a real object shows once it locks again.
+ */
+export function marksCandidate(tracker: SwingTracker) {
+  return tracker.state === 'searching' || (tracker.settingUp && standsInForObject(tracker))
 }
 
 export function candidateMark(tracker: SwingTracker, candidate: Candidate, time: number): ObjectMark {

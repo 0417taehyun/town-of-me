@@ -190,10 +190,16 @@ the held object is locked, loaded behind the body on the batting side, and swept
 things a visitor might hold, never a person) once enough sightings agree, or one they tap on the camera picture, and
 lets a detected one go after enough misses while they stand still. When nothing has locked after about three seconds of
 the detector looking, and nothing is by the hands, `swingTracker.ts` plays free mode from the next moment the hands are
-still (while the visitor sets up, a real object that locks later still takes over, and one lost then hands back to free
-mode at once, so a stance held through it goes on). The detector waits until the computer is timed, then runs about 9
-times a second while looking for an object and 4 once locked, and rests from each windup until the pitch's ball is
-down (the cadence is `heldObject.ts`'s, the pause the page's, since both follow the tracker and the derby rather than
+still. On every step a real object that locks later still takes over, and one lost hands back to free mode at once,
+its caption saying so, so play goes on with the hands: the design doc has a lost lock search again, which waits those
+three seconds of looking while the detector rests through every pitch, so a pitch or two could not be swung at. Free
+mode follows where the wrists meet, so a visitor who held the object in one hand swings (and holds a stance) with the
+hands together until it locks again. The detector waits until the computer is timed, then runs about 9 times a second
+while looking for an object (searching, in free mode on the setup step, or from a sighting by the hands until a lock
+window passes without another, so a detector that misses now and then still locks it), 4 to keep a detected one fresh,
+once a second in free mode otherwise, since each run holds up the pose frames for some 40–60 ms, and never for a tapped
+one (the design doc has only the 9 and the 4). It rests from each windup until the pitch's ball is down (the cadence is
+the tracker's, `objectDetectionInterval`, the pause the page's, since both follow the tracker and the derby rather than
 the camera).
 `swingTracker.ts` follows the grip against the shoulders of frontal frames only (a turned torso narrows them), arms on a
 load, and fires at the interpolated midline crossing once the sweep is fast and long enough, the head
@@ -212,12 +218,13 @@ frame rate; nothing is stored). `deviceGate.ts` names why the camera game cannot
 or failed; tracking could not start), which the page shows with another try; a computer too slow
 to track is blocked like a phone. `cameraTracking.ts` runs the camera for the page, loading the pose task and the object
 detector while the browser asks for the camera, and draws each frame mirrored with the upper body on the camera panel's
-canvas (`ui/cameraOverlay.ts`) with the object it marks: a found one's box, name, and lock progress, or a locked one's
-box. It reads swings and their cues on the same frames and hands each to the page the moment it is seen, so React
-hears only status changes, whether the camera sees the visitor, and the tracker's two- or three-word caption: where
-the tracker is, held
-at least 0.7 s so it never flickers, or at once what just happened (a lock, a swing, a sweep that was not one). Once the
-camera is off, the motion sampler's last picture and the tracked body are wiped along with the panel's.
+canvas (`ui/cameraOverlay.ts`) with the object it marks: a found one's box, name, and lock progress (while searching,
+or in free mode on the setup step; in play a glimpse by empty hands would only flash), or a locked one's box. It reads
+swings and their cues on the same frames and hands each to the page the moment it is seen, so React hears only
+status changes, whether the camera sees the visitor, and the tracker's two- or three-word caption: where the tracker
+is, held at least 0.7 s so it never flickers, or at once what just happened (a lock, a lost object, a swing, a sweep
+that was not one). Once the camera is off, the motion sampler's last picture and the tracked body are wiped along with
+the panel's.
 
 ### The `/baseball` page
 

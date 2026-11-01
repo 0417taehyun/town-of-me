@@ -421,26 +421,29 @@ describe('the camera swing tracker', () => {
     ])
   })
 
-  it('takes a real object found later in place of free mode while the visitor sets up, and keeps the stance', () => {
-    const settingUp = camera()
-    settingUp.tracker.settingUp = true
-    goFree(settingUp)
-    expect([settingUp.tracker.lock?.kind, settingUp.tracker.state]).toEqual(['free', 'loaded'])
-    hold(settingUp, { offset: LOAD }, 12, { detector: 'bottle' })
-    expect(settingUp.tracker.lock).toMatchObject({ kind: 'detected', label: 'bottle' })
-    expect(settingUp.tracker.state).toBe('loaded')
-    // Lost while the visitor holds the stance still: their hands take over at once, and the stance never breaks.
-    const states = new Set<SwingTracker['state']>()
-    Array.from({ length: framesFor(HELD_OBJECT_RULES.lostAfterMs) + 12 }, () => {
-      step(settingUp, { offset: LOAD }, { detector: 'nothing' })
-      states.add(settingUp.tracker.state)
+  it('takes a real object found later in place of free mode, and hands a lost one back to it at once, on every step', () => {
+    ;[true, false].forEach((settingUp) => {
+      const run = camera()
+      run.tracker.settingUp = settingUp
+      goFree(run)
+      expect([run.tracker.lock?.kind, run.tracker.state]).toEqual(['free', 'loaded'])
+      hold(run, { offset: LOAD }, 12, { detector: 'bottle' })
+      expect(run.tracker.lock).toMatchObject({ kind: 'detected', label: 'bottle' })
+      expect(run.tracker.state).toBe('loaded')
+      // Lost while the visitor holds still between pitches: their hands take over on the very run that lets it go,
+      // with no search for a new one, so the load (and a stance held with it) never breaks, and the caption says so.
+      const seen = new Set<string>()
+      const captionsBefore = run.captions.length
+      Array.from({ length: framesFor(HELD_OBJECT_RULES.lostAfterMs) + 12 }, () => {
+        step(run, { offset: LOAD }, { detector: 'nothing' })
+        seen.add(`${run.tracker.lock?.kind} ${run.tracker.state}`)
+      })
+      expect([...seen]).toEqual(['detected loaded', 'free loaded'])
+      expect(run.captions.slice(captionsBefore)).toContain('lost')
+      // So the next pitch, which the detector rests through, is swung at.
+      sweepAcross(run, LOAD, 0.7, 0.2)
+      expect(run.swings).toHaveLength(1)
     })
-    expect(settingUp.tracker.lock?.kind).toBe('free')
-    expect([...states]).toEqual(['loaded'])
-    const playing = camera()
-    goFree(playing)
-    hold(playing, { offset: LOAD }, 12, { detector: 'bottle' })
-    expect(playing.tracker.lock?.kind).toBe('free')
   })
 
   it('marks what the detector finds by the hands with its lock’s progress, then the locked object solid', () => {
@@ -459,13 +462,21 @@ describe('the camera swing tracker', () => {
     hold(resting, { offset: LOAD }, 3, { detector: 'bottle' })
     hold(resting, { offset: LOAD }, framesFor(HELD_OBJECT_RULES.candidateFreshMs) + 1)
     expect(objectMark(resting.tracker, resting.time)).toBeNull()
-    // In free mode there is nothing to mark, unless the visitor is setting up and something shows by the hands.
+    // On the setup step free mode marks nothing until something shows by the hands, and only while runs keep seeing it.
     const free = camera()
+    free.tracker.settingUp = true
     goFree(free)
     expect(objectMark(free.tracker, free.time)).toBeNull()
-    free.tracker.settingUp = true
     hold(free, { offset: LOAD }, 3, { detector: 'bottle' })
     expect(objectMark(free.tracker, free.time)).toMatchObject({ label: 'bottle', locked: false })
+    hold(free, { offset: LOAD }, framesFor(HELD_OBJECT_RULES.candidateFreshMs) + 1)
+    expect(objectMark(free.tracker, free.time)).toBeNull()
+    // Off the setup step, only once it locks: a glimpse by empty hands between pitches would only flash.
+    const playing = camera()
+    goFree(playing)
+    hold(playing, { offset: LOAD }, 3, { detector: 'bottle' })
+    expect(playing.tracker.candidate).toMatchObject({ label: 'bottle' })
+    expect(objectMark(playing.tracker, playing.time)).toBeNull()
   })
 
   it('cues a swing as a fast sweep closes on the midline, reports it on the crossing frame, and cues a check', () => {

@@ -18,7 +18,7 @@ import type { BattingSide } from './game/field'
 import type { RealTimeSwing, RealTimeSwingCue } from './stage/stageRun'
 import { clearCameraView, drawCameraView } from './ui/cameraOverlay'
 import { type CameraInput, type CameraStopReason, startCamera } from './vision/cameraInput'
-import { type Detection, type HeldObjectLabel, objectDetectionDue, objectDetections } from './vision/heldObject'
+import { type Detection, type HeldObjectLabel, objectDetections } from './vision/heldObject'
 import { createMotionEnergy, type MotionEnergySampler } from './vision/motionEnergy'
 import type { FrameTiming } from './vision/performanceTier'
 import type { Point } from './vision/poseLandmarks'
@@ -38,6 +38,7 @@ import {
   isLookingForObject,
   lockByHand,
   nextCaption,
+  objectDetectionInterval,
   objectMark,
   setTrackerSide,
   type SwingCue,
@@ -228,9 +229,9 @@ export function readSwingFrame(
 }
 
 /**
- * The held objects on `video`'s frame at `nowMs` when the detector is due; null when it does not run. While the tracker
- * looks for an object, a detector not at hand (still loading, failed, or being rebuilt) finds nothing, so the search
- * still runs out to free mode.
+ * The held objects on `video`'s frame at `nowMs` when the detector is due (objectDetectionInterval); null when it does
+ * not run. While the tracker looks for an object, a detector not at hand (still loading, failed, or being rebuilt)
+ * finds nothing, so the search still runs out to free mode.
  */
 export function detectObjects(
   reading: SwingReading,
@@ -238,12 +239,12 @@ export function detectObjects(
   video: HTMLVideoElement,
   objects: ObjectDetector | null,
 ): Detection[] | null {
-  const looking = isLookingForObject(reading.tracker)
-  if (!objectDetectionDue(looking, reading.objectsRanAt, nowMs)) return null
+  const interval = objectDetectionInterval(reading.tracker, nowMs)
+  if (interval === null || nowMs - reading.objectsRanAt < interval) return null
   reading.objectsRanAt = nowMs
   const result = objects?.detect(video, nowMs) ?? null
   if (result) return objectDetections(result, video.videoWidth, video.videoHeight)
-  return looking ? [] : null
+  return isLookingForObject(reading.tracker) ? [] : null
 }
 
 /** A tracked swing for the stage: the camera's, on the clock of the frames it was seen in (performance.now() ms). */
@@ -269,7 +270,7 @@ export type CameraTrackingOptions = {
   /** Hears the moment the camera sees the visitor begin a swing, or end one without a swing, for the batter's look. */
   onSwingCue: (cue: RealTimeSwingCue) => void
   stance: StanceWatch
-  /** Whether the visitor is on the setup step, where a real object that locks replaces free mode. */
+  /** Whether the visitor is on the setup step, where free mode looks for a real object as often as a search does. */
   settingUp: boolean
   /** What the camera panel calls each object it marks, in the visitor's language. */
   objectNames: Record<HeldObjectLabel, string>

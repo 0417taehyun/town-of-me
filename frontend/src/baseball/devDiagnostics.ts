@@ -468,14 +468,14 @@ export function frameLines(diagnostics: Diagnostics, latest: FrameNote, now: num
   const camera = cameraSummary(diagnostics.frames, latest.handledAt)
   const sinceMs = now - latest.handledAt
   const stopped = sinceMs > DIAGNOSTICS_WINDOWS.summaryMs ? ` · stopped ${numberText(sinceMs / 1000)} s ago` : ''
-  const { searching, locked } = OBJECT_DETECTION_INTERVAL_MS
+  const { searching, locked, handsOnly } = OBJECT_DETECTION_INTERVAL_MS
   const objects =
     camera.objectsPerSecond > 0
       ? `${numberText(camera.objectsMs, 1)} ms × ${numberText(camera.objectsPerSecond, 1)}/s`
       : 'resting'
   return [
     `camera  ${numberText(camera.fps, 1)} fps · pose ${numberText(camera.poseMs, 1)} ms · lag ${numberText(camera.latencyMs)} ms${stopped}`,
-    `objects ${objects} (due every ${searching}/${locked} ms)`,
+    `objects ${objects} (due every ${searching}/${locked}/${handsOnly} ms)`,
     `tracker ${latest.state} · ${latest.reason ?? '–'}`,
     gripLine(latest),
     lockLine(latest),

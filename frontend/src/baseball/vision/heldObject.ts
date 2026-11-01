@@ -14,9 +14,9 @@ import {
 // enough sightings agree and then trusted; none at all in free mode, which a visitor whose object the detector cannot
 // find plays (as a tap on the camera picture can point one out by hand). Detectors lose thin, blurred objects
 // mid-swing, so a swing is judged from the pose and the lock's geometry (swingTracker.ts), never from a detection
-// during it; the detector only keeps the lock fresh between swings and lets it go once the object is gone. Everything
-// is in the raw, unmirrored image with x scaled by its aspect ratio (poseLandmarks.ts); lengths are in the body's
-// shoulder widths.
+// during it; the detector only keeps the lock fresh between swings and lets it go once the object is gone, when free
+// mode takes over until a real object locks again. Everything is in the raw, unmirrored image with x scaled by its
+// aspect ratio (poseLandmarks.ts); lengths are in the body's shoulder widths.
 
 /** COCO labels a visitor might plausibly swing or hold. A person is never the held object. */
 export const HELD_OBJECT_LABELS = [
@@ -70,7 +70,10 @@ export const HELD_OBJECT_RULES = {
    * still visitor plays free (swingTracker.ts handsOnlyDue).
    */
   handsOnlyAfterMs: 3000,
-  /** What the detector found by the hands, unseen by any run for this long (it rests through a pitch), is gone. */
+  /**
+   * What the detector found by the hands, unseen by any run for this long (it rests through a pitch, and runs seldom in
+   * free mode), is gone, so its box never stays marked where nothing has been seen since.
+   */
   candidateFreshMs: 300,
   /** Wrists this close together hold the object together. */
   twoHands: 0.6,
@@ -87,8 +90,11 @@ export const HELD_OBJECT_RULES = {
   refreshWeight: 0.3,
 }
 
-/** How long (ms) the object detector waits between runs: briefly while looking for an object, longer once locked. */
-export const OBJECT_DETECTION_INTERVAL_MS = { searching: 110, locked: 250 }
+/**
+ * How long (ms) the object detector waits between runs: briefly while looking for an object, longer to keep a locked
+ * one fresh, and longest in free mode with nothing by the hands (swingTracker.ts objectDetectionInterval).
+ */
+export const OBJECT_DETECTION_INTERVAL_MS = { searching: 110, locked: 250, handsOnly: 1000 }
 
 /** One object the detector found: what it is, how sure the detector is, and its box as shares of the image. */
 export type Detection = { label: HeldObjectLabel; score: number; box: Box }
@@ -142,12 +148,6 @@ export function heldDetection(
       box: { x: box.originX / width, y: box.originY / height, width: box.width / width, height: box.height / height },
     },
   ]
-}
-
-/** Whether the detector runs on a frame at `nowMs`, having last run at `lastRunMs`, while `searching` for an object. */
-export function objectDetectionDue(searching: boolean, lastRunMs: number, nowMs: number) {
-  const interval = searching ? OBJECT_DETECTION_INTERVAL_MS.searching : OBJECT_DETECTION_INTERVAL_MS.locked
-  return nowMs - lastRunMs >= interval
 }
 
 export function toImageBox(box: Box, aspect: number): Box {
@@ -233,6 +233,11 @@ export function lockProgress(search: LockSearch, box: Box, time: number) {
 
 export function isLockedBy(search: LockSearch) {
   return search.progress >= HELD_OBJECT_RULES.lockHits
+}
+
+/** Whether `search` still has a sighting within the lock window at `time`, so a lock may yet come of it. */
+export function isLockUnderWay(search: LockSearch, time: number) {
+  return search.sightings.some((sighting) => time - sighting.time <= HELD_OBJECT_RULES.lockWindowMs)
 }
 
 /**
