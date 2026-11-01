@@ -53,7 +53,10 @@ import {
 // not been tuned against a webcam in this app yet.
 
 export const SWING_RULES = {
-  /** Grip speed (smoothed) under which the hands count as still: to lock an object, and for the noise baseline. */
+  /**
+   * Grip speed (smoothed) under which the hands count as still: to lock an object, for the noise baseline, and (the
+   * peak) for a failed sweep to be no swing tried, which the caption does not coach (abortSweep).
+   */
   still: 2.5,
   speedSmoothing: 0.4,
   /** The frontal width is this percentile of the last `frameSamples` widths; frames this share of it are frontal. */
@@ -89,11 +92,13 @@ export const SWING_RULES = {
   predictedCrossingCapMs: 300,
   /**
    * A sweep closing on the midline at `startSpeed` or faster, to cross it within `startHorizonMs`, cues the batter's
-   * swing (SwingCue). Replayed, the drafts' real webcam log cues 6 of its 11 swings a frame or more before they are
-   * reported, closing at 9–17 SW/s (the rest cross on their first fast frame), and 4 sweeps that were no swing in a
-   * minute of moving about, which the batter checks.
+   * swing (SwingCue). Replayed, the drafts' real webcam log cues 8 of its 10 swings a frame or more before they are
+   * reported, at 6.8–26 SW/s (of the others, one crosses on its first frame out of the load, one closes at 4.6 SW/s),
+   * and in its minute 4 sweeps of the hands moving about, none of the visitor standing still, which the batter checks.
+   * Slower, it cues no more swings, only more sweeps; a longer horizon cues one or two swings 33–48 ms sooner, guessing
+   * their crossing up to 115 ms late, for a sweep more: out of the load, swings close as slowly as hands moving about.
    */
-  startSpeed: 8,
+  startSpeed: 6,
   startHorizonMs: 100,
   /** The band must change `energyRatio` times its resting noise (at least `energyFloor`) over `energyArea` of it. */
   energyRatio: 2,
@@ -673,11 +678,15 @@ export function cueSwingStart(tracker: SwingTracker, sweep: Sweep, time: number)
 
 /**
  * Whether `sweep` has begun a swing, its grip due to cross the midline in `untilCrossingMs` (or past it): toward the
- * batting side, closing at `startSpeed` or faster to cross within `startHorizonMs`, and the head staying put.
+ * batting side, closing at `startSpeed` or faster since the last frame to cross within `startHorizonMs`, and the head
+ * staying put.
  */
 export function beginsSwing(tracker: SwingTracker, sweep: Sweep, untilCrossingMs: number) {
   const { startSpeed, startHorizonMs } = SWING_RULES
-  const closing = -sweep.velocity >= startSpeed && untilCrossingMs <= startHorizonMs
+  // The grip's own speed is none across a change of what it is made of (trackMotion), so the jump a wrist blinking in or
+  // out of a two-hand grip makes, between the hands' middle and one wrist, never closes on the midline.
+  const closingSpeed = Math.min(-sweep.velocity, tracker.speed)
+  const closing = closingSpeed >= startSpeed && untilCrossingMs <= startHorizonMs
   return sweep.arm.side === tracker.side && closing && !movedWithHands(sweep)
 }
 
@@ -748,8 +757,10 @@ export const SWEEP_FAILURE_REASONS = {
 
 /**
  * Ends a sweep that is not a swing. One that never left the load zone is wobble: the load goes on, as of this frame.
- * One the other way is usually the bat coming back to the load, so it says nothing; one toward the batting side says
- * what to change, and goes on toward the far side like a swing.
+ * One the other way is usually the bat coming back to the load, so it says nothing; one toward the batting side goes on
+ * toward the far side like a swing, and says what to change unless the hands never moved faster than `still`: then no
+ * swing was tried, only a drift, or a wrist blinking out of a grip held apart, which jumps it across the midline at no
+ * speed (trackMotion).
  */
 export function abortSweep(tracker: SwingTracker, sweep: Sweep) {
   if (!leftLoadZone(sweep)) {
@@ -759,6 +770,7 @@ export function abortSweep(tracker: SwingTracker, sweep: Sweep) {
   disarm(tracker)
   if (sweep.arm.side !== tracker.side) return
   tracker.followingThrough = true
+  if (sweep.peak < SWING_RULES.still) return
   notify(tracker, SWEEP_FAILURE_REASONS[sweepFailures(tracker, sweep)[0] ?? 'cross'])
 }
 

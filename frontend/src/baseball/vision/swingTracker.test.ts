@@ -13,6 +13,7 @@ import {
   nextCaption,
   notify,
   objectMark,
+  SWEEP_FAILURE_REASONS,
   SWING_RULES,
   type SwingCue,
   type SwingTracker,
@@ -496,6 +497,61 @@ describe('the camera swing tracker', () => {
     hold(quiet, { offset: 0.7 }, 20)
     sweepAcross(quiet, 0.7, LOAD, 0.2)
     expect(quiet.heard).toEqual([])
+  })
+
+  it('cues a swing as slow as the webcam log’s slower real ones, but not the hands moving about', () => {
+    // Straight across from deep behind the body at 6.5 SW/s: cued frames before it is reported.
+    const swung = camera()
+    lockAndLoad(swung, -1)
+    moveStraight(swung, -1, 0.3, 6)
+    const [started, reported] = swung.heard
+    expect(started.heard).toMatchObject({ kind: 'started' })
+    expect(reported.heard).toBe(swung.swings[0])
+    expect(reported.at - started.at).toBeGreaterThan(FRAME_MS)
+    // Toward the midline at 4.5 SW/s, as the log's sweeps that were no swing go, and back to the load: nothing begun.
+    const fidgeting = camera()
+    lockAndLoad(fidgeting, -1)
+    moveStraight(fidgeting, -1, -0.4, 4)
+    moveStraight(fidgeting, -0.4, -1, 4)
+    hold(fidgeting, { offset: -1 }, 10)
+    expect(fidgeting.heard).toEqual([])
+    // Stepped out of the load, then dropped fast, as hands relaxing between pitches go: fast, but not toward the midline.
+    const relaxing = camera()
+    lockAndLoad(relaxing, -1)
+    step(relaxing, { offset: -0.85 })
+    ;[0.5, 1].forEach((drop) => step(relaxing, { offset: -0.85, gripY: LEVEL_Y + drop * SHOULDER_WIDTH_Y }))
+    hold(relaxing, { offset: -0.85, gripY: LEVEL_Y + SHOULDER_WIDTH_Y }, 20)
+    expect(relaxing.heard).toEqual([])
+  })
+
+  it('neither cues nor coaches a wrist blinking out of a still two-hand grip, but cues a swing seen on one wrist', () => {
+    // Hands-only mode follows the middle of both wrists. Held still apart behind the body, the deeper wrist blinks out
+    // for a frame, so the grip jumps to the other wrist, near the midline or past it, and back: the batter starts no
+    // swing, and the caption tells the visitor nothing about one.
+    const swingWords: TrackerReason[] = Object.values(SWEEP_FAILURE_REASONS)
+    ;[
+      { offset: -0.8, armsApart: 1.2 },
+      { offset: -0.6, armsApart: 1.6 },
+    ].forEach((apart) => {
+      const blinking = camera()
+      goFree(blinking)
+      hold(blinking, apart, 10)
+      Array.from({ length: 3 }, () => {
+        step(blinking, { ...apart, gripSeen: false })
+        hold(blinking, apart, 10)
+      })
+      expect(blinking.heard).toEqual([])
+      expect(blinking.captions.filter((caption) => swingWords.includes(caption))).toEqual([])
+    })
+    // A wrist hidden from before the swing on: its frames share the one wrist, and the swing is cued as usual.
+    const oneWrist = camera()
+    goFree(oneWrist)
+    hold(oneWrist, { offset: -1, gripSeen: false }, 10)
+    sweepAcross(oneWrist, -1, 0.7, 0.2, 0, () => ({ gripSeen: false }))
+    expect(oneWrist.heard.map(({ heard }) => heard)).toEqual([
+      expect.objectContaining({ kind: 'started' }),
+      oneWrist.swings[0],
+    ])
   })
 
   it('loads a left-handed batter on the picture’s right and takes only their swing toward the left', () => {
