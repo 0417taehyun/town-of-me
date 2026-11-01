@@ -93,8 +93,11 @@ export function chalkLines(): ChalkLine[] {
   return [...foulLines, ...boxes]
 }
 
+/** A swept profile's cross-section: out from the arc it is swept along, and up. */
+export type SweepProfile = readonly (readonly [out: number, up: number])[]
+
 /** The hedge's cross-section, out from the fence line and up: trimmed flat on top with rounded edges. */
-export const HEDGE_PROFILE: readonly (readonly [out: number, up: number])[] = [
+export const HEDGE_PROFILE: SweepProfile = [
   [0, 0],
   [0, FENCE_HEIGHT - 0.45],
   [0.12, FENCE_HEIGHT - 0.14],
@@ -106,43 +109,61 @@ export const HEDGE_PROFILE: readonly (readonly [out: number, up: number])[] = [
 ]
 
 /** The snow that settles on the hedge's flat top in winter. */
-export const HEDGE_SNOW_PROFILE: readonly (readonly [out: number, up: number])[] = [
+export const HEDGE_SNOW_PROFILE: SweepProfile = [
   [0.4, FENCE_HEIGHT - 0.02],
   [0.55, FENCE_HEIGHT + 0.09],
   [HEDGE_DEPTH - 0.55, FENCE_HEIGHT + 0.09],
   [HEDGE_DEPTH - 0.4, FENCE_HEIGHT - 0.02],
 ]
 
-export const WARNING_TRACK_PROFILE: readonly (readonly [out: number, up: number])[] = [
+export const WARNING_TRACK_PROFILE: SweepProfile = [
   [-WARNING_TRACK_WIDTH, FIELD_LAYERS.dirt],
   [0, FIELD_LAYERS.dirt],
 ]
 
 export const FENCE_STEPS = 120
 
-/** The spray angles a swept piece of the fence is built at, foul pole to foul pole. */
-export function fenceSprays(steps: number) {
-  return Array.from({ length: steps + 1 }, (_, step) => -FOUL_ANGLE + (2 * FOUL_ANGLE * step) / steps)
+/**
+ * Where and how finely a profile is swept: between two spray angles (around home plate, radians, plus = right field)
+ * in `steps`, its first point `radiusAt(spray)` from home. UVs are meters over `textureMeters`, the arc's run measured
+ * at `textureRadius`, so a texture tiles at about the same size all along.
+ */
+export type ArcSweep = {
+  from: number
+  to: number
+  steps: number
+  radiusAt: (spray: number) => number
+  textureRadius: number
 }
 
 /**
  * `profile` swept along the fence from one foul pole to the other, its first point on the fence line; the faces look
- * toward home plate and up. `caps` closes both ends with the profile, which must then be convex. UVs are meters over
- * `textureMeters`, so a texture tiles at the same size all along.
+ * toward home plate and up. `caps` closes both ends with the profile, which must then be convex.
  */
-export function createFenceSweep(
-  profile: readonly (readonly [out: number, up: number])[],
-  { caps = false, textureMeters = 3 } = {},
-) {
-  const sprays = fenceSprays(FENCE_STEPS)
+export function createFenceSweep(profile: SweepProfile, { caps = false, textureMeters = 3 } = {}) {
+  const arc = {
+    from: -FOUL_ANGLE,
+    to: FOUL_ANGLE,
+    steps: FENCE_STEPS,
+    radiusAt: fenceDistance,
+    textureRadius: FENCE_DISTANCE.center,
+  }
+  return createArcSweep(profile, arc, { caps, textureMeters })
+}
+
+/** `profile` swept along `arc`, its faces toward home plate and up when the profile runs out and up. */
+export function createArcSweep(profile: SweepProfile, arc: ArcSweep, { caps = false, textureMeters = 3 } = {}) {
+  const sprays = Array.from({ length: arc.steps + 1 }, (_, step) => arc.from + ((arc.to - arc.from) * step) / arc.steps)
   const along = profileDistances(profile)
   const ring = profile.length
-  const positions = sprays.flatMap((spray) => profile.flatMap(([out, up]) => sweptPoint(spray, out, up)))
-  const uvs = sprays.flatMap((spray) =>
-    along.flatMap((distance) => [(spray * FENCE_DISTANCE.center) / textureMeters, distance / textureMeters]),
+  const positions = sprays.flatMap((spray) =>
+    profile.flatMap(([out, up]) => sweptPoint(spray, arc.radiusAt(spray) + out, up)),
   )
-  const sides = Array.from({ length: FENCE_STEPS }, (_, step) => sweepQuads(step, ring)).flat()
-  const ends = caps ? [...capFan(0, ring, false), ...capFan(FENCE_STEPS * ring, ring, true)] : []
+  const uvs = sprays.flatMap((spray) =>
+    along.flatMap((distance) => [(spray * arc.textureRadius) / textureMeters, distance / textureMeters]),
+  )
+  const sides = Array.from({ length: arc.steps }, (_, step) => sweepQuads(step, ring)).flat()
+  const ends = caps ? [...capFan(0, ring, false), ...capFan(arc.steps * ring, ring, true)] : []
   const geometry = new BufferGeometry()
   geometry.setAttribute('position', new Float32BufferAttribute(positions, 3))
   geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2))
@@ -151,13 +172,13 @@ export function createFenceSweep(
   return geometry
 }
 
-export function sweptPoint(spray: number, out: number, up: number) {
-  const radius = fenceDistance(spray) + out
+/** The field point `radius` m from home plate at `spray`, `up` m high. */
+export function sweptPoint(spray: number, radius: number, up: number) {
   return [Math.sin(spray) * radius, up, -Math.cos(spray) * radius]
 }
 
 /** How far along the profile each of its points is, for the texture's second coordinate. */
-export function profileDistances(profile: readonly (readonly [number, number])[]) {
+export function profileDistances(profile: SweepProfile) {
   return profile.map((_, index) =>
     profile
       .slice(1, index + 1)

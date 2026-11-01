@@ -40,10 +40,13 @@ export function InstancedTrees({
   objects,
   seasonChange,
   reducedMotion,
+  castShadow = true,
 }: {
   objects: TownObject[]
   seasonChange: MutableRefObject<SeasonChange>
   reducedMotion: boolean
+  /** Off for trees far beyond any shadow they could cast on what the camera looks at. */
+  castShadow?: boolean
 }) {
   const trunks = useRef<InstancedMesh>(null)
   const crowns = useRef<InstancedMesh>(null)
@@ -98,7 +101,7 @@ export function InstancedTrees({
         ref={trunks}
         args={[undefined, undefined, Math.max(1, objects.length)]}
         count={objects.length}
-        castShadow
+        castShadow={castShadow}
         receiveShadow
       >
         <cylinderGeometry args={[0.28, 0.48, 2.3, 8]} />
@@ -110,7 +113,7 @@ export function InstancedTrees({
         args={[undefined, foliageMaterial, Math.max(1, objects.length)]}
         count={objects.length}
         customDepthMaterial={foliageDepthMaterial}
-        castShadow
+        castShadow={castShadow}
       >
         <sphereGeometry args={[1.75, 16, 10]} />
       </instancedMesh>
@@ -119,7 +122,7 @@ export function InstancedTrees({
         args={[undefined, foliageMaterial, Math.max(1, objects.length)]}
         count={objects.length}
         customDepthMaterial={foliageDepthMaterial}
-        castShadow
+        castShadow={castShadow}
       >
         <sphereGeometry args={[1.45, 14, 8]} />
       </instancedMesh>
@@ -127,7 +130,7 @@ export function InstancedTrees({
         ref={snowCaps}
         args={[undefined, undefined, Math.max(1, snowyTrees.length)]}
         count={snowyTrees.length}
-        castShadow
+        castShadow={castShadow}
       >
         <sphereGeometry args={[1, 16, 8]} />
         <meshStandardMaterial color="#f4fbff" roughness={1} />

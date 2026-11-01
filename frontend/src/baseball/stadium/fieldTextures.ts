@@ -51,3 +51,30 @@ export function drawLeaves(context: CanvasRenderingContext2D, size: number) {
     context.fill()
   })
 }
+
+/** Greenhouse glass: a faint tint and a glint, framed into panes, six across and three up. */
+export function drawGlass(context: CanvasRenderingContext2D, size: number) {
+  context.fillStyle = 'rgba(196, 232, 222, 0.3)'
+  context.fillRect(0, 0, size, size)
+  context.fillStyle = 'rgba(255, 255, 255, 0.28)'
+  context.beginPath()
+  context.moveTo(size * 0.16, 0)
+  context.lineTo(size * 0.35, 0)
+  context.lineTo(size * 0.12, size)
+  context.lineTo(0, size)
+  context.fill()
+  context.strokeStyle = '#fbf8f0'
+  context.lineWidth = 7
+  const columns = Array.from({ length: 7 }, (_, column) => (column / 6) * size)
+  const rows = Array.from({ length: 4 }, (_, row) => (row / 3) * size)
+  context.beginPath()
+  columns.forEach((x) => {
+    context.moveTo(x, 0)
+    context.lineTo(x, size)
+  })
+  rows.forEach((y) => {
+    context.moveTo(0, y)
+    context.lineTo(size, y)
+  })
+  context.stroke()
+}

@@ -14,12 +14,13 @@ import type { BallparkPalette } from '../../scene/venues/ballpark/ballparkThemes
 import { useVenueMaterials } from '../../scene/venues/venueMaterials'
 import type { BattingSide } from '../game/field'
 import { Dugouts } from '../stadium/Dugouts'
+import { GardenBowl } from '../stadium/GardenBowl'
 import { StadiumField } from '../stadium/StadiumField'
 import type { FreeBand } from './cameraShots'
 import { DerbyDirector } from './DerbyDirector'
 import type { RealTimeSwing, RealTimeSwingCue, StageEvent, StageRunSetup } from './stageRun'
 
-/** Petals and leaves fall from trees, and the stadium has none yet: only winter's snow falls here. */
+/** Petals and leaves fall from the town's trees; none drift from the garden's yet, so only winter's snow falls here. */
 const NO_TREES: TownObject[] = []
 /** The fog begins past the outfield hedge, so the whole field stays clear. */
 const STADIUM_FOG = { near: 130, far: 380 }
@@ -94,6 +95,12 @@ export function BaseballStage({
       <SunLight dayChange={dayChange} playerPosition={shadowFocus} editing={false} />
       <StadiumField materials={materials} seasonChange={seasonChange} />
       <Dugouts materials={materials} />
+      <GardenBowl
+        materials={materials}
+        seasonChange={seasonChange}
+        dayChange={dayChange}
+        reducedMotion={reducedMotion}
+      />
       <DerbyDirector
         run={run}
         profile={profile}
