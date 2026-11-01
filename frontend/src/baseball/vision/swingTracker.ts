@@ -745,10 +745,15 @@ export function stepSweeping(tracker: SwingTracker, view: TrackerView | null, ti
 
 /** Cues the stage, once a sweep, that it has begun a swing (SwingCue), when it closes on the midline as one does. */
 export function cueSwingStart(tracker: SwingTracker, sweep: Sweep, time: number) {
-  const crossingAtMs = sweep.crossTime ?? predictCrossing(sweep)
+  const crossingAtMs = expectedCrossing(sweep)
   if (sweep.cued || !beginsSwing(tracker, sweep, crossingAtMs - time)) return
   sweep.cued = true
   tracker.cue = { kind: 'started', crossingAtMs }
+}
+
+/** When `sweep`'s grip crosses the midline: when it did, or else when it would at its last speed (predictCrossing). */
+export function expectedCrossing(sweep: Sweep) {
+  return sweep.crossTime ?? predictCrossing(sweep)
 }
 
 /**
@@ -758,11 +763,17 @@ export function cueSwingStart(tracker: SwingTracker, sweep: Sweep, time: number)
  */
 export function beginsSwing(tracker: SwingTracker, sweep: Sweep, untilCrossingMs: number) {
   const { startSpeed, startHorizonMs } = SWING_RULES
-  // The grip's own speed is none across a change of what it is made of (trackMotion), so the jump a wrist blinking in or
-  // out of a two-hand grip makes, between the hands' middle and one wrist, never closes on the midline.
-  const closingSpeed = Math.min(-sweep.velocity, tracker.speed)
-  const closing = closingSpeed >= startSpeed && untilCrossingMs <= startHorizonMs
+  const closing = closingSpeed(tracker, sweep) >= startSpeed && untilCrossingMs <= startHorizonMs
   return sweep.arm.side === tracker.side && closing && !movedWithHands(sweep)
+}
+
+/**
+ * How fast (SW/s) `sweep`'s grip closed on the midline since the last frame. The grip's own speed is none across a
+ * change of what it is made of (trackMotion), so the jump a wrist blinking in or out of a two-hand grip makes, between
+ * the hands' middle and one wrist, never closes on the midline.
+ */
+export function closingSpeed(tracker: SwingTracker, sweep: Sweep) {
+  return Math.min(-sweep.velocity, tracker.speed)
 }
 
 /** How far (SW) the head has moved the way the sweep goes since it began; 0 unless the head shows both times. */

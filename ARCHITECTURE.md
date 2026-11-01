@@ -317,7 +317,10 @@ camera's frames hand over like tracked ones. In a dev build, D also shows `devDi
 (`ui/DiagnosticsPanel.tsx`) for tuning on a real webcam: the camera's and the vision tasks' timing, the tracker and the
 lock, each stance condition against its limit, and the last sweep from leaving the load to the stage's reaction against
 the swing rules, with the judged swing's raw error against the contact point beside its judged one, since practice's and
-a run's judging take the camera's lag out; L saves the last minute as a JSON file on this device: these numbers and, for
+a run's judging take the camera's lag out. The sweep shows its swing-start signal too: when its frame was taken and
+handled, how fast the grip closed on the midline then, and the crossing it expected, against `startSpeed` and
+`startHorizonMs` (or, if none was given, the frame it closed fastest on); a sweep that signalled the batter's start but
+never left the load zone is noted too. L saves the last minute as a JSON file on this device: these numbers and, for
 each camera frame, what the swing tracker and the stance hold read of it (the upper body's joint positions and the hips,
 what the object detector handed the tracker, the motion in the swing's band, the picture's size, the batting side, and
 the step that waited), with each pitch's release and result and each tap on the camera picture on the frames' clock;

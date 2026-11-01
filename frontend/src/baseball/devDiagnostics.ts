@@ -42,7 +42,9 @@ import {
 } from './vision/poseLandmarks'
 import type { PoseFrame } from './vision/poseLoop'
 import {
+  closingSpeed,
   energyNeeded,
+  expectedCrossing,
   type GripSource,
   leftLoadZone,
   type Side,
@@ -58,16 +60,17 @@ import { DEV_DETECTOR_SCORE, type VisionTask } from './vision/tasksVision'
 
 // Dev builds only: why the camera game did what it did on a real webcam. Every camera frame leaves a note of how fast
 // the camera and the vision tasks run, what they found, where the swing tracker and the held object are, and each
-// condition of the stance hold; each sweep toward the batting side that left the load leaves one of its timing, from
-// leaving the load through the midline crossing to the swing's report and the stage's reaction, against the swing
-// rules, or why it was no swing; each pitch's release and result, and each tap on the camera picture, leave one too. D
-// shows them in a panel (ui/DiagnosticsPanel.tsx) and L saves the last minute of notes as a JSON file on this device,
-// for tuning. A frame's note keeps what the swing tracker and the stance hold read of it (the upper body's joint
-// positions, what the object detector handed the tracker, the motion in the swing's band, the batting side, the step
-// that waited), so a saved session can be replayed through changed rules (devReplay.ts); never a picture, and nothing
-// is sent anywhere: the file stays on this computer unless the visitor hands it over. cameraTracking.ts and
-// BaseballApp.tsx reach this module only behind `import.meta.env.DEV`, so a production build leaves it out. Times are
-// performance.now() ms; lengths are shoulder widths (SW), as in vision/swingTracker.ts.
+// condition of the stance hold; each sweep toward the batting side that left the load, or signalled the batter's swing
+// before it came back to the load, leaves one of its timing, from leaving the load through the swing-start signal and
+// the midline crossing to the swing's report and the stage's reaction, against the swing rules, or why it was no swing;
+// each pitch's release and result, and each tap on the camera picture, leave one too. D shows them in a panel
+// (ui/DiagnosticsPanel.tsx) and L saves the last minute of notes as a JSON file on this device, for tuning. A frame's
+// note keeps what the swing tracker and the stance hold read of it (the upper body's joint positions, what the object
+// detector handed the tracker, the motion in the swing's band, the batting side, the step that waited), so a saved
+// session can be replayed through changed rules (devReplay.ts); never a picture, and nothing is sent anywhere: the file
+// stays on this computer unless the visitor hands it over. cameraTracking.ts and BaseballApp.tsx reach this module only
+// behind `import.meta.env.DEV`, so a production build leaves it out. Times are performance.now() ms; lengths are
+// shoulder widths (SW), as in vision/swingTracker.ts.
 
 export const DIAGNOSTICS_WINDOWS = {
   /** The camera's rates and medians are over this long (ms). */
@@ -158,18 +161,34 @@ export type FrameNote = {
 }
 
 /**
- * A sweep toward the batting side that left the load: a swing, or no swing for its `failures` (the swing rules it had
- * not met when it ended). `gripLost` says the swing was reported with the grip lost mid-sweep, so the tracker's dropout
- * rules judged it, and `crossingPredicted` that its crossing was predicted rather than seen. When it left the load and
- * crossed the midline (capture clock); when the frame that reported it was taken and handled; when the page saw it
- * end; and when the stage judged the swing, and how, with its raw timing error (ms) against the contact point, before
- * the visitor's usual timing came off: the camera's lag. `measured` is null for a swing never seen mid-sweep (made
- * between two frames, or the dev stand-in's); its `closing` is the grip's speed toward the midline on the last frame it
- * was on.
+ * A sweep's swing-start signal (vision/swingTracker.ts SwingCue), which the batter's swing follows: `signalled` says
+ * the tracker gave it, on the frame taken at `capturedAt` and handled at `handledAt`, expecting the grip to cross the
+ * midline at `crossingAt` (capture clock), closing on it at `closing` SW/s then. A sweep that gave none notes the frame
+ * it closed fastest on instead, so a session shows how near it came to `startSpeed` and `startHorizonMs`.
+ */
+export type StartNote = {
+  signalled: boolean
+  capturedAt: number
+  handledAt: number
+  crossingAt: number
+  closing: number
+}
+
+/**
+ * A sweep toward the batting side that left the load zone, or signalled a swing's start before it came back to the
+ * load (`leftLoadZone` false), so every start the batter made shows: a swing, or no swing for its `failures` (the swing
+ * rules it had not met when it ended). `gripLost` says the swing was reported with the grip lost mid-sweep, so the
+ * tracker's dropout rules judged it, and `crossingPredicted` that its crossing was predicted rather than seen. When it
+ * left the load and crossed the midline (capture clock); when the frame that reported it was taken and handled; when
+ * the page saw it end; and when the stage judged the swing, and how, with its raw timing error (ms) against the contact
+ * point, before the visitor's usual timing came off: the camera's lag. `measured` is null for a swing never seen
+ * mid-sweep (made between two frames, or the dev stand-in's); its `closing` is the grip's speed toward the midline on
+ * the last frame it was on. `start` is its swing-start signal, null for a swing never seen mid-sweep too.
  */
 export type SweepNote = {
   swing: boolean
   failures: SweepFailure[]
+  leftLoadZone: boolean
   gripLost: boolean
   crossingPredicted: boolean
   leftLoadAt: number
@@ -185,6 +204,7 @@ export type SweepNote = {
     moving: number
     closing: number
   } | null
+  start: StartNote | null
   stage: ({ at: number; rawErrorMs: number | null } & Pick<PitchResult, 'outcome' | 'timing' | 'errorMs'>) | null
 }
 
@@ -202,8 +222,11 @@ export type GameEventNote =
 /** A tap on the camera picture that asked the tracker to lock what it pointed at (`point`, image units), when heard. */
 export type TapNote = { type: 'tap'; handledAt: number; point: Point }
 
-/** The sweep the tracker is on, and its crossing as of the last frame it was on (null: not crossed yet). */
-export type FollowedSweep = { sweep: Sweep; crossedBefore: number | null }
+/**
+ * The sweep the tracker is on, its crossing as of the last frame it was on (null: not crossed yet), and its swing-start
+ * signal so far.
+ */
+export type FollowedSweep = { sweep: Sweep; crossedBefore: number | null; start: StartNote }
 
 /**
  * The notes of the last minute and the events, the camera the next note is of, the pose task's run and how long (ms)
@@ -348,7 +371,7 @@ export function diagnoseFrame(
     stance: stanceNote(hold, stance, tracker),
   })
   const sweep = sweepNote(endedSweep(diagnostics.followed, tracker), tracker, swing, frame.capturedAt, now)
-  diagnostics.followed = tracker.sweep && { sweep: tracker.sweep, crossedBefore: tracker.sweep.crossTime }
+  diagnostics.followed = followedSweep(diagnostics.followed, tracker, frame.capturedAt, now)
   if (sweep) diagnostics.sweeps.push(sweep)
   dropOlder(diagnostics.frames, now - DIAGNOSTICS_WINDOWS.logMs)
   dropOlder(diagnostics.sweeps, now - DIAGNOSTICS_WINDOWS.logMs)
@@ -484,6 +507,38 @@ export function wristsApart({ hand, view }: SwingTracker) {
   return distance(left, right) / view.width
 }
 
+/** The sweep the tracker is on after a frame taken at `capturedAt` and handled at `now`, with its start so far. */
+export function followedSweep(
+  previous: FollowedSweep | null,
+  tracker: SwingTracker,
+  capturedAt: number,
+  now: number,
+): FollowedSweep | null {
+  const { sweep } = tracker
+  if (!sweep) return null
+  const start = previous?.sweep === sweep ? previous.start : null
+  return { sweep, crossedBefore: sweep.crossTime, start: nextStartNote(start, tracker, sweep, capturedAt, now) }
+}
+
+/**
+ * `sweep`'s start note after one more frame it went on, taken at `capturedAt` and handled at `handledAt`: its signal
+ * once the tracker gave it, else this frame's if it closed fastest yet.
+ */
+export function nextStartNote(
+  previous: StartNote | null,
+  tracker: SwingTracker,
+  sweep: Sweep,
+  capturedAt: number,
+  handledAt: number,
+): StartNote {
+  if (previous?.signalled) return previous
+  const started = tracker.cue?.kind === 'started' ? tracker.cue : null
+  const closing = closingSpeed(tracker, sweep)
+  if (!started && previous && previous.closing >= closing) return previous
+  const crossingAt = started?.crossingAtMs ?? expectedCrossing(sweep)
+  return { signalled: started !== null, capturedAt, handledAt, crossingAt, closing }
+}
+
 /** The sweep the tracker was on until this frame, as it ended (the tracker leaves it as it was then), if it ended. */
 export function endedSweep(followed: FollowedSweep | null, tracker: SwingTracker) {
   return followed && followed.sweep !== tracker.sweep ? followed : null
@@ -491,7 +546,8 @@ export function endedSweep(followed: FollowedSweep | null, tracker: SwingTracker
 
 /**
  * The note for a frame taken at `capturedAt` and handled at `now` that ended a sweep or reported a swing; null when
- * it did neither, and for a sweep toward the far side (the bat coming back) or one that never left the load (wobble).
+ * it did neither, and for a sweep toward the far side (the bat coming back) or one that never left the load and never
+ * signalled a swing's start (wobble).
  */
 export function sweepNote(
   followed: FollowedSweep | null,
@@ -501,12 +557,13 @@ export function sweepNote(
   now: number,
 ): SweepNote | null {
   const ended = followed?.sweep ?? null
-  if (!swing && !(ended && leftTheLoad(ended, tracker))) return null
+  if (!swing && !(ended && isNotedSweep(ended, tracker))) return null
   // A swing reported on a frame without the grip is the dropout rules' (vision/swingTracker.ts sweepDropout).
   const gripLost = swing !== null && ended !== null && gripUnseen(tracker)
   return {
     swing: swing !== null,
     failures: ended && !swing ? sweepFailures(tracker, ended) : [],
+    leftLoadZone: ended === null || leftLoadZone(ended),
     gripLost,
     crossingPredicted: gripLost && followed?.crossedBefore === null,
     leftLoadAt: ended?.startedAt ?? swing?.startedAtRealMs ?? capturedAt,
@@ -522,13 +579,17 @@ export function sweepNote(
       moving: ended.moving,
       closing: -ended.velocity,
     },
+    start: followed?.start ?? null,
     stage: null,
   }
 }
 
-/** Whether `sweep` went toward the batting side and left the load zone on its way. */
-export function leftTheLoad(sweep: Sweep, tracker: SwingTracker) {
-  return sweep.arm.side === tracker.side && leftLoadZone(sweep)
+/**
+ * Whether `sweep` went toward the batting side and left the load zone on its way, or signalled a swing's start, which
+ * the batter followed, before it came back to the load.
+ */
+export function isNotedSweep(sweep: Sweep, tracker: SwingTracker) {
+  return sweep.arm.side === tracker.side && (leftLoadZone(sweep) || sweep.cued)
 }
 
 /** Whether the tracker lost the grip on this frame: no wrist seen, or the last grip held in its place. */
@@ -648,6 +709,7 @@ export function sweepLines(sweep: SweepNote | null, now: number) {
   return [
     `sweep   ${sweepVerdict(sweep)} · ${numberText((now - sweep.handledAt) / 1000, 1)} s ago`,
     `  left load ${signedMs(sweep.leftLoadAt - zero)}`,
+    `  signal    ${signalText(sweep, zero)}`,
     `  crossed   ${crossedText(sweep)}`,
     `  reported  ${reportedText(sweep, zero)}`,
     `  stage     ${stageText(sweep, zero)}`,
@@ -655,10 +717,26 @@ export function sweepLines(sweep: SweepNote | null, now: number) {
   ]
 }
 
-export function sweepVerdict({ swing, failures, gripLost, crossingPredicted }: SweepNote) {
-  if (!swing) return `no swing: ${failures.join(', ')}`
+export function sweepVerdict({ swing, failures, leftLoadZone, gripLost, crossingPredicted }: SweepNote) {
+  if (!swing) return `no swing${leftLoadZone ? '' : ', never left the load zone'}: ${failures.join(', ')}`
   if (!gripLost) return 'swing'
   return `swing (grip lost mid-sweep: dropout rules${crossingPredicted ? ', crossing predicted' : ''})`
+}
+
+/**
+ * The swing-start signal against `startSpeed` and `startHorizonMs`: when the frame that gave it was taken and handled
+ * (from `zero`), how fast the grip closed then, and the crossing it expected, from then and from `zero`; for a sweep
+ * that gave none, the same of the frame it closed fastest on.
+ */
+export function signalText({ start }: SweepNote, zero: number) {
+  if (!start) return '– (not seen mid-sweep)'
+  const { startSpeed, startHorizonMs } = SWING_RULES
+  const { signalled, capturedAt, handledAt, crossingAt, closing } = start
+  const when = signalled
+    ? `${signedMs(capturedAt - zero)} capture · ${signedMs(handledAt - zero)} now`
+    : `none · fastest at ${signedMs(capturedAt - zero)} capture`
+  const crossing = `crossing expected ${signedMs(crossingAt - capturedAt)} after it (≤${startHorizonMs}), at ${signedMs(crossingAt - zero)}`
+  return `${when} · closing ${numberText(closing, 1)} SW/s (≥${startSpeed}) · ${crossing}`
 }
 
 export function crossedText({ crossedAt, leftLoadAt, crossingPredicted }: SweepNote) {
@@ -744,8 +822,12 @@ export function diagnosticsLog(diagnostics: Diagnostics, savedAt: Date) {
       'are performance.now() ms (capturedAt: when the camera took the frame; handledAt: when the page handled it or ' +
       "heard the event; a release's contactAt: when its ball reaches the contact point). " +
       'Lengths are shoulder widths (SW): grip depth behind the body midline toward the batting side, grip drop below ' +
-      "the shoulders. A sweep's stage.errorMs is its timing error as judged, after the visitor's usual timing came " +
-      'off; stage.rawErrorMs is against the contact point itself.',
+      "the shoulders. A sweep's start is the swing-start signal the batter's swing follows (signalled: the tracker " +
+      'gave it on the frame taken at capturedAt and handled at handledAt, expecting the grip to cross the midline at ' +
+      'crossingAt, closing on it at closing SW/s then; otherwise the same of the frame it closed fastest on; null when ' +
+      'never seen mid-sweep), against rules.swing.startSpeed and startHorizonMs; a sweep that signalled one without ' +
+      "leaving the load zone is kept too, with leftLoadZone false. A sweep's stage.errorMs is its timing error as judged, " +
+      "after the visitor's usual timing came off; stage.rawErrorMs is against the contact point itself.",
     savedAt: savedAt.toISOString(),
     video: diagnostics.video,
     rules: {

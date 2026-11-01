@@ -109,6 +109,25 @@ function sweepEnds(
   endSweep(diagnostics, tracker, fromMs + 66, swing)
 }
 
+/**
+ * Follows `sweep` on a frame taken at `atMs`, its grip closing on the midline at `closing` SW/s from 0.5 SW out, which
+ * signals the swing's start expected to cross at `crossingAtMs`, unless that is null.
+ */
+function closingFrame(
+  diagnostics: Diagnostics,
+  tracker: SwingTracker,
+  sweep: Sweep,
+  atMs: number,
+  closing: number,
+  crossingAtMs: number | null = null,
+) {
+  Object.assign(sweep, { velocity: -closing, previousDepth: 0.5, previousTime: atMs })
+  sweep.cued = sweep.cued || crossingAtMs !== null
+  Object.assign(tracker, { view: SEEN_GRIP, sweep, speed: closing })
+  tracker.cue = crossingAtMs === null ? null : { kind: 'started', crossingAtMs }
+  noteFrame(diagnostics, tracker, atMs)
+}
+
 /** A frame note handled at `handledAt` with the pose and the object detector's times. */
 function timedNote(handledAt: number, poseMs: number, objectsMs: number | null): FrameNote {
   return {
@@ -211,6 +230,48 @@ describe('the camera diagnostics', () => {
     expect(diagnostics.sweeps.map((sweep) => [sweep.swing, sweep.failures])).toEqual([
       [false, ['speed', 'body']],
       [false, ['cross']],
+    ])
+  })
+
+  it('notes when each sweep signalled the swing start, as the stage heard it, even one that never left the load', () => {
+    const diagnostics = createDiagnostics()
+    const tracker = createSwingTracker('right')
+    // A swing: closing fast on a frame that signals nothing (the head moving with the hands, say), then slower on the
+    // one that signals its start, then faster still.
+    const swing = sweepFrom(-1, { startedAt: 900 })
+    closingFrame(diagnostics, tracker, swing, 1000, 10)
+    closingFrame(diagnostics, tracker, swing, 1033, 9, 1070)
+    closingFrame(diagnostics, tracker, swing, 1066, 12)
+    endSweep(diagnostics, tracker, 1099, swingAt(1075))
+    // A start the batter made that the grip took back before it left the load.
+    const checked = sweepFrom(-1, { startedAt: 1900, minimumDepth: 0.3 })
+    closingFrame(diagnostics, tracker, checked, 2000, 7, 2060)
+    endSweep(diagnostics, tracker, 2033, null)
+    expect(diagnostics.sweeps.map(({ swing, leftLoadZone, start }) => ({ swing, leftLoadZone, start }))).toEqual([
+      {
+        swing: true,
+        leftLoadZone: true,
+        start: { signalled: true, capturedAt: 1033, handledAt: 1033 + HANDLING_MS, crossingAt: 1070, closing: 9 },
+      },
+      {
+        swing: false,
+        leftLoadZone: false,
+        start: { signalled: true, capturedAt: 2000, handledAt: 2000 + HANDLING_MS, crossingAt: 2060, closing: 7 },
+      },
+    ])
+  })
+
+  it('notes the fastest a sweep that signalled no start closed on the midline, and the crossing it expected then', () => {
+    const diagnostics = createDiagnostics()
+    const tracker = createSwingTracker('right')
+    const sweep = sweepFrom(-1, { startedAt: 900 })
+    closingFrame(diagnostics, tracker, sweep, 1000, 2)
+    closingFrame(diagnostics, tracker, sweep, 1033, 4)
+    closingFrame(diagnostics, tracker, sweep, 1066, 3)
+    endSweep(diagnostics, tracker, 1099, null)
+    // 0.5 SW out at 4 SW/s: 125 ms to the midline.
+    expect(diagnostics.sweeps.map((note) => note.start)).toEqual([
+      { signalled: false, capturedAt: 1033, handledAt: 1033 + HANDLING_MS, crossingAt: 1033 + 125, closing: 4 },
     ])
   })
 
