@@ -325,7 +325,9 @@ export function DerbyScreen({
   const panelSizeLabel =
     panelSize === 'off' && panelShown ? cameraCopy.hiddenWhileSearching : cameraCopy.panelSizes[panelSize]
   const feedback =
-    step === 'practice' && run ? shownPracticeFeedback(judgedResult(hud), run.plan.rules.difficulty) : null
+    step === 'practice' && run
+      ? shownPracticeFeedback(judgedResult(hud), run.plan.rules.difficulty, flow.practice)
+      : null
 
   useEffect(() => () => sounds.dispose(), [sounds])
   useEffect(() => (cameraOn ? keepScreenOn() : undefined), [cameraOn])

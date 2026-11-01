@@ -31,7 +31,7 @@ export function calibrate(practice: readonly PracticeSample[]): Calibration {
   return { offsetMs: timingOffset(valid), peakSpeed: peakSpeed(valid) }
 }
 
-export function isValidPracticeSwing(sample: PracticeSample) {
+export function isValidPracticeSwing(sample: Pick<PracticeSample, 'errorMs'>) {
   return Math.abs(sample.errorMs) <= CALIBRATION_RULES.validErrorMs
 }
 

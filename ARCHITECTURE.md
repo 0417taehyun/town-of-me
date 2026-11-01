@@ -240,7 +240,10 @@ when a step or the line changes, and while a step waits the camera panel's chip 
 tracker's directions to swing (`ui/derbyCues.ts seenCameraState`). Practice pitches the game core's practice schedule at the practice pace as a derby of its own, with no
 calibration, so its swings' errors are against the contact point, and it takes swings as late as the calibration still
 counts one, so a slow camera's late swings still teach it. It tells each swing only a bit early, good, or a bit late
-(its own error against the contact point, within the difficulty's GOOD window or not), and its swings calibrate every
+against the visitor's own usual timing, as a run's judge does (`shownPracticeFeedback`): from the third valid swing on,
+its error less the calibration's offset from the swings so far, this one included (the median of the valid ones),
+within the difficulty's GOOD window or not; the first two valid swings are good, as there is no usual timing yet.
+Against the contact point alone a webcam's steady delay would call nearly every swing late. Its swings calibrate every
 run until the camera turns off. Practice and a run stand still once the visitor has been out of the camera's view
 1.5 s, but only between pitches (before the first windup, or once a result's ball is down and another pitch is to
 come), so a ball on its way plays out and no swing made meanwhile meets a pitch; the next pitch comes once they are
