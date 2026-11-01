@@ -44,6 +44,23 @@ export function scoreboardTotals(hud: DerbyHudState) {
   return homeRunTotals(hud.results.slice(0, hud.settledPitch + 1))
 }
 
+/** A pitch's dot on the scoreboard: how it ended (a strike or a miss is an out), the one up next, or one to come. */
+export type PitchDot = 'homeRun' | 'hit' | 'foul' | 'out' | 'current' | 'coming'
+
+/**
+ * A dot for each of the run's `pitchCount` pitches, coloured by how it ended once its ball is down, as the scoreboard
+ * counts it, so no dot says more than the caption has; until then the pitch up next is ringed.
+ */
+export function pitchDots(hud: DerbyHudState, pitchCount: number): PitchDot[] {
+  const settled = hud.results.slice(0, hud.settledPitch + 1)
+  return Array.from({ length: pitchCount }, (_, index) => pitchDot(settled[index], index === hud.pitchIndex))
+}
+
+export function pitchDot(result: PitchResult | undefined, upNext: boolean): PitchDot {
+  if (result) return result.outcome === 'miss' ? 'out' : result.outcome
+  return upNext ? 'current' : 'coming'
+}
+
 /**
  * The result the banner shows: the latest pitch's, once its ball is in the mitt or on the grass, until the next windup.
  * Shown no sooner, the banner never covers the bat meeting the ball or the ball's flight.

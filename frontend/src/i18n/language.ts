@@ -595,6 +595,7 @@ export const languageCopy = {
       rulesTitle: 'Rules',
       stageLabel: 'The ballpark, seen from behind home plate',
       leaveKey: 'Esc to leave',
+      batsAs: 'You bat as the character you made in the town.',
       hud: {
         pitch: 'Pitch',
         homeRuns: 'HR',
@@ -696,8 +697,9 @@ export const languageCopy = {
         },
         side: { legend: 'You bat', right: 'Right-handed', left: 'Left-handed' },
         panelKey: 'During practice and a run, V makes the camera larger or hides it.',
-        lockHint:
-          'Hold a bat or a bottle still for a moment: the camera boxes it and locks on by itself. No object? Bring your empty hands together, as if gripping a bat.',
+        lockHint: 'Hold what you swing still and the camera locks on by itself. No object? Grip with empty hands.',
+        safety: 'Keep 1.5 m clear around you and swing something light, like an empty bottle or a folded umbrella.',
+        swingTip: 'Pull your hands back to your back shoulder, then swing across your body.',
         tracker: {
           showHands: 'Show your hands',
           looking: 'Looking for what you swing · none? Both hands together will do, as on a bat',
@@ -1383,6 +1385,7 @@ export const languageCopy = {
       rulesTitle: '경기 규칙',
       stageLabel: '홈플레이트 뒤에서 본 야구장',
       leaveKey: 'Esc로 나가기',
+      batsAs: '마을에서 만든 모습 그대로 타석에 서요.',
       hud: {
         pitch: '투구',
         homeRuns: '홈런',
@@ -1483,7 +1486,9 @@ export const languageCopy = {
         side: { legend: '타석', right: '오른손 타자', left: '왼손 타자' },
         panelKey: '연습과 경기 중에 V로 카메라를 크게 하거나 숨겨요.',
         lockHint:
-          '배트나 병을 들고 잠깐 멈추면 카메라가 알아서 찾아 잡아요. 물건이 없으면 배트를 쥐듯 두 손을 모아 타격 자세를 잡아요.',
+          '휘두를 물건을 들고 잠깐 멈추면 카메라가 알아서 찾아 잡아요. 물건이 없으면 배트를 쥐듯 두 손을 모아 타격 자세를 잡아요.',
+        safety: '사방 1.5m 안에 사람이나 물건이 없는지 확인하고, 빈 페트병이나 접은 우산처럼 가벼운 물건으로 휘둘러요.',
+        swingTip: '손을 뒷어깨 쪽으로 당겼다가 몸 앞을 가로질러 휘둘러요.',
         tracker: {
           showHands: '손이 보이게',
           looking: '들고 칠 물건을 찾는 중이에요 · 없으면 배트를 쥐듯 두 손을 모으면 돼요',

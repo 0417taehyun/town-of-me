@@ -88,6 +88,9 @@ import './baseball.css'
 const CharacterCreator = lazy(() =>
   import('../ui/CharacterCreator').then((module) => ({ default: module.CharacterCreator })),
 )
+const CharacterPreviewCanvas = lazy(() =>
+  import('../ui/CharacterPreviewCanvas').then((module) => ({ default: module.CharacterPreviewCanvas })),
+)
 
 /** The home run derby page: the same town and tab session as the town, so a visitor plays as their character. */
 export function BaseballApp({ townId }: { townId: string }) {
@@ -219,8 +222,9 @@ const noteDerbyStageEvent = import.meta.env.DEV ? diagnoseStageEvent : null
 const DerbyDiagnostics = import.meta.env.DEV ? DiagnosticsPanel : null
 
 /**
- * The derby over its stadium, step by step (flow/derbyFlow.ts): the rules, then the camera's setup with its picture as
- * the stage, then practice, a run, its result, and another go, with the camera panel beside the play. The one click
+ * The derby over its stadium, step by step (flow/derbyFlow.ts): the rules (with the visitor's own character at the
+ * plate, the room and the light object to swing, and how to swing), then the camera's setup with its picture as the
+ * stage, then practice, a run, its result, and another go, with the camera panel beside the play. The one click
  * on the rules card turns the camera on, unlocks the sounds, and asks for the full screen; the screen stays on while
  * the camera is (flow/screenRequests.ts). From then on the visitor goes on by holding the batting stance about three
  * seconds (flow/stanceHold.ts) or by the step's button, which takes focus so Enter or Space presses it. No key and no
@@ -451,7 +455,8 @@ export function DerbyScreen({
           onPlay={start}
         />
       )}
-      {(step === 'play' || step === 'result') && run && (
+      {/* The result card shows the run's own figures, so the live HUD steps aside for it. */}
+      {step === 'play' && run && (
         <DerbyHud hud={hud} pitchCount={pitchCount} paused={paused} language={language} cameraState={cameraState} />
       )}
       {step === 'setup' && status.kind !== 'off' && (
@@ -473,6 +478,17 @@ export function DerbyScreen({
         <section className="baseball-card derby-start" aria-labelledby="baseball-title">
           <p className="eyebrow">{venueCopy.themes[ballpark.theme]}</p>
           <h1 id="baseball-title">{copy.baseball.title}</h1>
+          <div className="derby-batter">
+            <div className="derby-batter-portrait" aria-hidden="true">
+              <Suspense fallback={null}>
+                <CharacterPreviewCanvas language={language} profile={batter} degrees={-20} />
+              </Suspense>
+            </div>
+            <div>
+              {batter.name && <strong>{batter.name}</strong>}
+              <p>{copy.baseball.batsAs}</p>
+            </div>
+          </div>
           <h2>{copy.baseball.rulesTitle}</h2>
           <ul className="baseball-rules">
             <li>{venueCopy.rulesThisMonth(rules.pitchCount, venueCopy.difficulties[rules.difficulty])}</li>
@@ -498,6 +514,8 @@ export function DerbyScreen({
               {cameraCopy.stopped[status.stoppedBy]}
             </p>
           )}
+          <p className="baseball-note derby-safety">{cameraCopy.safety}</p>
+          <p className="baseball-note derby-swing-tip">{cameraCopy.swingTip}</p>
           <p className="baseball-note">{cameraCopy.notice}</p>
           <p className="baseball-note">{copy.baseball.leaveKey}</p>
           <div className="derby-actions">

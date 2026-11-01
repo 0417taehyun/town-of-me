@@ -15,6 +15,7 @@ import {
   homeRunDistanceText,
   hudAfterEvent,
   NEW_RUN_HUD,
+  pitchDots,
   pitchInPlay,
   scoreboardTotals,
   seenCameraState,
@@ -164,6 +165,39 @@ describe('the derby HUD', () => {
         ['landed', false],
       ]),
       ['finished', false],
+    ])
+  })
+
+  it('colours each pitch dot only once its ball is down, ringing the pitch up next until then', () => {
+    let hud = NEW_RUN_HUD
+    expect(pitchDots(hud, 3)).toEqual(['current', 'coming', 'coming'])
+    const dots = deadOnRun(createRunPlan({ pitchCount: 3, difficulty: 'normal' }, 11)).map((event) => {
+      hud = hudAfterEvent(hud, event)
+      return [event.type, pitchDots(hud, 3)]
+    })
+    const pitches = [
+      [
+        ['current', 'coming', 'coming'],
+        ['homeRun', 'coming', 'coming'],
+      ],
+      [
+        ['homeRun', 'current', 'coming'],
+        ['homeRun', 'homeRun', 'coming'],
+      ],
+      [
+        ['homeRun', 'homeRun', 'current'],
+        ['homeRun', 'homeRun', 'homeRun'],
+      ],
+    ]
+    expect(dots).toEqual([
+      ...pitches.flatMap(([inPlay, down]) => [
+        ['windup', inPlay],
+        ['release', inPlay],
+        ['result', inPlay],
+        ['chase', inPlay],
+        ['landed', down],
+      ]),
+      ['finished', ['homeRun', 'homeRun', 'homeRun']],
     ])
   })
 
