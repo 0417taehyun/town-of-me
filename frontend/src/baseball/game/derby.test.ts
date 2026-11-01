@@ -16,7 +16,8 @@ import { type DerbyInputLog, replayDerby } from './derbyScore'
 import { contactHeight, contactSeconds } from './pitch'
 import { createRunPlan, planRunPitch } from './runPlan'
 
-const keyboard: Omit<DerbyInputLog, 'swings'> = { input: 'keyboard', side: 'right', practice: [] }
+/** A run with no practice before it, so nothing calibrates it. */
+const uncalibrated: Omit<DerbyInputLog, 'swings'> = { side: 'right', practice: [] }
 /** Practice that measured a webcam registering swings about 110 ms late. */
 const latency = 110
 const practice: PracticeSample[] = [100, 120, 110, 130, 90].map((errorMs) => ({ errorMs, speed: 8 }))
@@ -51,7 +52,7 @@ function contactAt(pitching: Derby, lateBy: number) {
 
 /** A camera swing with its bat `batHeight` m up; by default level with the middle of the strike zone. */
 function swingAt(contactAtMs: number, batHeight: number | null = 0.6, speed = 8): DerbySwing {
-  return { source: 'camera', contactAtMs, startedAtMs: contactAtMs - 220, speed, batHeight }
+  return { contactAtMs, startedAtMs: contactAtMs - 220, speed, batHeight }
 }
 
 /** A swing at the pitch on its way `lateBy` ms after the ball reaches the contact point, `above` m over the ball. */
@@ -81,7 +82,7 @@ function playRun(derby: Derby, swings: readonly { lateBy: number | null; above?:
 describe('derby', () => {
   it('ends a run of N pitches after exactly N results, the same at any frame rate', () => {
     counts.forEach((pitchCount) => {
-      const derby = createDerby(createRunPlan({ pitchCount, difficulty: 'hard' }, pitchCount), keyboard, 0)
+      const derby = createDerby(createRunPlan({ pitchCount, difficulty: 'hard' }, pitchCount), uncalibrated, 0)
       const played = events(derby, 1000 / 60)
       const types = played.seen.map((event) => event.type)
       expect(types.filter((type) => type === 'result')).toHaveLength(pitchCount)
@@ -96,7 +97,7 @@ describe('derby', () => {
 
   it('ignores a swing during the windup, one before the release, and a second swing at the same pitch', () => {
     const plan = createRunPlan({ pitchCount: 3, difficulty: 'normal' }, 11)
-    const winding = advanceDerby(createDerby(plan, keyboard, 0), DERBY_PHASE_MS.ready + 100).derby
+    const winding = advanceDerby(createDerby(plan, uncalibrated, 0), DERBY_PHASE_MS.ready + 100).derby
     expect(winding.phase).toBe('windup')
     const duringWindup = swingDerby(winding, swingAt(DERBY_PHASE_MS.ready + 200))
     expect(duringWindup.derby.phase).toBe('windup')
@@ -111,7 +112,7 @@ describe('derby', () => {
 
   it('ignores a swing or a moment that is not a number instead of playing out the run', () => {
     const plan = createRunPlan({ pitchCount: 5, difficulty: 'normal' }, 14)
-    const pitching = toRelease(createDerby(plan, keyboard, 0))
+    const pitching = toRelease(createDerby(plan, uncalibrated, 0))
     const glitches = [NaN, Infinity].flatMap((value) => [
       { ...swingAt(value) },
       { ...swingAt(contactAt(pitching, 0)), speed: value },
@@ -124,7 +125,7 @@ describe('derby', () => {
   it('meets a swing reported a frame after the release with the pitch it was aimed at', () => {
     const plan = createRunPlan({ pitchCount: 3, difficulty: 'normal' }, 12)
     const releasedMs = DERBY_PHASE_MS.ready + DERBY_PHASE_MS.windup
-    const winding = advanceDerby(createDerby(plan, keyboard, 0), releasedMs - 5).derby
+    const winding = advanceDerby(createDerby(plan, uncalibrated, 0), releasedMs - 5).derby
     const contactAtMs = releasedMs + contactSeconds(planRunPitch(plan, 0)) * 1000
     const swung = swingDerby(winding, swingAt(contactAtMs))
     expect(swung.events.map((event) => event.type)).toEqual(['release', 'result'])
@@ -133,7 +134,7 @@ describe('derby', () => {
 
   it('takes the latest swing that still touches the ball after a camera delay, and none once the pitch is over', () => {
     const plan = createRunPlan({ pitchCount: 3, difficulty: 'normal' }, 13)
-    const pitching = toRelease(createDerby(plan, { input: 'camera', side: 'left', practice }, 0))
+    const pitching = toRelease(createDerby(plan, { side: 'left', practice }, 0))
     const latest = latency + DIFFICULTY_RULES.normal.timingWindows.contact - 1
     expect(swingDerby(pitching, swingAt(contactAt(pitching, latest))).derby.results[0].outcome).toBe('foul')
     const over = advanceDerby(pitching, phaseEndMs(pitching) ?? Infinity)
@@ -146,7 +147,7 @@ describe('derby', () => {
     const plan = createRunPlan({ pitchCount: 6, difficulty: 'normal' }, 2026)
     const lateness = [latency, latency + 30, null, latency - 120, latency + 200, latency - 20]
     const derby = playRun(
-      createDerby(plan, { input: 'camera', side: 'right', practice }, 0),
+      createDerby(plan, { side: 'right', practice }, 0),
       lateness.map((lateBy) => ({ lateBy })),
     )
     const finished = advanceDerby(derby.derby, 10 ** 9)
@@ -173,7 +174,7 @@ describe('derby', () => {
     const plan = createRunPlan({ pitchCount: 4, difficulty: 'normal' }, 2027)
     const measured = [0, 0.3, -0.6]
     const played = playRun(
-      createDerby(plan, { input: 'camera', side: 'right', practice }, 0),
+      createDerby(plan, { side: 'right', practice }, 0),
       [...measured, null].map((above) => ({ lateBy: latency, above })),
     )
     const finished = advanceDerby(played.derby, 10 ** 9)

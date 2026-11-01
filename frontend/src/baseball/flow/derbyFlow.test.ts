@@ -42,7 +42,7 @@ const hardBallpark: BallparkSettings = { ...ballpark, rules: { pitchCount: 5, di
 const october = new Date('2026-10-20T03:00:00Z')
 const plays: DerbyPlays = {
   practice: () => createPracticeRun(ballpark, october, 'left'),
-  run: (practice) => createDerbyRun(ballpark, october, 7, { input: 'camera', side: 'left', practice }),
+  run: (practice) => createDerbyRun(ballpark, october, 7, { side: 'left', practice }),
 }
 const steps: DerbyStep[] = ['rules', 'setup', 'practice', 'practiceDone', 'play', 'result']
 const cameraKinds: CameraStatus['kind'][] = ['off', 'starting', 'loading', 'measuring', 'ready', 'problem']
@@ -60,7 +60,7 @@ function swingAtRelease(run: StageRun, event: StageEvent, offsetsMs: readonly (n
   if (event.type !== 'release' || offsetMs === null || offsetMs === undefined) return []
   const contactAtRealMs = realMomentOf(run, event.releasedMs + contactSeconds(event.pitch) * 1000 + offsetMs)
   const batHeight = contactHeight(event.pitch)
-  return [{ source: 'camera', contactAtRealMs, startedAtRealMs: contactAtRealMs - 200, speed: 8, batHeight }]
+  return [{ contactAtRealMs, startedAtRealMs: contactAtRealMs - 200, speed: 8, batHeight }]
 }
 
 /** One 60 fps frame: the swings seen by now reach the stage, which then plays everything due. */
@@ -106,7 +106,7 @@ function awayFrame(playback: AwayPlayback, realMs: number, offsetsMs: readonly (
   playback.awayFromMs ??= playback.events.some((event) => event.type === 'release') ? realMs : null
   const present = playback.awayFromMs === null || realMs >= playback.awayFromMs + AWAY_FOR_MS
   const pitchCount = playback.run.derby.plan.schedule.length
-  const paused = pausedForAway('play', true, present, betweenPitches(playback.hud, pitchCount))
+  const paused = pausedForAway('play', present, betweenPitches(playback.hud, pitchCount))
   if (paused !== playback.paused) setStageRunPaused(playback.run, realMs, paused)
   playback.paused = paused
   if (!paused) return
@@ -115,13 +115,7 @@ function awayFrame(playback: AwayPlayback, realMs: number, offsetsMs: readonly (
   if (playback.pausedAtMs !== null) return
   playback.pausedAtMs = realMs
   const contactAtRealMs = realMs + 1000
-  playback.coming.push({
-    source: 'camera',
-    contactAtRealMs,
-    startedAtRealMs: contactAtRealMs - 200,
-    speed: 8,
-    batHeight: 0.6,
-  })
+  playback.coming.push({ contactAtRealMs, startedAtRealMs: contactAtRealMs - 200, speed: 8, batHeight: 0.6 })
 }
 
 function playAway(setup: StageRunSetup, offsetsMs: readonly (number | null)[]) {
@@ -141,8 +135,8 @@ function playAway(setup: StageRunSetup, offsetsMs: readonly (number | null)[]) {
   return playback
 }
 
-function flowAt(step: DerbyStep, input: 'camera' | 'keyboard' = 'camera'): DerbyFlow {
-  const run = createDerbyRun(ballpark, october, 7, { input, side: 'right', practice: [] })
+function flowAt(step: DerbyStep): DerbyFlow {
+  const run = createDerbyRun(ballpark, october, 7, { side: 'right', practice: [] })
   return { ...setupFlow(1000), step, run: ['practice', 'play', 'result'].includes(step) ? run : null }
 }
 
@@ -222,7 +216,7 @@ describe('the derby flow', () => {
     const samples = results.flatMap((event) => practiceSample(event) ?? [])
     expect(samples.map((sample) => sample.errorMs)).toEqual(results.map(() => expect.closeTo(300, 6)))
     expect(results.map(({ result }) => shownPracticeFeedback(result, 'hard'))).toEqual(results.map(() => 'late'))
-    const run = createDerbyRun(hardBallpark, october, 7, { input: 'camera', side: 'right', practice: samples })
+    const run = createDerbyRun(hardBallpark, october, 7, { side: 'right', practice: samples })
     expect(createDerby(run.plan, run.log, 0).calibration.offsetMs).toBeCloseTo(300, 0)
   })
 
@@ -236,14 +230,9 @@ describe('the derby flow', () => {
     expect([watch(inView, false, 1000, 2400).seen, watch(inView, false, 1000, 2500).seen]).toEqual([true, false])
     const away = watch(inView, false, 1000, 2500)
     expect([watch(away, true, 3000, 3400).seen, watch(away, true, 3000, 3500).seen]).toEqual([false, true])
-    const pausing = steps.filter((step) => pausedForAway(step, true, false, true))
+    const pausing = steps.filter((step) => pausedForAway(step, false, true))
     expect(pausing).toEqual(['practice', 'play'])
-    const otherwise = steps.filter(
-      (step) =>
-        pausedForAway(step, true, true, true) ||
-        pausedForAway(step, false, false, true) ||
-        pausedForAway(step, true, false, false),
-    )
+    const otherwise = steps.filter((step) => pausedForAway(step, true, true) || pausedForAway(step, false, false))
     expect(otherwise).toEqual([])
   })
 
@@ -268,13 +257,6 @@ describe('the derby flow', () => {
     const notReady = cameraKinds.filter((kind) => kind !== 'off' && kind !== 'ready')
     expect(notReady.map((kind) => derbyStep(flowAt('play'), kind))).toEqual(notReady.map(() => 'setup'))
     expect(derbyStep(flowAt('play'), 'ready')).toBe('play')
-    // The keyboard run needs no camera (until the camera-only change removes it).
-    expect(derbyStep(flowAt('play', 'keyboard'), 'off')).toBe('play')
-  })
-
-  it('plays practice and the runs after it with the camera only', () => {
-    const runs = [plays.practice(), plays.run([])]
-    expect(runs.map((run) => run.log.input)).toEqual(['camera', 'camera'])
   })
 })
 
@@ -284,7 +266,7 @@ describe('a derby run', () => {
       ...ballpark,
       scheduledRules: { fromMonth: '2026-11', rules: { pitchCount: 8, difficulty: 'hard' } },
     }
-    const log = { input: 'camera' as const, side: 'right' as const, practice: [] }
+    const log = { side: 'right' as const, practice: [] }
     const lastOctoberRun = createDerbyRun(scheduled, new Date('2026-10-31T14:59:00Z'), 7, log)
     const firstNovemberRun = createDerbyRun(scheduled, new Date('2026-10-31T15:01:00Z'), 7, log)
     expect(lastOctoberRun.plan.rules).toEqual(scheduled.rules)

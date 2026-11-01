@@ -5,8 +5,6 @@ import { contactSeconds, type PitchPlan } from './pitch'
 export type TimingId = 'perfect' | 'good' | 'early' | 'late' | 'tooEarly' | 'tooLate'
 
 export const SWING_POWER_RANGE = { minimum: 0.5, maximum: 1.15 }
-/** A key press measures no speed, so a keyboard swing hits at this power, with the bat level with the ball. */
-export const KEYBOARD_POWER = 0.95
 
 /**
  * A swing's timing error in ms (minus = early): its contact moment, `contactMs` after release, less the visitor's
@@ -26,7 +24,7 @@ export function judgeTiming(errorMs: number, windows: TimingWindows): TimingId {
 }
 
 /**
- * A camera swing's power: its speed against the visitor's practice peak, both in shoulder widths per second. The range
+ * A swing's power: its speed against the visitor's practice peak, both in shoulder widths per second. The range
  * keeps a weak practice or a wild swing from running away with it.
  */
 export function swingPower(speed: number, peakSpeed: number) {

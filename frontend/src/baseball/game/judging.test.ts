@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DIFFICULTY_RULES } from './difficulty'
 import { FOUL_ANGLE } from './field'
-import { judgeTiming, KEYBOARD_POWER, swingPower, SWING_POWER_RANGE, type TimingId } from './judging'
+import { judgeTiming, swingPower, SWING_POWER_RANGE, type TimingId } from './judging'
 import { landingFor, type Landing } from './landing'
 
 const timingRank: Record<TimingId, number> = { tooEarly: 0, tooLate: 0, early: 1, late: 1, good: 2, perfect: 3 }
@@ -11,11 +11,7 @@ const difficulties = Object.values(DIFFICULTY_RULES)
 const batHeights = [0, null]
 
 function landingOn(difficulty: keyof typeof DIFFICULTY_RULES, errorMs: number, heightError: number | null) {
-  return landingFor(
-    { errorMs, power: KEYBOARD_POWER, heightError },
-    DIFFICULTY_RULES[difficulty].timingWindows,
-    'right',
-  )
+  return landingFor({ errorMs, power: 1, heightError }, DIFFICULTY_RULES[difficulty].timingWindows, 'right')
 }
 
 /** One number that orders landings: the outcome first, then the distance. */

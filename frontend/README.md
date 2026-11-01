@@ -84,7 +84,7 @@ npm run build
 | Field of view               | Mouse wheel                                      |
 | Debug view                  | `H`                                              |
 | Respawn and recenter camera | `R`                                              |
-| Swing (home-run derby)      | `Space` / `Enter` or the on-screen `Swing`       |
+| Swing (home-run derby)      | Swing on camera, with an object or empty hands   |
 | Lock what you swing (derby) | Hold it still, tap it, or `Lock this object`     |
 | Go on hands-free (derby)    | Hold your batting stance 3 s, or the step button |
 | Leave the derby             | `Esc` (twice in full screen) or `Back to town`   |

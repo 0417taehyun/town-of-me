@@ -583,12 +583,11 @@ export const languageCopy = {
       play: 'Play',
       rulesTitle: 'Rules',
       stageLabel: 'The ballpark, seen from behind home plate',
-      controls: 'Space or Enter to swing · Esc to leave',
+      leaveKey: 'Esc to leave',
       hud: {
         pitch: 'Pitch',
         homeRuns: 'HR',
         homeRunDistance: 'Total distance',
-        swing: 'Swing',
         captions: {
           ready: 'Play ball!',
           coming: 'Here it comes',
@@ -1328,12 +1327,11 @@ export const languageCopy = {
       play: '플레이',
       rulesTitle: '경기 규칙',
       stageLabel: '홈플레이트 뒤에서 본 야구장',
-      controls: 'Space나 Enter로 스윙 · Esc로 나가기',
+      leaveKey: 'Esc로 나가기',
       hud: {
         pitch: '투구',
         homeRuns: '홈런',
         homeRunDistance: '총 비거리',
-        swing: '스윙',
         captions: {
           ready: '플레이 볼!',
           coming: '공이 와요',

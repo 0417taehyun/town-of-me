@@ -6,11 +6,11 @@ import { median, percentile } from '../statistics'
 
 /**
  * One practice swing: its timing error against the practice pitch's contact moment (ms, minus = early, before any
- * offset) and its top speed in shoulder widths per second, or null when nothing measured it (keyboard).
+ * offset) and its top speed in shoulder widths per second.
  */
-export type PracticeSample = { errorMs: number; speed: number | null }
+export type PracticeSample = { errorMs: number; speed: number }
 
-/** `offsetMs` comes off every swing's timing error; a camera swing's power is its speed against `peakSpeed`. */
+/** `offsetMs` comes off every swing's timing error; a swing's power is its speed against `peakSpeed`. */
 export type Calibration = { offsetMs: number; peakSpeed: number }
 
 export const CALIBRATION_RULES = {
@@ -43,7 +43,7 @@ export function timingOffset(valid: readonly PracticeSample[]) {
 }
 
 export function peakSpeed(valid: readonly PracticeSample[]) {
-  const speeds = valid.flatMap((sample) => (sample.speed === null ? [] : [sample.speed]))
+  const speeds = valid.map((sample) => sample.speed)
   if (speeds.length === 0) return CALIBRATION_RULES.peakFloor
   return Math.max(CALIBRATION_RULES.peakFloor, percentile(speeds, CALIBRATION_RULES.peakPercentile))
 }

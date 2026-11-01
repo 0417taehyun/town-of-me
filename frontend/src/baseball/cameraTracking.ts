@@ -1,6 +1,6 @@
 import type { ObjectDetectorResult, PoseLandmarkerResult } from '@mediapipe/tasks-vision'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { devVisitorFrame } from './devSeam'
+import { devSwingSeen, devVisitorFrame } from './devSeam'
 import { type CameraGameProblem, cameraProblem } from './deviceGate'
 import {
   type StanceFrame,
@@ -234,7 +234,7 @@ export function detectObjects(
 
 /** A tracked swing for the stage: the camera's, on the clock of the frames it was seen in (performance.now() ms). */
 export function cameraSwing({ contactAtMs, startedAtMs, speed, batHeight }: TrackedSwing): RealTimeSwing {
-  return { source: 'camera', contactAtRealMs: contactAtMs, startedAtRealMs: startedAtMs, speed, batHeight }
+  return { contactAtRealMs: contactAtMs, startedAtRealMs: startedAtMs, speed, batHeight }
 }
 
 export type CameraTrackingOptions = {
@@ -247,8 +247,12 @@ export type CameraTrackingOptions = {
   stance: StanceWatch
 }
 
-/** What a dev build's stand-in visitor shows instead of the camera's picture (devSeam.ts); never in production. */
+/**
+ * What a dev build's stand-in visitor shows instead of the camera's picture, and the stand-in swings its frames report
+ * (devSeam.ts); never in production.
+ */
 const DEV_VISITOR = import.meta.env.DEV ? devVisitorFrame : null
+const DEV_SWING = import.meta.env.DEV ? devSwingSeen : null
 
 /** What the stance hold and the presence read of a frame: the dev stand-in's, if one stands in, else the camera's. */
 export function visitorFrame(frame: PoseFrame, tracker: SwingTracker): { seen: boolean; stance: StanceFrame } {
@@ -303,7 +307,8 @@ export function useCameraTracking({ side, objectsPaused, onSwing, stance }: Came
       if (!isCameraOn(next)) setRequest(null)
     }
     const onFrame = (frame: PoseFrame, objects: ObjectDetector | null) => {
-      const swing = readSwingFrame(current, frame, feed, objects, !timed || page.current.objectsPaused)
+      const tracked = readSwingFrame(current, frame, feed, objects, !timed || page.current.objectsPaused)
+      const swing = tracked ?? DEV_SWING?.(frame.capturedAt)
       if (swing) page.current.onSwing(swing)
       drawCameraView(picture, feed, frame.keypoints, heldObjectBox(current.tracker))
       const visitor = visitorFrame(frame, current.tracker)

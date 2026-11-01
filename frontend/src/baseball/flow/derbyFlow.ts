@@ -8,14 +8,13 @@ import type { BattingSide } from '../game/field'
 import { createPracticePlan, createRunPlan } from '../game/runPlan'
 import type { StageEvent, StageRunSetup } from '../stage/stageRun'
 
-// The derby's steps: the rules card, the camera's setup, practice, the step after it, the run, and its result. Only
-// the first click is needed: it turns the camera on and asks for everything else a click must (BaseballApp.tsx). From
-// there the visitor goes on by holding the batting stance (stanceHold.ts) or by the step's button, which Enter and
-// Space press once it has focus, as any button. No key starts a step by itself, and in practice and a camera run only
-// the camera sees swings (the keyboard run the rules card still offers takes key swings until the camera-only change
-// removes it). Practice pitches the game core's practice schedule at the practice pace, says how each swing was timed
-// in words only, and calibrates every run after it until the camera turns off. Practice and a run pause between
-// pitches while the visitor is out of the camera's view.
+// The derby's steps: the rules card, the camera's setup, practice, the step after it, the run, and its result. Only the
+// first click is needed: it turns the camera on and asks for everything else a click must (BaseballApp.tsx). From there
+// the visitor goes on by holding the batting stance (stanceHold.ts) or by the step's button, which Enter and Space
+// press once it has focus, as any button. No key starts a step by itself or swings: only the camera sees swings.
+// Practice pitches the game core's practice schedule at the practice pace, says how each swing was timed in words only,
+// and calibrates every run after it until the camera turns off. Practice and a run pause between pitches while the
+// visitor is out of the camera's view.
 
 export type DerbyStep = 'rules' | 'setup' | 'practice' | 'practiceDone' | 'play' | 'result'
 
@@ -44,11 +43,9 @@ export const WAITING_STEPS: readonly DerbyStep[] = ['setup', 'practiceDone', 're
 
 /**
  * The step on screen: the rules card while the camera is off, and the setup until the camera is ready to play or
- * while it names a problem; otherwise the step the visitor last went on to. A keyboard run needs no camera (it goes
- * with the keyboard swing in the camera-only change).
+ * while it names a problem; otherwise the step the visitor last went on to.
  */
 export function derbyStep(flow: DerbyFlow, camera: CameraStatus['kind']): DerbyStep {
-  if (flow.run?.log.input === 'keyboard') return flow.step
   if (camera === 'off') return 'rules'
   if (camera !== 'ready' || flow.step === 'rules') return 'setup'
   return flow.step
@@ -68,7 +65,7 @@ export function stanceWait(flow: DerbyFlow): string | null {
   return WAITING_STEPS.includes(flow.step) ? `${flow.step}@${flow.since}` : null
 }
 
-/** What a go can start: the practice, and a camera run calibrated by `practice`. */
+/** What a go can start: the practice, and a run calibrated by `practice`. */
 export type DerbyPlays = { practice: () => StageRunSetup; run: (practice: PracticeSample[]) => StageRunSetup }
 
 /**
@@ -131,13 +128,13 @@ export function shownPracticeFeedback(
 }
 
 /**
- * Practice and a camera run stand still for a visitor out of the camera's view (`present` false), but only
+ * Practice and a run stand still for a visitor out of the camera's view (`present` false), but only
  * `betweenPitches` (derbyCues.ts): a pitch on its way and its result play out, so no ball stops in the air and a run
  * still finishes, and a swing made while it stands still meets no pitch. Once the visitor is back, the next pitch comes
  * with a fresh windup. No other step stands still.
  */
-export function pausedForAway(step: DerbyStep, cameraOn: boolean, present: boolean, betweenPitches: boolean) {
-  return cameraOn && !present && betweenPitches && (step === 'practice' || step === 'play')
+export function pausedForAway(step: DerbyStep, present: boolean, betweenPitches: boolean) {
+  return !present && betweenPitches && (step === 'practice' || step === 'play')
 }
 
 /** The visitor bats right-handed until they choose otherwise on the setup card. */
@@ -160,7 +157,7 @@ export function createDerbyRun(
 }
 
 /**
- * The practice before a camera run at `now`, batting on `side`: the practice pitches at the practice pace, judged by
+ * The practice before a run at `now`, batting on `side`: the practice pitches at the practice pace, judged by
  * the timing windows of the rules a run would play then, with no calibration, since it measures one.
  */
 export function createPracticeRun(
@@ -171,7 +168,7 @@ export function createPracticeRun(
 ): StageRunSetup {
   return {
     plan: createPracticePlan(rulesFor(ballpark, rankingMonth(now))),
-    log: { input: 'camera', side, practice: [] },
+    log: { side, practice: [] },
     practice: true,
   }
 }

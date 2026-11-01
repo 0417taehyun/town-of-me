@@ -3,10 +3,8 @@ import { BASEBALL_DIFFICULTIES } from '../../data/models'
 import type { PracticeSample } from './calibration'
 import { DIFFICULTY_RULES } from './difficulty'
 import { type DerbyInputLog, type DerbyResult, replayDerby, type SwingEvent } from './derbyScore'
-import { KEYBOARD_POWER } from './judging'
-import { landingFor } from './landing'
 import { contactSeconds } from './pitch'
-import { createRunPlan, planRunPitch, type RunPlan } from './runPlan'
+import { createRunPlan, planRunPitch } from './runPlan'
 
 const plan = createRunPlan({ pitchCount: 5, difficulty: 'normal' }, 2026)
 /** A webcam that registers swings about 110 ms late, which practice measures. */
@@ -14,19 +12,19 @@ const latency = 110
 const practice: PracticeSample[] = [100, 120, 110, 130, 90].map((errorMs) => ({ errorMs, speed: 8 }))
 
 /** A swing at pitch `pitchIndex` reaching the contact point `lateBy` ms after the ball, as the tracker reports it. */
-function swing(pitchIndex: number, lateBy: number, heightError: number | null = 0, speed = 8): SwingEvent {
-  const contactMs = contactSeconds(planRunPitch(plan, pitchIndex)) * 1000 + lateBy
-  return { source: 'camera', contactMs, startedMs: contactMs - 220, speed, heightError }
-}
-
-/** A key pressed `lateBy` ms after the ball reaches the contact point, as the keyboard records it. */
-function keyPress(runPlan: RunPlan, pitchIndex: number, lateBy: number): SwingEvent {
+function swing(
+  pitchIndex: number,
+  lateBy: number,
+  heightError: number | null = 0,
+  speed = 8,
+  runPlan = plan,
+): SwingEvent {
   const contactMs = contactSeconds(planRunPitch(runPlan, pitchIndex)) * 1000 + lateBy
-  return { source: 'keyboard', contactMs, startedMs: contactMs, speed: 0, heightError: null }
+  return { contactMs, startedMs: contactMs - 220, speed, heightError }
 }
 
 function cameraLog(swings: (SwingEvent | null)[], practiceSamples = practice): DerbyInputLog {
-  return { input: 'camera', side: 'right', practice: practiceSamples, swings }
+  return { side: 'right', practice: practiceSamples, swings }
 }
 
 function replaced(swings: (SwingEvent | null)[], pitchIndex: number, event: SwingEvent) {
@@ -94,49 +92,28 @@ describe('derby scoring', () => {
     )
   })
 
-  it('judges a keyboard run without whatever speed or bat height its swings claim', () => {
-    const claimed = [0, 30, -60, 100, 15].map((lateBy, index) => swing(index, lateBy, 0.3, 40))
-    const plain = claimed.map((event) => ({ ...event, speed: 0, heightError: null }))
-    const keyboard = (swings: SwingEvent[]): DerbyInputLog => ({
-      input: 'keyboard',
-      side: 'right',
-      practice: [],
-      swings,
-    })
-    expect(replayDerby(plan, keyboard(claimed)).pitches).toEqual(replayDerby(plan, keyboard(plain)).pitches)
-    expect(replayDerby(plan, cameraLog(claimed, [])).pitches).not.toEqual(replayDerby(plan, keyboard(claimed)).pitches)
-  })
-
-  it('carries a keyboard PERFECT out of the park on every difficulty, a dead-on one farther than a lost bat would', () => {
+  it('carries a PERFECT practice-peak swing out of the park on every difficulty, farther than a lost bat', () => {
     BASEBALL_DIFFICULTIES.forEach((difficulty) => {
-      const keyboardPlan = createRunPlan({ pitchCount: 5, difficulty }, 2026)
+      const difficultyPlan = createRunPlan({ pitchCount: 5, difficulty }, 2026)
       const windows = DIFFICULTY_RULES[difficulty].timingWindows
       const swings = [0, -0.5, 0.5, -0.9, 0.9].map((share, index) =>
-        keyPress(keyboardPlan, index, share * windows.perfect),
+        swing(index, latency + share * windows.perfect, 0, 8, difficultyPlan),
       )
-      const result = replayDerby(keyboardPlan, { input: 'keyboard', side: 'right', practice: [], swings })
+      const result = replayDerby(difficultyPlan, cameraLog(swings))
       expect(result.pitches.map((pitch) => [pitch.timing, pitch.outcome])).toEqual(
         swings.map(() => ['perfect', 'homeRun']),
       )
-      const lostBat = landingFor({ errorMs: 0, power: KEYBOARD_POWER, heightError: null }, windows, 'right')
-      expect(result.pitches[0].distanceDecimetres).toBeGreaterThan(lostBat.distanceDecimetres)
+      const lostBat = replayDerby(difficultyPlan, cameraLog(replaced(swings, 0, { ...swings[0], heightError: null })))
+      expect(result.pitches[0].distanceDecimetres).toBeGreaterThan(lostBat.pitches[0].distanceDecimetres)
     })
   })
 
-  it('judges a key pressed during a camera run as a keyboard swing and takes the run off the board', () => {
-    const fast = swing(1, latency + 20, 0.3, 40)
-    const swings = [swing(0, latency), fast, null, null, null]
-    const camera = replayDerby(plan, cameraLog(swings))
-    expect(camera.input).toBe('camera')
-    const keyed = replayDerby(plan, cameraLog(replaced(swings, 1, { ...fast, source: 'keyboard' })))
-    const plain = replayDerby(
-      plan,
-      cameraLog(replaced(swings, 1, { ...fast, source: 'keyboard', speed: 0, heightError: null })),
+  it('carries a faster swing farther against the practice peak, up to the power cap', () => {
+    const [slow, atPeak, fast, wild] = [5, 8, 9.2, 40].map(
+      (speed) => replayDerby(plan, cameraLog([swing(0, latency, 0, speed), null, null, null, null])).pitches[0],
     )
-    expect(keyed.input).toBe('keyboard')
-    expect(keyed.pitches[1]).toEqual(plain.pitches[1])
-    expect(keyed.pitches[1].power).toBe(KEYBOARD_POWER)
-    expect(keyed.pitches[1]).not.toEqual(camera.pitches[1])
-    expect(keyed.pitches[0]).toEqual(camera.pitches[0])
+    expect(slow.distanceDecimetres).toBeLessThan(atPeak.distanceDecimetres)
+    expect(atPeak.distanceDecimetres).toBeLessThan(fast.distanceDecimetres)
+    expect(wild.distanceDecimetres).toBe(fast.distanceDecimetres)
   })
 })

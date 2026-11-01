@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { calibrate, CALIBRATION_RULES, type PracticeSample } from './calibration'
 
-const swing = (errorMs: number, speed: number | null = 8): PracticeSample => ({ errorMs, speed })
+const swing = (errorMs: number, speed = 8): PracticeSample => ({ errorMs, speed })
 
 describe('swing calibration', () => {
   it('takes the median error of three or more valid practice swings, ignoring swings far off the pitch', () => {
@@ -24,7 +24,8 @@ describe('swing calibration', () => {
     expect(calibrate(speeds.map((speed) => swing(100, speed))).peakSpeed).toBeCloseTo(9.6, 9)
     const gentle = calibrate([swing(100, 1), swing(90, 2), swing(110, 1.5)])
     expect(gentle.peakSpeed).toBe(CALIBRATION_RULES.peakFloor)
-    expect(calibrate([swing(100, null), swing(90, null), swing(110, null)]).peakSpeed).toBe(CALIBRATION_RULES.peakFloor)
+    const offPitch = CALIBRATION_RULES.validErrorMs + 1
+    expect(calibrate([swing(offPitch, 12), swing(-offPitch, 12)]).peakSpeed).toBe(CALIBRATION_RULES.peakFloor)
   })
 
   it('does not let a fast swing far off the pitch raise the peak', () => {

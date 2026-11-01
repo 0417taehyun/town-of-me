@@ -30,7 +30,7 @@ import { LanguageSelect } from '../ui/LanguageSelect'
 import { type BaseballExit, baseballExit, EXIT_PATHS, isNextRulesPreview } from './baseballRoute'
 import { needsCharacter, withVenueProfile } from './baseballSession'
 import { cameraStateId, isCameraOn, useCameraTracking } from './cameraTracking'
-import { devSwingAt, installDevSeam } from './devSeam'
+import { installDevSeam, queueDevSwing } from './devSeam'
 import { browserDeviceBlock, type DeviceBlock } from './deviceGate'
 import {
   createDerbyRun,
@@ -51,7 +51,6 @@ import {
 } from './flow/derbyFlow'
 import { keepScreenOn, requestFullscreen } from './flow/screenRequests'
 import type { StanceWatch } from './flow/stanceHold'
-import { isSwingKey, keyboardSwing } from './keyboardRun'
 import { BaseballStage } from './stage/BaseballStage'
 import type { RealTimeSwing, StageEvent } from './stage/stageRun'
 import { CameraPanel } from './ui/CameraPanel'
@@ -167,14 +166,7 @@ export function BaseballLinks({
   children?: ReactNode
 }) {
   return (
-    // A pointer leaves no focus behind here, so the next Space or Enter swings instead of pressing a link or language
-    // button again; focus the keyboard put here stays.
-    <header
-      className={className}
-      onPointerUp={() => {
-        if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
-      }}
-    >
+    <header className={className}>
       <a className="baseball-back" href={EXIT_PATHS[exit]}>
         <span aria-hidden="true">←</span> {languageCopy[language].baseball.back[exit]}
       </a>
@@ -206,25 +198,24 @@ export function BlockedPage({
 
 /** Dev builds only: the stand-in visitor and swings an automated check plays with (devSeam.ts); none in production. */
 const installDerbyDevSeam = import.meta.env.DEV ? installDevSeam : null
-const devSwing = import.meta.env.DEV ? devSwingAt : null
+const queueDerbyDevSwing = import.meta.env.DEV ? queueDevSwing : null
 
 /**
  * The derby over its stadium, step by step (flow/derbyFlow.ts): the rules, then the camera's setup with its picture as
- * the stage, then practice, a camera run, its result, and another go, with the camera panel beside the play. The one
- * click on the rules card turns the camera on, unlocks the sounds, and asks for the full screen; the screen stays on
- * while the camera is (flow/screenRequests.ts). From then on the visitor goes on by holding the batting stance about
- * three seconds (flow/stanceHold.ts) or by the step's button, which takes focus so Enter or Space presses it. A camera
- * run takes no key: its swings are the ones the camera sees (cameraTracking.ts), handed to the stage the moment they
- * are seen. Practice tells each swing only a bit early, good, or a bit late, and calibrates the runs after it; practice
- * and a run pause between pitches while the visitor is out of the camera's view. A camera that fails names its cause
- * and offers another try, never the keyboard; the keyboard run the rules card still offers takes Space or Enter as
- * swings until the camera-only change removes it. The object detector rests from each windup until the pitch is judged.
- * A computer that tracks too slowly is blocked for the visit. Every run reads the KST month when it starts, never when
- * the page loaded. A `preview`, the admin's try of next month's rules, plays those scheduled (or this month's when none
- * are) and says so on every screen; it is never ranked. V (or the camera view button) resizes or hides the camera panel
- * beside the play, the "lock this object" button there and on the setup card locks what the visitor holds, the result
- * screen can turn the camera off, and Escape leaves from any of these screens: for the town, or from a preview back to
- * the editor.
+ * the stage, then practice, a run, its result, and another go, with the camera panel beside the play. The one click
+ * on the rules card turns the camera on, unlocks the sounds, and asks for the full screen; the screen stays on while
+ * the camera is (flow/screenRequests.ts). From then on the visitor goes on by holding the batting stance about three
+ * seconds (flow/stanceHold.ts) or by the step's button, which takes focus so Enter or Space presses it. No key and no
+ * button swings: the swings are the ones the camera sees (cameraTracking.ts), handed to the stage the moment they are
+ * seen. Practice tells each swing only a bit early, good, or a bit late, and calibrates the runs after it; practice and
+ * a run pause between pitches while the visitor is out of the camera's view. A camera that fails names its cause and
+ * offers another try, and the derby cannot be played without it. The object detector rests from each windup until the
+ * pitch is judged. A computer that tracks too slowly is blocked for the visit. Every run reads the KST month when it
+ * starts, never when the page loaded. A `preview`, the admin's try of next month's rules, plays those scheduled (or
+ * this month's when none are) and says so on every screen; it is never ranked. V (or the camera view button) resizes
+ * or hides the camera panel beside the play, the "lock this object" button there and on the setup card locks what the
+ * visitor holds, the result screen can turn the camera off, and Escape leaves from any of these screens: for the town,
+ * or from a preview back to the editor.
  */
 export function DerbyScreen({
   ballpark,
@@ -257,9 +248,7 @@ export function DerbyScreen({
   const viewport = useViewportSize()
   const [panelSize, setPanelSize] = useState(readPanelSize)
   const side = flow.run?.log.side ?? chosenSide
-  const keyboardRun = flow.run?.log.input === 'keyboard'
-  const keyboardPlaying = keyboardRun && flow.step === 'play'
-  const cameraSwinging = !keyboardRun && (flow.step === 'practice' || flow.step === 'play')
+  const cameraSwinging = flow.step === 'practice' || flow.step === 'play'
   const onCameraSwing = useCallback(
     (swing: RealTimeSwing) => {
       if (cameraSwinging) swings.current.push(swing)
@@ -275,24 +264,13 @@ export function DerbyScreen({
     setHud(NEW_RUN_HUD)
     setFlow(next)
   }
-  const keyboardFlow = (at: number): DerbyFlow => {
-    const log = { input: 'keyboard' as const, side, practice: [] }
-    return {
-      ...RULES_FLOW,
-      step: 'play',
-      since: at,
-      run: createDerbyRun(ballpark, new Date(), randomRunSeed(), log, rulesFor),
-    }
-  }
   const plays: DerbyPlays = {
     practice: () => createPracticeRun(ballpark, new Date(), side, rulesFor),
-    run: (practice) =>
-      createDerbyRun(ballpark, new Date(), randomRunSeed(), { input: 'camera', side, practice }, rulesFor),
+    run: (practice) => createDerbyRun(ballpark, new Date(), randomRunSeed(), { side, practice }, rulesFor),
   }
-  // A go on a step that waits, by the held stance or its button; a keyboard run's result plays the keyboard again.
+  // A go on a step that waits, by the held stance or its button.
   const start = () => {
-    const at = performance.now()
-    const next = keyboardRun ? keyboardFlow(at) : startedFlow(flow, at, plays)
+    const next = startedFlow(flow, performance.now(), plays)
     if (next !== flow) begin(next)
   }
   const onStanceProgress = useCallback((progress: number) => {
@@ -309,7 +287,7 @@ export function DerbyScreen({
   const cameraOn = isCameraOn(status)
   const screen = cameraScreen(cameraOn, step)
   const pitchCount = run?.plan.schedule.length ?? 0
-  const paused = pausedForAway(step, cameraOn, camera.present, betweenPitches(hud, pitchCount))
+  const paused = pausedForAway(step, camera.present, betweenPitches(hud, pitchCount))
   const searching = cameraOn && !camera.seen
   const panel = cameraPanelLayout({ screen, chasing: chasingHomeRun(hud), searching, size: panelSize }, viewport, side)
   const stateId = cameraStateId(status, camera.seen)
@@ -343,14 +321,10 @@ export function DerbyScreen({
         return
       }
       if (action === 'cameraPanel') cyclePanelSize()
-      if (!keyboardPlaying || !isSwingKey(event)) return
-      // Keeps a focused button from also taking the key, and Space from scrolling.
-      event.preventDefault()
-      swings.current.push(keyboardSwing(event.timeStamp))
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [keyboardPlaying, screen, cyclePanelSize, exit])
+  }, [screen, cyclePanelSize, exit])
 
   const onStageEvent = useCallback(
     (event: StageEvent) => {
@@ -359,7 +333,7 @@ export function DerbyScreen({
       setFlow((current) => flowAfterEvent(current, event, at))
       const sound = derbySoundFor(event)
       if (sound) sounds.play(sound)
-      devSwing?.(event, (swing) => swings.current.push(swing))
+      queueDerbyDevSwing?.(event)
     },
     [sounds],
   )
@@ -370,11 +344,6 @@ export function DerbyScreen({
     requestFullscreen()
     begin(setupFlow(performance.now()))
     camera.turnOn()
-  }
-  // The keyboard run, until the camera-only change removes it; its click lets the browser start its sounds.
-  const startKeyboardRun = () => {
-    sounds.unlock()
-    begin(keyboardFlow(performance.now()))
   }
 
   if (status.kind === 'tooSlow')
@@ -431,14 +400,7 @@ export function DerbyScreen({
         <PracticeDoneView gauge={gauge} language={language} cameraState={cameraState} onPlay={start} />
       )}
       {(step === 'play' || step === 'result') && run && (
-        <DerbyHud
-          hud={hud}
-          pitchCount={pitchCount}
-          paused={paused}
-          language={language}
-          cameraState={run.log.input === 'camera' ? cameraState : null}
-          onSwing={run.log.input === 'keyboard' ? (timeStamp) => swings.current.push(keyboardSwing(timeStamp)) : null}
-        />
+        <DerbyHud hud={hud} pitchCount={pitchCount} paused={paused} language={language} cameraState={cameraState} />
       )}
       {step === 'setup' && status.kind !== 'off' && (
         <SetupView
@@ -487,28 +449,16 @@ export function DerbyScreen({
             </p>
           )}
           <p className="baseball-note">{cameraCopy.notice}</p>
+          <p className="baseball-note">{copy.baseball.leaveKey}</p>
           <div className="derby-actions">
             <button className="primary-button" type="button" autoFocus onClick={startWithCamera}>
               {cameraCopy.turnOn}
             </button>
           </div>
-          {/* The keyboard run, until the camera-only change removes it; its keys are told beside it, not the camera's. */}
-          <p className="baseball-note derby-keyboard-play">
-            <button className="derby-secondary" type="button" onClick={startKeyboardRun}>
-              {copy.baseball.play}
-            </button>
-            {copy.baseball.controls}
-          </p>
         </section>
       )}
       {step === 'result' && flow.result && (
-        <ResultView
-          result={flow.result}
-          exit={exit}
-          gauge={cameraOn ? gauge : null}
-          language={language}
-          onPlayAgain={start}
-        />
+        <ResultView result={flow.result} exit={exit} gauge={gauge} language={language} onPlayAgain={start} />
       )}
       <BaseballLinks
         className="baseball-header derby-links"

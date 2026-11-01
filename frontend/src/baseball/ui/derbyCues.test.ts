@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { advanceDerby, createDerby, type Derby, type DerbyEvent, phaseEndMs, swingDerby } from '../game/derby'
-import { contactSeconds, type PitchTypeId } from '../game/pitch'
+import { contactHeight, contactSeconds, type PitchTypeId } from '../game/pitch'
 import type { PitchResult } from '../game/derbyScore'
 import { createRunPlan, planRunPitch, type RunPlan } from '../game/runPlan'
 import type { StageEvent } from '../stage/stageRun'
@@ -23,15 +23,17 @@ function stageEventsFor(event: DerbyEvent): StageEvent[] {
   return [event, { type: settled, pitchIndex: event.pitchIndex }]
 }
 
-/** A key pressed the moment the pitch on its way reaches the contact point. */
+/** A swing with the bat level with the ball the moment the pitch on its way reaches the contact point. */
 function swingDeadOn(derby: Derby) {
-  const contactAtMs = derby.phaseStartedMs + contactSeconds(planRunPitch(derby.plan, derby.pitchIndex)) * 1000
-  return swingDerby(derby, { source: 'keyboard', contactAtMs, startedAtMs: contactAtMs, speed: 0, batHeight: null })
+  const pitch = planRunPitch(derby.plan, derby.pitchIndex)
+  const contactAtMs = derby.phaseStartedMs + contactSeconds(pitch) * 1000
+  const batHeight = contactHeight(pitch)
+  return swingDerby(derby, { contactAtMs, startedAtMs: contactAtMs - 200, speed: 8, batHeight })
 }
 
-/** The stage events of a keyboard run swung dead on at every pitch. */
+/** The stage events of a run swung dead on at every pitch. */
 function deadOnRun(plan: RunPlan) {
-  let derby = createDerby(plan, { input: 'keyboard', side: 'right', practice: [] }, 0)
+  let derby = createDerby(plan, { side: 'right', practice: [] }, 0)
   const events: DerbyEvent[] = []
   while (derby.phase !== 'finished') {
     const update = derby.phase === 'pitch' ? swingDeadOn(derby) : advanceDerby(derby, phaseEndMs(derby) ?? 0)
@@ -44,7 +46,7 @@ function deadOnRun(plan: RunPlan) {
 describe('the derby HUD', () => {
   it('names each pitch only once its ball is down, never while that one or the next is wound up or on its way', () => {
     const plan = createRunPlan({ pitchCount: 3, difficulty: 'normal' }, 11)
-    let derby = createDerby(plan, { input: 'keyboard', side: 'right', practice: [] }, 0)
+    let derby = createDerby(plan, { side: 'right', practice: [] }, 0)
     let hud = NEW_RUN_HUD
     const named: Array<[StageEvent['type'], PitchTypeId | null]> = []
     for (let nowMs = 0; derby.phase !== 'finished'; nowMs += 16) {
@@ -127,12 +129,12 @@ describe('the derby HUD', () => {
     ])
   })
 
-  it('names the distance and the pitch in the banner, never how the swing was timed or how hard it was', () => {
+  it('names the distance and the pitch in the banner, never how the swing was timed', () => {
     const landing = { outcome: 'homeRun', distanceDecimetres: 1203, spray: 0.1, launchDegrees: 28 } as const
-    const deadOn: PitchResult = { ...landing, pitchType: 'curve', timing: 'perfect', errorMs: 3, power: 1.1 }
-    const lateAndWeak: PitchResult = { ...deadOn, timing: 'late', errorMs: 120, power: 0.6 }
-    expect(bannerText(lateAndWeak, 'en')).toEqual(bannerText(deadOn, 'en'))
-    expect(bannerText(lateAndWeak, 'ko')).toEqual(bannerText(deadOn, 'ko'))
+    const deadOn: PitchResult = { ...landing, pitchType: 'curve', timing: 'perfect', errorMs: 3 }
+    const lateSwing: PitchResult = { ...deadOn, timing: 'late', errorMs: 120 }
+    expect(bannerText(lateSwing, 'en')).toEqual(bannerText(deadOn, 'en'))
+    expect(bannerText(lateSwing, 'ko')).toEqual(bannerText(deadOn, 'ko'))
     expect(bannerText({ ...deadOn, pitchType: 'fastball' }, 'en')).not.toEqual(bannerText(deadOn, 'en'))
   })
 

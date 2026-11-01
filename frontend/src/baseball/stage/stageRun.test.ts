@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { BaseballDifficulty, Vec3 } from '../../data/models'
+import { CALIBRATION_RULES } from '../game/calibration'
 import { DERBY_PHASE_MS, LATE_SWING_MARGIN_MS, latestContactMs, RESULT_HOLD_MS } from '../game/derby'
-import { type DerbyInput, replayDerby } from '../game/derbyScore'
+import { replayDerby } from '../game/derbyScore'
 import { DIFFICULTY_RULES } from '../game/difficulty'
 import { BATTER_REACH } from '../game/field'
 import { gameTime } from '../game/gameClock'
-import { contactHeight, contactSeconds, pitchPosition, secondsAtDepth } from '../game/pitch'
+import { contactHeight, contactSeconds, type PitchPlan, pitchPosition, secondsAtDepth } from '../game/pitch'
 import { createRunPlan, planRunPitch } from '../game/runPlan'
 import { SWING_RULES } from '../vision/swingTracker'
 import {
@@ -23,7 +24,7 @@ import {
 } from './stageRun'
 
 const FRAME_MS = 1000 / 60
-/** Input reaches the stage this long after the swing it reports. */
+/** A swing reaches the stage this long after the moment it reports. */
 const HANDLED_LATE_MS = 40
 const difficulties: BaseballDifficulty[] = ['easy', 'normal', 'hard']
 
@@ -33,11 +34,14 @@ type Playback = { run: StageRun; realMs: number; pending: RealTimeSwing | null; 
 /** Looks at the run after each frame, with that frame's events; it may move the next frame's time. */
 type Watch = (playback: Playback, frameEvents: StageEvent[]) => void
 
-function keyboardSetup(difficulty: BaseballDifficulty, pitchCount: number, seed: number): StageRunSetup {
-  return {
-    plan: createRunPlan({ pitchCount, difficulty }, seed),
-    log: { input: 'keyboard', side: 'right', practice: [] },
-  }
+function runSetup(difficulty: BaseballDifficulty, pitchCount: number, seed: number): StageRunSetup {
+  return { plan: createRunPlan({ pitchCount, difficulty }, seed), log: { side: 'right', practice: [] } }
+}
+
+/** A camera swing with the bat level with the ball at `contactAtRealMs`, as fast as an uncalibrated run's peak. */
+function levelSwing(pitch: PitchPlan, contactAtRealMs: number): RealTimeSwing {
+  const speed = CALIBRATION_RULES.peakFloor
+  return { contactAtRealMs, startedAtRealMs: contactAtRealMs - 200, speed, batHeight: contactHeight(pitch) }
 }
 
 /** The real moment game time reaches `gameMs`, while the clock keeps its current pace. */
@@ -52,7 +56,7 @@ function swingAt(run: StageRun, frameEvents: StageEvent[], swinging: Swinging): 
   const offsetMs = swinging(release.pitchIndex)
   if (offsetMs === null) return null
   const contactAtRealMs = realMomentOf(run, release.releasedMs + contactSeconds(release.pitch) * 1000 + offsetMs)
-  return { source: 'keyboard', contactAtRealMs, startedAtRealMs: contactAtRealMs, speed: 0, batHeight: null }
+  return levelSwing(release.pitch, contactAtRealMs)
 }
 
 /** One 60 fps frame: a swing is handed in HANDLED_LATE_MS after it was made, then the run advances to now. */
@@ -78,13 +82,12 @@ function play(setup: StageRunSetup, swinging: Swinging, watch: Watch = () => und
 }
 
 /**
- * A one-pitch `input` run with a swing `fromLatestMs` off the latest contact that still touches the ball, handed in
- * `lagMs` after it: where the ball was drawn on each 60 fps frame before then, and the run and the ball's place on the
- * frame that takes the swing.
+ * A one-pitch run with a swing `fromLatestMs` off the latest contact that still touches the ball, handed in `lagMs`
+ * after it: where the ball was drawn on each 60 fps frame before then, and the run and the ball's place on the frame
+ * that takes the swing.
  */
-function swingHandedInLate(input: DerbyInput, difficulty: BaseballDifficulty, fromLatestMs: number, lagMs: number) {
-  const setup = { ...keyboardSetup(difficulty, 1, 7), log: { input, side: 'right' as const, practice: [] } }
-  const run = createStageRun(setup, 0)
+function swingHandedInLate(difficulty: BaseballDifficulty, fromLatestMs: number, lagMs: number) {
+  const run = createStageRun(runSetup(difficulty, 1, 7), 0)
   const release = advanceStageRun(run, DERBY_PHASE_MS.ready + DERBY_PHASE_MS.windup, false).at(-1)
   if (release?.type !== 'release') throw new Error('expected the release')
   // No hit-stop or slow motion has changed the clock yet, so game time is real time.
@@ -98,9 +101,7 @@ function swingHandedInLate(input: DerbyInput, difficulty: BaseballDifficulty, fr
     advanceStageRun(run, realMs, false)
     return stageBallView(run, realMs, null).position
   })
-  const batHeight = contactHeight(release.pitch)
-  const swing = { source: input, contactAtRealMs, startedAtRealMs: contactAtRealMs, speed: 20, batHeight }
-  swingStageRun(run, swing, handedInAtMs)
+  swingStageRun(run, levelSwing(release.pitch, contactAtRealMs), handedInAtMs)
   const events = advanceStageRun(run, handedInAtMs, false).map((event) => event.type)
   const nowMs = gameTime(run.clock, handedInAtMs)
   return { run, frames, drawn, events, nowMs, handedIn: stageBallView(run, nowMs, null).position }
@@ -132,7 +133,7 @@ function playCameraFrame(playback: CameraPlayback) {
   const above = playback.above[release.pitchIndex]
   const contactAtRealMs = realMomentOf(run, release.releasedMs + contactSeconds(release.pitch) * 1000)
   const batHeight = above === null ? null : contactHeight(release.pitch) + above
-  playback.pending = { source: 'camera', contactAtRealMs, startedAtRealMs: contactAtRealMs - 200, speed: 9, batHeight }
+  playback.pending = { contactAtRealMs, startedAtRealMs: contactAtRealMs - 200, speed: 9, batHeight }
 }
 
 function distance(from: Vec3, to: Vec3) {
@@ -144,7 +145,7 @@ describe('stage run', () => {
     const offsetsMs = [0, -15, 20, 100]
     const starts: Vec3[] = []
     const { run } = play(
-      keyboardSetup('normal', 4, 7),
+      runSetup('normal', 4, 7),
       (pitchIndex) => offsetsMs[pitchIndex],
       (playback, frameEvents) => {
         if (frameEvents.some((event) => event.type === 'contact')) starts.push({ ...playback.run.batted!.start })
@@ -174,23 +175,23 @@ describe('stage run', () => {
       if (flight && run.clock.rate < 1 && atSlowdown.length === 0)
         atSlowdown.push({ rising: flight.velocity.y > 0, landed: flight.landed })
     }
-    const equalHomeRuns = play(keyboardSetup('normal', 3, 7), () => 0, watch)
+    const equalHomeRuns = play(runSetup('normal', 3, 7), () => 0, watch)
     expect(new Set(equalHomeRuns.run.derby.results.map((result) => result.distanceDecimetres)).size).toBe(1)
     expect(slowestRate).toEqual([STAGE_TIMING.apexSlowMotion.rate, 1, 1])
     expect(atSlowdown).toEqual([{ rising: false, landed: false }])
     expect(equalHomeRuns.run.clock.rate).toBe(1)
     slowestRate.length = 0
-    play(keyboardSetup('normal', 3, 7), () => 0, watch, true)
+    play(runSetup('normal', 3, 7), () => 0, watch, true)
     expect(slowestRate).toEqual([1, 1, 1])
   })
 
   it('never lets the mitt catch a pitch a swing still in time then hits, and catches each one let go', () => {
     difficulties.forEach((difficulty) => {
       const lastMomentMs = DIFFICULTY_RULES[difficulty].timingWindows.contact - 5
-      const late = play(keyboardSetup(difficulty, 3, 7), () => lastMomentMs)
+      const late = play(runSetup(difficulty, 3, 7), () => lastMomentMs)
       expect(late.run.derby.results.map((result) => result.outcome)).toEqual(['foul', 'foul', 'foul'])
       expect(late.events.filter((event) => event.type === 'caught')).toEqual([])
-      const letGo = play(keyboardSetup(difficulty, 3, 7), () => null)
+      const letGo = play(runSetup(difficulty, 3, 7), () => null)
       const judgedAndCaught = letGo.events.filter((event) => event.type === 'result' || event.type === 'caught')
       expect(judgedAndCaught.map((event) => event.type)).toEqual([
         'result',
@@ -205,7 +206,7 @@ describe('stage run', () => {
 
   it('keeps a pitch hit at the last moment at the back of the reach, however late a camera swing is reported', () => {
     difficulties.forEach((difficulty) => {
-      const { drawn, events, run } = swingHandedInLate('camera', difficulty, -5, LATE_SWING_MARGIN_MS - 10)
+      const { drawn, events, run } = swingHandedInLate(difficulty, -5, LATE_SWING_MARGIN_MS - 10)
       expect(events).toContain('contact')
       expect(Math.min(...drawn.map((position) => -position.z))).toBeGreaterThanOrEqual(BATTER_REACH.back - 1e-9)
       expect(run.batted!.start).toEqual(drawn.at(-1))
@@ -214,7 +215,7 @@ describe('stage run', () => {
 
   it('judges a camera swing that touched the ball however late the camera can report it, at every difficulty', () => {
     difficulties.forEach((difficulty) => {
-      const { run } = swingHandedInLate('camera', difficulty, -5, LATEST_CAMERA_REPORT_MS)
+      const { run } = swingHandedInLate(difficulty, -5, LATEST_CAMERA_REPORT_MS)
       const [swing] = run.derby.log.swings
       expect(swing?.contactMs).toBeCloseTo(latestContactMs(run.derby, run.pitch!.plan) - 5, 6)
       expect(run.derby.results[0].outcome).not.toBe('miss')
@@ -223,7 +224,7 @@ describe('stage run', () => {
 
   it('sends a pitch a late swing missed on from where it waits, however late the swing is reported', () => {
     difficulties.forEach((difficulty) => {
-      const { drawn, events, handedIn, run } = swingHandedInLate('camera', difficulty, 5, 110)
+      const { drawn, events, handedIn, run } = swingHandedInLate(difficulty, 5, 110)
       expect(events).not.toContain('contact')
       const frameTravel = distance(pitchPosition(run.pitch!.plan, 0), pitchPosition(run.pitch!.plan, FRAME_MS / 1000))
       expect(distance(drawn.at(-1)!, handedIn)).toBeLessThan(frameTravel)
@@ -231,32 +232,19 @@ describe('stage run', () => {
   })
 
   it('holds the moment the bat met the ball through the hit-stop, even when the swing is handed in late', () => {
-    const lags: Array<[DerbyInput, number]> = [
-      ['keyboard', FRAME_MS - 1],
-      ['camera', 115],
-    ]
-    lags.forEach(([input, lagMs]) => {
-      const { run, nowMs, handedIn } = swingHandedInLate(input, 'normal', -60, lagMs)
+    const lagsMs = [FRAME_MS - 1, 115]
+    lagsMs.forEach((lagMs) => {
+      const { run, nowMs, handedIn } = swingHandedInLate('normal', -60, lagMs)
       expect(nowMs).toBe(run.batted!.meetMs)
       expect(handedIn).toEqual(run.batted!.start)
       expect(gameTime(run.clock, run.clock.realMs - 1)).toBe(run.batted!.meetMs)
     })
   })
 
-  it('lets a keyboard pitch go on into the mitt from the first frame past its latest contact', () => {
-    difficulties.forEach((difficulty) => {
-      const { run, frames, drawn } = swingHandedInLate('keyboard', difficulty, 3 * FRAME_MS, 0)
-      const latestMs = run.pitch!.releasedMs + latestContactMs(run.derby, run.pitch!.plan)
-      const firstPast = frames.findIndex((realMs) => realMs >= latestMs)
-      expect(-drawn[firstPast].z).toBeCloseTo(BATTER_REACH.back, 9)
-      expect(-drawn[firstPast + 1].z).toBeLessThan(BATTER_REACH.back - 0.2)
-    })
-  })
-
   it('brings every ball in play down before its result ends, however high it was hit', () => {
     // Just past the GOOD edge a foul carries farthest, and hangs longest.
     const windowShares = [-0.95, -0.62, -0.5, 0, 0.5, 0.62, 0.95]
-    const runs = difficulties.flatMap((difficulty) => [3, 7, 11].map((seed) => keyboardSetup(difficulty, 7, seed)))
+    const runs = difficulties.flatMap((difficulty) => [3, 7, 11].map((seed) => runSetup(difficulty, 7, seed)))
     const flyingAfterResults = runs.map((setup) => {
       const contactWindowMs = DIFFICULTY_RULES[setup.plan.rules.difficulty].timingWindows.contact
       let flying = 0
@@ -277,7 +265,7 @@ describe('stage run', () => {
     let stalled = false
     let slowestPitchRate = 1
     play(
-      keyboardSetup('normal', 3, 7),
+      runSetup('normal', 3, 7),
       () => 0,
       (playback, frameEvents) => {
         const { run } = playback
@@ -295,7 +283,7 @@ describe('stage run', () => {
   })
 
   it('lets no pitch go by while the page is hidden', () => {
-    const run = createStageRun(keyboardSetup('normal', 3, 7), 0)
+    const run = createStageRun(runSetup('normal', 3, 7), 0)
     advanceStageRun(run, 1000, false)
     setStageRunPaused(run, 1000, true)
     const hiddenEvents = advanceStageRun(run, 61_000, false)
@@ -309,12 +297,12 @@ describe('stage run', () => {
     const above = [0, 0.2, null]
     const setup: StageRunSetup = {
       plan: createRunPlan({ pitchCount: above.length, difficulty: 'normal' }, 9),
-      log: { input: 'camera', side: 'right', practice: [] },
+      log: { side: 'right', practice: [] },
     }
     const playback: CameraPlayback = { run: createStageRun(setup, 1000), realMs: 1000, pending: null, above }
     while (playback.run.derby.phase !== 'finished' && playback.realMs < 120_000) playCameraFrame(playback)
     const { derby } = playback.run
-    expect(derby.log.swings.map((swing) => swing?.source)).toEqual(['camera', 'camera', 'camera'])
+    expect(derby.log.swings).not.toContain(null)
     derby.results.forEach((result) => expect(result.errorMs).toBeCloseTo(0, 6))
     const heights = derby.log.swings.map((swing) => swing?.heightError)
     expect(heights[0]).toBeCloseTo(0, 9)

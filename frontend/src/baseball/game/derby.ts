@@ -1,7 +1,6 @@
 import { calibrate, type Calibration, CALIBRATION_RULES } from './calibration'
 import { DIFFICULTY_RULES, PRACTICE_PITCH_FLIGHT_SECONDS } from './difficulty'
 import {
-  type DerbyInput,
   type DerbyInputLog,
   type DerbyResult,
   type PitchResult,
@@ -66,12 +65,11 @@ export type DerbyEvent =
 export type DerbyUpdate = { derby: Derby; events: DerbyEvent[] }
 
 /**
- * A swing on the game clock: what made it, when the bat reached the contact point and when the swing began, its top
- * speed (see SwingEvent), and how high the bat was there (field m), or null when nothing measured it. The derby logs
+ * A camera swing on the game clock: when the bat reached the contact point and when the swing began, its top speed
+ * (see SwingEvent), and how high the bat was there (field m), or null when the tracking lost the bat. The derby logs
  * that height against the ball's at the contact point, since only it knows which pitch the swing met.
  */
 export type DerbySwing = {
-  source: DerbyInput
   contactAtMs: number
   startedAtMs: number
   speed: number
@@ -80,8 +78,8 @@ export type DerbySwing = {
 
 /**
  * A run starting at `nowMs`, judged with the calibration from the practice already in `log`. The `practice` before a
- * camera run flies at the practice pace, and takes a swing as late as the calibration still counts one, past the
- * contact window, so a slow camera's late swings still teach it; a run flies at its difficulty's pace and takes a swing
+ * run flies at the practice pace, and takes a swing as late as the calibration still counts one, past the contact
+ * window, so a slow camera's late swings still teach it; a run flies at its difficulty's pace and takes a swing
  * only while it can still touch the ball.
  */
 export function createDerby(plan: RunPlan, log: Omit<DerbyInputLog, 'swings'>, nowMs: number, practice = false): Derby {
@@ -125,7 +123,6 @@ export function swingDerby(derby: Derby, swing: DerbySwing): DerbyUpdate {
   if (advanced.derby.phase !== 'pitch' || swing.contactAtMs < releasedMs) return advanced
   const pitch = derbyPitch(advanced.derby, advanced.derby.pitchIndex)
   const event: SwingEvent = {
-    source: swing.source,
     contactMs: swing.contactAtMs - releasedMs,
     startedMs: swing.startedAtMs - releasedMs,
     speed: swing.speed,

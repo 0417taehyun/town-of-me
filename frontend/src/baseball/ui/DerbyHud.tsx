@@ -15,8 +15,8 @@ import {
  * events told it (derbyCues.ts), never the pitches to come. The caption and banner are one live region, so a screen
  * reader hears each cue and result; `cameraState`, what the camera panel's chip shows, is another, heard only. While
  * the run is `paused` for a visitor out of the camera's view, the caption says so. Results show the outcome, the
- * distance, and the pitch type, never how the swing was timed or its power. In a keyboard run Space and Enter swing
- * anywhere (BaseballApp) and `onSwing` gives a pointer a button; a camera run has none.
+ * distance, and the pitch type, never how the swing was timed or its power. It has no swing button: only the camera
+ * swings.
  */
 export function DerbyHud({
   hud,
@@ -24,14 +24,12 @@ export function DerbyHud({
   paused,
   language,
   cameraState,
-  onSwing,
 }: {
   hud: DerbyHudState
   pitchCount: number
   paused: boolean
   language: AppLanguage
   cameraState: string | null
-  onSwing: ((timeStamp: number) => void) | null
 }) {
   const copy = languageCopy[language].baseball.hud
   const score = scoreboardTotals(hud)
@@ -69,12 +67,6 @@ export function DerbyHud({
       <p className="derby-camera-state" role="status">
         {cameraState}
       </p>
-      {onSwing && hud.phase !== 'finished' && (
-        <button className="derby-swing" type="button" onPointerDown={(event) => onSwing(event.timeStamp)}>
-          {copy.swing}
-          <kbd>Space</kbd>
-        </button>
-      )}
     </div>
   )
 }

@@ -5,7 +5,7 @@ import { DEFAULT_PLAYER_PROFILE, type PlayerProfile } from '../../data/playerPro
 import { DERBY_PHASE_MS } from '../game/derby'
 import type { BattingSide } from '../game/field'
 import { gameTime } from '../game/gameClock'
-import { contactSeconds, RELEASE_POINT } from '../game/pitch'
+import { contactHeight, contactSeconds, type PitchPlan, RELEASE_POINT } from '../game/pitch'
 import { createRunPlan } from '../game/runPlan'
 import { type BallplayerRig, turnHead } from './actors/ballplayerRig'
 import { BAT } from './actors/bat'
@@ -34,22 +34,20 @@ import {
 
 const FRAME_MS = 10
 
-/** A one-pitch keyboard run on `side` with a swing `offsetMs` off PERFECT, handed in a frame after it was made. */
+/** A camera swing with the bat level with `pitch` at `contactAtRealMs`. */
+function levelSwing(pitch: PitchPlan, contactAtRealMs: number): RealTimeSwing {
+  return { contactAtRealMs, startedAtRealMs: contactAtRealMs - 200, speed: 8, batHeight: contactHeight(pitch) }
+}
+
+/** A one-pitch run on `side` with a swing `offsetMs` off PERFECT, handed in a frame after it was made. */
 function swungRun(side: BattingSide, offsetMs: number) {
   const plan = createRunPlan({ pitchCount: 1, difficulty: 'normal' }, 7)
-  const run = createStageRun({ plan, log: { input: 'keyboard', side, practice: [] } }, 0)
+  const run = createStageRun({ plan, log: { side, practice: [] } }, 0)
   const release = advanceStageRun(run, DERBY_PHASE_MS.ready + DERBY_PHASE_MS.windup, false).at(-1)
   if (release?.type !== 'release') throw new Error('expected the release')
   // No hit-stop or slow motion has changed the clock yet, so game time is real time.
   const contactAtRealMs = release.releasedMs + contactSeconds(release.pitch) * 1000 + offsetMs
-  const swing: RealTimeSwing = {
-    source: 'keyboard',
-    contactAtRealMs,
-    startedAtRealMs: contactAtRealMs,
-    speed: 0,
-    batHeight: null,
-  }
-  swingStageRun(run, swing, contactAtRealMs + 17)
+  swingStageRun(run, levelSwing(release.pitch, contactAtRealMs), contactAtRealMs + 17)
   advanceStageRun(run, contactAtRealMs + 17, false)
   return { run, contactAtMs: contactAtRealMs }
 }
@@ -88,18 +86,18 @@ function distance(from: Vec3, to: Vec3) {
 /** One frame as the director draws it, after posing the cast: game time and the ball. */
 type CastFrame = { nowMs: number; view: BallView; run: StageRun }
 
-/** The keyboard swing at a pitch released among `events`, `offsetsMs[pitch]` off PERFECT, or null to let it go. */
+/** The swing at a pitch released among `events`, `offsetsMs[pitch]` off PERFECT, or null to let it go. */
 function swingAtRelease(run: StageRun, events: StageEvent[], offsetsMs: (number | null)[]): RealTimeSwing | null {
   const release = events.find((event) => event.type === 'release')
   const offsetMs = release?.type === 'release' ? offsetsMs[release.pitchIndex] : null
   if (release?.type !== 'release' || offsetMs === null) return null
   const atGameMs = release.releasedMs + contactSeconds(release.pitch) * 1000 + offsetMs
   const atMs = run.clock.realMs + (atGameMs - run.clock.gameMs) / run.clock.rate
-  return { source: 'keyboard', contactAtRealMs: atMs, startedAtRealMs: atMs, speed: 0, batHeight: null }
+  return levelSwing(release.pitch, atMs)
 }
 
 /**
- * Plays a normal keyboard run on `side` with `cast` the way the director does, a frame every FRAME_MS: each pitch swung
+ * Plays a normal run on `side` with `cast` the way the director does, a frame every FRAME_MS: each pitch swung
  * `offsetsMs` off PERFECT (null: let go), handed in with the next frame, the heads eased `delta` seconds a frame.
  */
 function playWithCast(
@@ -110,7 +108,7 @@ function playWithCast(
   delta = FRAME_MS / 1000,
 ) {
   const plan = createRunPlan({ pitchCount: offsetsMs.length, difficulty: 'normal' }, 7)
-  const run = createStageRun({ plan, log: { input: 'keyboard', side, practice: [] } }, 0)
+  const run = createStageRun({ plan, log: { side, practice: [] } }, 0)
   let pending: RealTimeSwing | null = null
   for (let realMs = FRAME_MS; run.derby.phase !== 'finished'; realMs += FRAME_MS) {
     const handedIn: RealTimeSwing[] = pending && pending.contactAtRealMs < realMs ? [pending] : []

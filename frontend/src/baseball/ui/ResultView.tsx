@@ -9,8 +9,7 @@ import { StanceGauge } from './StanceGauge'
  * A finished run as `replayDerby` scored it from its plan and input log, so these are the numbers a server recomputing
  * the run gets: home runs first, then their summed distance, which ranks runs with as many. Distances show to the
  * decimeter they are scored in, so two totals that rank apart never read the same; the live HUD rounds to meters. No
- * timing or power is shown. With the camera on, holding the batting stance fills `gauge` and plays again, as the button
- * does; `gauge` is null without the camera.
+ * timing or power is shown. Holding the batting stance fills `gauge` and plays again, as the button does.
  */
 export function ResultView({
   result,
@@ -21,7 +20,7 @@ export function ResultView({
 }: {
   result: DerbyResult
   exit: BaseballExit
-  gauge: Ref<HTMLDivElement> | null
+  gauge: Ref<HTMLDivElement>
   language: AppLanguage
   onPlayAgain: () => void
 }) {
@@ -46,9 +45,8 @@ export function ResultView({
           <dd>{homeRunDistanceText(result.longestHomeRunDecimetres, language, 1)}</dd>
         </div>
       </dl>
-      {gauge && <StanceGauge ref={gauge} label={copy.flow.stance} hint={copy.flow.toPlayAgain} />}
+      <StanceGauge ref={gauge} label={copy.flow.stance} hint={copy.flow.toPlayAgain} />
       <div className="derby-actions">
-        {/* Enter plays again at once; Space and Enter swing only while a run plays. */}
         <button className="primary-button" type="button" autoFocus onClick={onPlayAgain}>
           {copy.result.playAgain}
         </button>

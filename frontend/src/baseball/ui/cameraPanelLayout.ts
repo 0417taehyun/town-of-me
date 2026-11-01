@@ -154,9 +154,8 @@ export type DerbyKeyAction = 'leave' | 'cameraPanel'
 
 /**
  * What a key does on the derby's page, wherever focus is: Escape leaves, and V resizes or hides the camera panel beside
- * the play. Nothing else: Enter and Space press the focused button as on any page, so no key goes on by itself, and in
- * practice and a camera run no key swings (only the keyboard run the rules card still offers takes Space and Enter as
- * swings, BaseballApp.tsx, until the camera-only change removes it).
+ * the play. Nothing else: Enter and Space press the focused button as on any page, so no key goes on by itself, and no
+ * key swings: only the camera does.
  */
 export function derbyKeyAction(
   event: Pick<KeyboardEvent, 'key' | 'code' | 'repeat' | 'altKey' | 'ctrlKey' | 'metaKey'>,

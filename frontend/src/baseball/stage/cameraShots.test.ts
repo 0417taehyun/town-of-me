@@ -49,7 +49,6 @@ function homeRun(distanceDecimetres: number): PitchResult {
     pitchType: 'fastball',
     timing: 'perfect',
     errorMs: 0,
-    power: 0.95,
   }
 }
 

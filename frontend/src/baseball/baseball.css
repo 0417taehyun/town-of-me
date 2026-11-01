@@ -170,13 +170,6 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   padding: 0 16px;
   font-size: 0.95rem;
 }
-.derby-keyboard-play {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin-top: 16px;
-}
 .derby-links {
   position: absolute;
   bottom: 0;
@@ -566,35 +559,4 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   font-size: clamp(28px, 6vh, 96px);
   font-weight: 700;
   line-height: 1.1;
-}
-.derby-swing {
-  position: absolute;
-  right: 3vw;
-  bottom: 1vh;
-  display: inline-flex;
-  align-items: center;
-  gap: 1.2vh;
-  height: 6vh;
-  min-height: 44px;
-  padding: 0 3vh;
-  border: 0;
-  border-radius: 999px;
-  color: #fffef9;
-  background: var(--leaf);
-  box-shadow: var(--shadow);
-  font-size: clamp(16px, 2.8vh, 40px);
-  font-weight: 800;
-  cursor: pointer;
-  pointer-events: auto;
-  touch-action: manipulation;
-}
-.derby-swing:active {
-  background: var(--leaf-dark);
-}
-.derby-swing kbd {
-  padding: 0.15em 0.5em;
-  border-radius: 0.4em;
-  background: rgba(255, 255, 255, 0.2);
-  font: inherit;
-  font-size: 0.7em;
 }

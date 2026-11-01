@@ -25,21 +25,20 @@ import { MITT_DEPTH } from './stageLayout'
 
 // A run as the stage plays it: the derby (game/derby.ts) on its game clock, plus what only the stage shows. The ball is
 // in the pitcher's hand until the derby releases it, then pitched on the derby's own times. A pitch waits at the back
-// of the batter's reach while a swing that touches it could still be reported (a keyboard swing comes with the next
-// frame, a camera swing up to the derby's late margin after it), so the mitt never catches a ball the bat then hits;
-// a ball in play leaves the bat where and when the bat met it and flies to the landing the judge already decided. The
-// stage changes the clock's pace (hit-stop at contact, holding the moment the bat met the ball even when the swing came
-// late; slow motion at a showcase home run's peak; a pause while the page is hidden, or between pitches while the
-// visitor is away) but never an outcome. Every function here mutates the run it is given; the director keeps it in a
-// ref and reads it each frame.
+// of the batter's reach while a swing that touches it could still be reported (a camera swing comes up to the derby's
+// late margin after it), so the mitt never catches a ball the bat then hits; a ball in play leaves the bat where and
+// when the bat met it and flies to the landing the judge already decided. The stage changes the clock's pace (hit-stop
+// at contact, holding the moment the bat met the ball even when the swing came late; slow motion at a showcase home
+// run's peak; a pause while the page is hidden, or between pitches while the visitor is away) but never an outcome.
+// Every function here mutates the run it is given; the director keeps it in a ref and reads it each frame.
 
 /**
- * A run for the stage to play: its plan, how the visitor plays it (input, batting side, practice), and whether it is
- * the practice before a camera run, which keeps its own pace and late limit (createDerby).
+ * A run for the stage to play: its plan, how the visitor plays it (batting side, practice), and whether it is the
+ * practice before a run, which keeps its own pace and late limit (createDerby).
  */
 export type StageRunSetup = { plan: RunPlan; log: Omit<DerbyInputLog, 'swings'>; practice?: boolean }
 
-/** A swing as input reports it, on the real clock: performance.now() ms, the clock of `event.timeStamp`. */
+/** A swing as the camera reports it, on the real clock: performance.now() ms, as the frames it was seen in. */
 export type RealTimeSwing = Omit<DerbySwing, 'contactAtMs' | 'startedAtMs'> & {
   contactAtRealMs: number
   startedAtRealMs: number
@@ -130,7 +129,7 @@ export function toDerbySwing(clock: GameClock, swing: RealTimeSwing): DerbySwing
   return { ...measured, contactAtMs: gameTime(clock, contactAtRealMs), startedAtMs: gameTime(clock, startedAtRealMs) }
 }
 
-/** A swing input handed in at real moment `realMs`. */
+/** A camera swing handed in at real moment `realMs`. */
 export function swingStageRun(run: StageRun, swing: RealTimeSwing, realMs: number): StageEvent[] {
   const update = swingDerby(run.derby, toDerbySwing(run.clock, swing))
   return takeDerbyUpdate(run, update, gameTime(run.clock, realMs))
@@ -141,7 +140,6 @@ export function advanceStageRun(run: StageRun, realMs: number, reducedMotion: bo
   endSlowMotion(run, realMs)
   const nowMs = gameTime(run.clock, realMs)
   const derbyEvents = takeDerbyUpdate(run, advanceDerby(run.derby, nowMs), nowMs)
-  endKeyboardHold(run, nowMs)
   const cues = [...catchCue(run, nowMs), ...contactCue(run, nowMs, realMs)]
   return [...derbyEvents, ...cues, ...flyBall(run, realMs, reducedMotion)]
 }
@@ -189,19 +187,6 @@ export function endHold(pitch: PitchOnStage | null, event: ResultEvent, nowMs: n
   const reachBack = secondsAtDepth(pitch.plan, BATTER_REACH.back)
   const takenSeconds = (nowMs - pitch.releasedMs) / 1000
   pitch.holdSeconds = Math.min(pitch.holdSeconds, Math.max(reachBack, event.swing.contactMs / 1000, takenSeconds))
-}
-
-/**
- * A keyboard swing is handed in with the first frame after its key press, so once a frame at game time `nowMs` comes
- * past the latest contact that still touches a keyboard run's pitch, and none has, no swing can: the pitch goes on from
- * there. A camera swing can be reported later, so a camera run's pitch waits until the derby's deadline.
- */
-export function endKeyboardHold(run: StageRun, nowMs: number) {
-  const { pitch, derby } = run
-  if (!pitch || derby.log.input !== 'keyboard' || derby.results.length > pitch.index) return
-  const elapsedMs = nowMs - pitch.releasedMs
-  if (elapsedMs < latestContactMs(derby, pitch.plan)) return
-  pitch.holdSeconds = Math.min(pitch.holdSeconds, elapsedMs / 1000)
 }
 
 /**
@@ -436,7 +421,7 @@ export function directedShot(
 }
 
 /**
- * One frame of the run: the swings input reported since the last frame, in order, then everything due by `realMs`.
+ * One frame of the run: the swings the camera reported since the last frame, in order, then everything due by `realMs`.
  * Slow motion that is over ends first, so a swing made after it converts at full pace.
  */
 export function playStageFrame(
