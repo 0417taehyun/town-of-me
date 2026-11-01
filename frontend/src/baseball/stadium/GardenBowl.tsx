@@ -48,6 +48,7 @@ import {
 } from './bowlLayout'
 import { coverWithSnow } from './fieldLayout'
 import { createCanvasTexture, drawGlass, drawLeaves } from './fieldTextures'
+import { landmarkFootprints } from './landmarkLayout'
 
 const hedgeColors = getSeasonColors('hedge')
 const hillColors = getSeasonColors('hills')
@@ -93,7 +94,7 @@ export function GardenBowl({
     const seats = standSeats()
     return {
       seats: [seats.filter((seat) => seat.section % 2 === 0), seats.filter((seat) => seat.section % 2 === 1)],
-      trees: gardenTrees([]),
+      trees: gardenTrees(landmarkFootprints()),
       flowers: gardenFlowers(),
       beds: flowerBeds(),
       stones: steppingStones(),

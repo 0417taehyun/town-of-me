@@ -7,7 +7,6 @@ import {
   Path,
   Shape,
 } from 'three'
-import type { BallparkColorRole } from '../../data/models'
 import { BASES, FENCE_DISTANCE, FENCE_HEIGHT, fenceDistance, FOUL_ANGLE, MOUND_DISTANCE } from '../game/field'
 
 // The stadium as drawn, in the field meters of baseball/game/field.ts: home plate's center at the origin, the pitcher
@@ -217,33 +216,6 @@ export const FOUL_POLE = { height: 14, radius: 0.15, capRadius: 0.42 }
 export const DUGOUT_SPOTS = [
   { x: -16.3, z: -2.1, yaw: (3 * Math.PI) / 4 },
   { x: 16.3, z: -2.1, yaw: (-3 * Math.PI) / 4 },
-]
-
-/** One box of a dugout in its own frame (front +z): the building role that colors it, its center, size, and tilt. */
-export type DugoutPart = {
-  role: BallparkColorRole
-  center: readonly [x: number, y: number, z: number]
-  size: readonly [width: number, height: number, depth: number]
-  tilt: number
-}
-
-/** A garden shed open to the field under a roof sloping toward it: every building role colors part of it. */
-export const DUGOUT_PARTS: readonly DugoutPart[] = [
-  { role: 'walls', center: [0, 1.4, -1.5], size: [8, 2.8, 0.2], tilt: 0 },
-  { role: 'walls', center: [-3.9, 1.3, 0], size: [0.2, 2.6, 3], tilt: 0 },
-  { role: 'walls', center: [3.9, 1.3, 0], size: [0.2, 2.6, 3], tilt: 0 },
-  { role: 'walls', center: [0, 0.45, 1.4], size: [8, 0.9, 0.2], tilt: 0 },
-  { role: 'roof', center: [0, 2.78, 0.1], size: [8.8, 0.18, 3.8], tilt: 0.13 },
-  { role: 'trim', center: [0, 0.95, 1.4], size: [8.1, 0.1, 0.34], tilt: 0 },
-  { role: 'trim', center: [0, 2.48, 1.98], size: [8.9, 0.24, 0.12], tilt: 0 },
-  ...[-3.9, -1.3, 1.3, 3.9].map((x) => ({
-    role: 'trim' as const,
-    center: [x, 1.7, 1.4] as const,
-    size: [0.16, 1.6, 0.16] as const,
-    tilt: 0,
-  })),
-  { role: 'accent', center: [0, 2.12, 1.56], size: [2.4, 0.42, 0.06], tilt: 0 },
-  { role: 'accent', center: [0, 0.55, 1.52], size: [8, 0.16, 0.04], tilt: 0 },
 ]
 
 /** Snow settles on the lawn and the hedge's top as the season's cover grows, and melts off as it shrinks. */

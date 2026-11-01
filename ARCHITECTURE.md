@@ -152,7 +152,11 @@ down, so a ball farther off is drawn higher and one flat frame would show strike
 runs from where the bat meets the ball, over the plate, to where a pitch let go by waits, so a strike is drawn inside it
 as the visitor swings, as it crosses the plate, and while it waits. Its opening is the zone grown by the drawn ball's
 extra size. The stadium's lawn and hedge take the visitor's season like the town's (`scene/environment`), the sky and
-light the time of day, and its dugouts and foul poles the ballpark palette; none of this reaches the score.
+light the time of day, and its dugouts and foul poles the ballpark palette; none of this reaches the score. The garden
+bowl (`bowlLayout.ts`, `GardenBowl.tsx`) and its landmarks (`landmarkLayout.ts`, `GardenLandmarks.tsx`) follow the same
+split: buildings in the palette's roles, nature in the season (town trees and flowers, with their snow). Nothing tall
+stands where a home run lands or the landing camera stands (`bowlLayout.test.ts`), and the treehouse scoreboard shows a
+pitch only once its ball is down, as the HUD does (`scoreboard.ts`).
 
 `stage/actors/` builds the players in plain Three.js. `ballplayerRig.ts` is the town character's body, look, and
 proportions posed by joints (two-bone IK legs on planted feet, a chest turning about a tilted spine, elbow arms); the

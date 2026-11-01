@@ -1,26 +1,24 @@
-import { BoxGeometry } from 'three'
+import { useEffect, useMemo } from 'react'
 import type { BallparkPalette } from '../../scene/venues/ballpark/ballparkThemes'
 import type { VenueMaterials } from '../../scene/venues/venueMaterials'
-import { DUGOUT_PARTS, DUGOUT_SPOTS } from './fieldLayout'
+import { createShedGeometries } from './landmarkLayout'
 
-const unitBox = new BoxGeometry(1, 1, 1)
-
-/** The two dugouts, built in the ballpark's building colors, so an admin's walls, roof, trim, and accent show here. */
+/**
+ * The two dugouts as garden sheds in the ballpark's building colors, so an admin's walls, roof, trim, and accent show
+ * here; their round windows keep their glass.
+ */
 export function Dugouts({ materials }: { materials: VenueMaterials<keyof BallparkPalette> }) {
-  return DUGOUT_SPOTS.map((spot, dugout) => (
-    <group key={dugout} position={[spot.x, 0, spot.z]} rotation-y={spot.yaw}>
-      {DUGOUT_PARTS.map((part, index) => (
-        <mesh
-          key={index}
-          geometry={unitBox}
-          material={materials[part.role]}
-          position={part.center}
-          rotation-x={part.tilt}
-          scale={part.size}
-          castShadow
-          receiveShadow
-        />
-      ))}
+  const sheds = useMemo(() => createShedGeometries(), [])
+  useEffect(() => () => Object.values(sheds).forEach((geometry) => geometry.dispose()), [sheds])
+  return (
+    <group>
+      <mesh geometry={sheds.walls} material={materials.walls} castShadow receiveShadow />
+      <mesh geometry={sheds.roof} material={materials.roof} castShadow receiveShadow />
+      <mesh geometry={sheds.trim} material={materials.trim} castShadow receiveShadow />
+      <mesh geometry={sheds.accent} material={materials.accent} castShadow receiveShadow />
+      <mesh geometry={sheds.glass}>
+        <meshStandardMaterial color="#425566" roughness={0.4} />
+      </mesh>
     </group>
-  ))
+  )
 }

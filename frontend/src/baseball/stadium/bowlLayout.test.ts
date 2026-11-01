@@ -3,6 +3,7 @@ import { fenceDistance } from '../game/field'
 import { FENCE_RULES, LONGEST_CARRY, SPRAY_RULES } from '../game/landing'
 import { wideShot } from '../stage/cameraShots'
 import { gardenTrees, outerHedgeDistance, sprayOf } from './bowlLayout'
+import { landmarkFootprints } from './landmarkLayout'
 
 /** Every home run the judge can give, on a grid of sprays and carries. */
 function homeRunLandings() {
@@ -16,8 +17,9 @@ function homeRunLandings() {
 }
 
 describe('the garden beyond the outfield', () => {
-  it('keeps every home run and its landing camera clear of the trees and inside the outer hedge', () => {
-    const trees = gardenTrees([])
+  it('keeps every home run and its landing camera clear of the trees and landmarks, inside the outer hedge', () => {
+    const landmarks = landmarkFootprints()
+    const trees = gardenTrees(landmarks)
     homeRunLandings().forEach(({ spray, distance }) => {
       const { position } = wideShot(spray, distance)
       const landing = { x: Math.sin(spray) * distance, z: -Math.cos(spray) * distance }
@@ -26,6 +28,9 @@ describe('the garden beyond the outfield', () => {
           ...trees.map((tree) => Math.hypot(tree.position.x - spot.x, tree.position.z - spot.z)),
         )
         expect(nearestTree).toBeGreaterThan(9)
+        landmarks.forEach((landmark) =>
+          expect(Math.hypot(landmark.x - spot.x, landmark.z - spot.z)).toBeGreaterThan(landmark.radius),
+        )
         expect(Math.hypot(spot.x, spot.z)).toBeLessThan(outerHedgeDistance(sprayOf(spot.x, spot.z)) - 5)
       })
     })

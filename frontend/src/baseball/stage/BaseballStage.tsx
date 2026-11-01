@@ -15,7 +15,9 @@ import { useVenueMaterials } from '../../scene/venues/venueMaterials'
 import type { BattingSide } from '../game/field'
 import { Dugouts } from '../stadium/Dugouts'
 import { GardenBowl } from '../stadium/GardenBowl'
+import { GardenLandmarks } from '../stadium/GardenLandmarks'
 import { StadiumField } from '../stadium/StadiumField'
+import type { DerbyHudState } from '../ui/derbyCues'
 import type { FreeBand } from './cameraShots'
 import { DerbyDirector } from './DerbyDirector'
 import type { RealTimeSwing, RealTimeSwingCue, StageEvent, StageRunSetup } from './stageRun'
@@ -46,6 +48,8 @@ export function BaseballStage({
   period,
   season,
   reducedMotion,
+  hud,
+  pitchCount,
   onUnavailable,
 }: {
   language: AppLanguage
@@ -62,6 +66,9 @@ export function BaseballStage({
   period: DayPeriod
   season: Season
   reducedMotion: boolean
+  /** The run so far, for the treehouse scoreboard; a new run's before the run starts. */
+  hud: DerbyHudState
+  pitchCount: number
   onUnavailable: () => void
 }) {
   const dayChange = useDayChange(period, reducedMotion)
@@ -95,6 +102,13 @@ export function BaseballStage({
       <SunLight dayChange={dayChange} playerPosition={shadowFocus} editing={false} />
       <StadiumField materials={materials} seasonChange={seasonChange} />
       <Dugouts materials={materials} />
+      <GardenLandmarks
+        materials={materials}
+        seasonChange={seasonChange}
+        language={language}
+        hud={hud}
+        pitchCount={pitchCount}
+      />
       <GardenBowl
         materials={materials}
         seasonChange={seasonChange}

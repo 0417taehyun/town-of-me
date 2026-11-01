@@ -268,7 +268,9 @@ export function createOuterHedgeSweep(profile: SweepProfile) {
   return createArcSweep(profile, arc, { textureMeters: 4 })
 }
 
-/** A round keep-out patch for trees: a landmark, a light tower, or the like. */
+/** The round patch a landmark stands on; a tree's crown keeps `TREE_ROOM` m clear of it. */
+export const TREE_ROOM = 8
+
 export type Clearing = { x: number; z: number; radius: number }
 
 /**
@@ -281,7 +283,7 @@ export function isBuiltUp(x: number, z: number, clearings: readonly Clearing[]) 
   if (Math.abs(spray) <= FOUL_ANGLE + 0.05 && distance < fenceDistance(spray) + 8) return true
   if (isOnHomeRunLawn(x, z) || distance < 48 || distance > outerHedgeDistance(spray) - 7) return true
   if ([-1, 1].some((side) => isInStands(x, z, side))) return true
-  return clearings.some((clearing) => Math.hypot(clearing.x - x, clearing.z - z) < clearing.radius)
+  return clearings.some((clearing) => Math.hypot(clearing.x - x, clearing.z - z) < clearing.radius + TREE_ROOM)
 }
 
 /** Within the stands, or the foul ground between them and their foul line, on `side` (1 is first base). */

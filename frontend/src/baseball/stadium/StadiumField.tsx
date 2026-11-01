@@ -38,7 +38,8 @@ const FLAT = -Math.PI / 2
 /**
  * The playing field: lawn and the 3 m hedge on the judge's fence line, which take the visitor's season like the town's
  * grass and hedges and gather snow in winter. The dirt, chalk, and bases keep the theme's colors so the field reads in
- * every season; the foul poles wear the ballpark's accent.
+ * every season; the foul poles wear the ballpark's accent under a roof-colored cap, topiary round their feet
+ * (GardenLandmarks).
  */
 export function StadiumField({
   materials,
@@ -158,7 +159,7 @@ export function StadiumField({
           <mesh position-y={FOUL_POLE.height / 2} material={materials.accent} castShadow>
             <cylinderGeometry args={[FOUL_POLE.radius, FOUL_POLE.radius * 1.3, FOUL_POLE.height, 10]} />
           </mesh>
-          <mesh position-y={FOUL_POLE.height + FOUL_POLE.capRadius * 0.6} material={materials.accent}>
+          <mesh position-y={FOUL_POLE.height + FOUL_POLE.capRadius * 0.6} material={materials.roof}>
             <sphereGeometry args={[FOUL_POLE.capRadius, 16, 12]} />
           </mesh>
         </group>
