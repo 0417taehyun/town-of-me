@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { stanceFrame } from '../flow/stanceHold'
 import type { BattingSide } from '../game/field'
 import { STRIKE_ZONE } from '../game/field'
 import { type Detection, HELD_OBJECT_RULES } from './heldObject'
@@ -33,6 +34,8 @@ const SHOULDER_WIDTH_X = 0.15
 const SHOULDER_WIDTH_Y = SHOULDER_WIDTH_X * ASPECT
 /** The grip height that swings the bat level through the middle of the strike zone. */
 const LEVEL_Y = SHOULDER_Y + CONTACT_HEIGHT.levelDrop * SHOULDER_WIDTH_Y
+/** The grip up by the chest, high enough for the batting stance. */
+const CHEST_Y = SHOULDER_Y + 0.6 * SHOULDER_WIDTH_Y
 const LOAD = -0.6
 const QUIET: Energy = { value: 1, moving: 0.01 }
 const LOUD: Energy = { value: 12, moving: 0.25 }
@@ -49,8 +52,8 @@ const FREE_HAND_DROP = 0.7
 
 /**
  * The grip at `offset` SW from the body's midline, the body standing at `centre`: both hands together (`armsApart` SW
- * apart, around the grip), or the right hand alone (`oneHanded`) with the left below it; `gripSeen` hides the right
- * wrist alone.
+ * apart, around the grip), or the right hand alone (`oneHanded`) with the left below it, or below `freeHandAt` SW from
+ * the midline, where it hangs still; `gripSeen` hides the right wrist alone.
  */
 type Pose = {
   offset: number
@@ -59,6 +62,7 @@ type Pose = {
   wristsSeen?: boolean
   torso?: Torso
   oneHanded?: boolean
+  freeHandAt?: number
   gripSeen?: boolean
   armsApart?: number
 }
@@ -84,13 +88,18 @@ function keypointsFor(pose: Pose): Keypoints {
   const halfWidth = (torso.width * SHOULDER_WIDTH_X) / 2
   const together = pose.armsApart === undefined ? 0.008 : (pose.armsApart * SHOULDER_WIDTH_X) / 2
   const apart = oneHanded ? 0 : together
+  const leftOffset = oneHanded ? (pose.freeHandAt ?? offset) : offset
   return {
     nose: { x: centre, y: 0.2, score: 0.95 },
     leftShoulder: { x: shouldersX + halfWidth, y: SHOULDER_Y, score: 0.95 },
     rightShoulder: { x: shouldersX - halfWidth, y: SHOULDER_Y, score: 0.95 },
     leftElbow: null,
     rightElbow: null,
-    leftWrist: { x: gripX + apart, y: gripY + (oneHanded ? FREE_HAND_DROP * SHOULDER_WIDTH_Y : 0), score: wristScore },
+    leftWrist: {
+      x: centre + leftOffset * SHOULDER_WIDTH_X + apart,
+      y: gripY + (oneHanded ? FREE_HAND_DROP * SHOULDER_WIDTH_Y : 0),
+      score: wristScore,
+    },
     rightWrist: { x: gripX - apart, y: gripY, score: pose.gripSeen === false ? 0.1 : wristScore },
   }
 }
@@ -448,6 +457,97 @@ describe('the camera swing tracker', () => {
       // So the next pitch, which the detector rests through, is swung at.
       sweepAcross(run, LOAD, 0.7, 0.2)
       expect(run.swings).toHaveLength(1)
+    })
+  })
+
+  it('swings on with the one hand an object was lost from, until both hands come together', () => {
+    // As in the drafts' real webcam log: a bottle in the right hand by the chest, the free one hanging 1.5 SW off.
+    const oneHand = { oneHanded: true, freeHandAt: 0.9, gripY: CHEST_Y }
+    const run = camera()
+    lockAndLoad(run, LOAD, oneHand)
+    hold(run, { ...oneHand, offset: LOAD }, framesFor(HELD_OBJECT_RULES.lostAfterMs) + 12, { detector: 'nothing' })
+    expect(run.tracker.lock?.kind).toBe('free')
+    // The stance held with that hand still counts, not asking for the hands together, and so does its swing, which the
+    // wrists' middle (just past the midline) would have lost; so would one frame of the pose task putting the
+    // wrists together, as the log's once did, if it counted as the hands coming together.
+    expect(stanceFrame(run.tracker, run.time).pose).toBeNull()
+    step(run, { offset: LOAD, gripY: CHEST_Y })
+    hold(run, { ...oneHand, offset: LOAD }, 10)
+    const crossedAt = sweepAcross(run, LOAD, 0.7, 0.2, 0, () => oneHand)
+    expect(run.swings).toHaveLength(1)
+    expect(Math.abs(run.swings[0].contactAtMs - crossedAt)).toBeLessThan(5)
+    // Hands that only meet in the swing's finish change nothing; a two-hand stance held a moment makes free mode follow
+    // both from then on, as for a visitor who never held anything, so hands apart again are asked back together. The
+    // switch breaks into the stance with no caption, nor a sweep from the hand's own load, deeper than their middle.
+    hold(run, { offset: 0.7, gripY: CHEST_Y }, 40)
+    step(run, { offset: 0.7, gripY: CHEST_Y, armsApart: 1.4 })
+    expect(stanceFrame(run.tracker, run.time).pose).not.toBe('together')
+    const together = { offset: LOAD, gripY: CHEST_Y, armsApart: 0.4 }
+    hold(run, together, 5)
+    const captionsBefore = run.captions.length
+    const states = Array.from({ length: 35 }, () => {
+      step(run, together)
+      return run.tracker.state
+    })
+    expect(new Set(states)).toEqual(new Set(['loaded']))
+    expect(run.captions.slice(captionsBefore)).toEqual([])
+    step(run, { offset: LOAD, gripY: CHEST_Y, armsApart: 1.4 })
+    expect(stanceFrame(run.tracker, run.time).pose).toBe('together')
+  })
+
+  it('keeps a load, deepest point and all, through the detector losing and locking an object in one hand', () => {
+    const oneHand = { oneHanded: true, freeHandAt: 0.9 }
+    // Lost once eased toward the plate from a deeper load, still loaded: a short swing straight after is long enough
+    // only from the load's deepest point, from before the loss.
+    const lost = camera()
+    lockAndLoad(lost, -0.9, oneHand)
+    hold(lost, { ...oneHand, offset: -0.9 }, 20, { detector: 'nothing' })
+    moveStraight(lost, -0.9, -0.45, 12, { ...oneHand, energy: QUIET })
+    hold(lost, { ...oneHand, offset: -0.45 }, 20, { detector: 'nothing' })
+    expect(lost.tracker.lock?.kind).toBe('free')
+    sweepAcross(lost, -0.45, 0.1, 0.15, 0, () => oneHand)
+    expect(lost.swings).toHaveLength(1)
+    // Lost at the deeper load, then eased forward and held there while the bottle locks again.
+    const relocked = camera()
+    lockAndLoad(relocked, -0.9, oneHand)
+    hold(relocked, { ...oneHand, offset: -0.9 }, framesFor(HELD_OBJECT_RULES.lostAfterMs) + 12, { detector: 'nothing' })
+    expect(relocked.tracker.lock?.kind).toBe('free')
+    moveStraight(relocked, -0.9, -0.45, 12, { ...oneHand, energy: QUIET })
+    hold(relocked, { ...oneHand, offset: -0.45 }, 10, { detector: 'bottle' })
+    expect(relocked.tracker.lock?.kind).toBe('detected')
+    sweepAcross(relocked, -0.45, 0.1, 0.15, 0, () => oneHand)
+    expect(relocked.swings).toHaveLength(1)
+    // Free mode with both hands from the start loads them once for good too, through a still hold together.
+    const free = camera()
+    goFree(free)
+    moveStraight(free, LOAD, -0.9, 3, { energy: QUIET })
+    hold(free, { offset: -0.9 }, 20)
+    moveStraight(free, -0.9, -0.45, 12, { energy: QUIET })
+    sweepAcross(free, -0.45, 0.1, 0.15)
+    expect(free.swings).toHaveLength(1)
+  })
+
+  it('keeps a one-hand lock, and the stance that hand holds, through the other hand nearing it', () => {
+    // A bottle locked in the right hand stays there while the left joins it in a still load.
+    const locked = camera()
+    lockAndLoad(locked, LOAD, { oneHanded: true })
+    hold(locked, { offset: LOAD, armsApart: 0.4 }, 30)
+    expect(locked.tracker.lock).toMatchObject({ kind: 'detected', hand: 'right' })
+    // Once it is lost, free mode goes on following the right hand, its stance counting on, while the left hangs apart
+    // behind it, or joins it nearer the midline, their middle short of a load.
+    const holdingRight = { oneHanded: true, freeHandAt: 0.9, gripY: CHEST_Y }
+    ;[
+      { load: LOAD, then: { ...holdingRight, offset: LOAD, freeHandAt: -1.4 } },
+      { load: -0.35, then: { offset: -0.225, armsApart: 0.25, gripY: CHEST_Y } },
+    ].forEach(({ load, then }) => {
+      const run = camera()
+      lockAndLoad(run, load, holdingRight)
+      hold(run, { ...holdingRight, offset: load }, framesFor(HELD_OBJECT_RULES.lostAfterMs) + 12, {
+        detector: 'nothing',
+      })
+      hold(run, then, 30)
+      const stance = stanceFrame(run.tracker, run.time).pose
+      expect([run.tracker.lock?.kind, run.tracker.state, stance]).toEqual(['free', 'loaded', null])
     })
   })
 

@@ -198,8 +198,15 @@ looked. On every step a real object that locks later still takes over, and one l
 caption saying so, so play goes on with the hands: the design doc has a lost lock search again, which waits for the
 detector while it rests through every pitch, so a pitch or two could not be swung at. While searching, the caption says
 it looks for what the visitor swings and that the hands will do without one, and free mode's asks for both hands
-together. Free mode follows where the wrists meet, so a visitor who held the object in one hand swings (and holds a
-stance) with the hands together until it locks again. The detector waits until the computer is timed, then runs about 9
+together. Free mode follows where the wrists meet, but one that takes over from an object lost from one hand goes on
+following that hand, for its swings and its stance alike, its caption saying to carry on as before (a loss lands while
+the visitor keeps still, mostly mid-stance, so it never says to swing): in the drafts' real webcam log the free hand
+hung 1.5 shoulder widths off, so the wrists' middle halved the next one-handed swing, which then fell short. It turns
+two-hand, without a caption, once the hands have held a still load together for 300 ms (not hands that only look
+together for a frame or in a swing's turned finish) with their middle loaded too, so that the switch never un-counts a
+stance the one hand held, or follows another hand once an object locks in it. A lock or a loss that
+keeps the hand followed keeps the load too, so the detector locking and losing the log's bottle three times in 15 s on
+the setup step never makes the visitor load again. The detector waits until the computer is timed, then runs about 9
 times a second while looking for an object (searching, in free mode on the setup step, or from a sighting by the hands
 until a lock window passes without another, so a detector that misses now and then still locks it), 4 to keep a detected
 one fresh, once a second in free mode otherwise, since each run holds up the pose frames for some 40–60 ms, and never
@@ -265,7 +272,7 @@ fills nor drains the ring, and a longer one drains it as fast as holding fills i
 fills `ui/StanceGauge.tsx` straight on its element; the line under the ring says what the hold waits for, the first
 unmet first: the upper body in view, the hands inside the picture (a followed wrist within 5% of its edge, or past it
 where the pose task only guesses it, as the drafts' log had the hands at the bottom, so that comes before any height or
-place), the lock, both hands together as if gripping a bat in free mode, raised by the back shoulder, a fresh stance,
+place), the lock, both hands together as on a bat in two-hand free mode, raised by the back shoulder, a fresh stance,
 held still, and in a step's first second, while the ring cannot fill, that the stance is being checked rather than to
 keep holding. Right after swings, hands at the picture's edge are taken for lowered ones, so the line asks for a fresh
 stance and then for the hands raised rather than to step back. React renders only when a step or the line changes, and

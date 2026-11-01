@@ -15,8 +15,8 @@ import {
 // find plays (as a tap on the camera picture can point one out by hand). Detectors lose thin, blurred objects
 // mid-swing, so a swing is judged from the pose and the lock's geometry (swingTracker.ts), never from a detection
 // during it; the detector only keeps the lock fresh between swings and lets it go once the object is gone, when free
-// mode takes over until a real object locks again. Everything is in the raw, unmirrored image with x scaled by its
-// aspect ratio (poseLandmarks.ts); lengths are in the body's shoulder widths.
+// mode takes over with the hand that held it until a real object locks again. Everything is in the raw, unmirrored
+// image with x scaled by its aspect ratio (poseLandmarks.ts); lengths are in the body's shoulder widths.
 
 /**
  * COCO labels a visitor might plausibly swing or hold. A person is never the held object, and neither is a remote: in
@@ -188,8 +188,13 @@ export function farthestCorner(box: Box, point: Point): Point {
 export function chooseHand(wrists: BodySample['wrists'], shoulderWidth: number, box: Box): Hand {
   const { left, right } = wrists
   if (!left || !right) return left ? 'left' : right ? 'right' : 'both'
-  if (distance(left, right) <= HELD_OBJECT_RULES.twoHands * shoulderWidth) return 'both'
+  if (handsTogether(wrists, shoulderWidth)) return 'both'
   return boxDistance(box, left) <= boxDistance(box, right) ? 'left' : 'right'
+}
+
+/** Whether both wrists show, close enough together to hold one thing, for a body `shoulderWidth` wide. */
+export function handsTogether({ left, right }: BodySample['wrists'], shoulderWidth: number) {
+  return left !== null && right !== null && distance(left, right) <= HELD_OBJECT_RULES.twoHands * shoulderWidth
 }
 
 /** `detection` in image units, with its reach to the nearest visible wrist (Infinity when none is visible). */
@@ -245,16 +250,16 @@ export function isLockUnderWay(search: LockSearch, time: number) {
 }
 
 /**
- * Locks `box` held in `view`'s hands, with no label (a detected lock adds its own); its tip is `tip`, or the box's
- * corner farthest from the grip. Free mode holds nothing to choose a hand by, so it follows both.
+ * Locks `box` held in `view`'s `hand` (by default the one nearest it, or both together), with no label (a detected
+ * lock adds its own); its tip is `tip`, or the box's corner farthest from the grip.
  */
 export function lockOn(
   view: HandsView,
   box: Box,
   kind: HeldObjectLock['kind'],
   tip: Point | null = null,
+  hand: Hand = chooseHand(view.wrists, view.width, box),
 ): HeldObjectLock {
-  const hand = kind === 'free' ? 'both' : chooseHand(view.wrists, view.width, box)
   const grip = gripOf(view.wrists, hand)?.point ?? view.grip
   const length = distance(tip ?? farthestCorner(box, grip), grip) / view.width
   return { kind, label: null, hand, box, grip, length, misses: 0, missingSince: null }
@@ -286,13 +291,15 @@ export function manualLock(view: HandsView, point: Point): HeldObjectLock | null
 }
 
 /**
- * Free mode: no object at all, so a stick in both hands, pointing up, stands in for one. The grip is where the wrists
- * meet, so arms hanging at the sides read as no load at all, rather than whichever wrist is a hair higher.
+ * Free mode: no object at all, so a stick in `hand`, pointing up, stands in for one. With both, as a visitor who never
+ * held anything plays, the grip is where the wrists meet, so arms hanging at the sides read as no load at all, rather
+ * than whichever wrist is a hair higher; with one, it is the hand an object was just lost from, which goes on swinging
+ * as it did (swingTracker.ts refreshHeldObject).
  */
-export function freeLock(view: HandsView): HeldObjectLock {
-  const grip = gripOf(view.wrists, 'both')?.point ?? view.grip
+export function freeLock(view: HandsView, hand: Hand = 'both'): HeldObjectLock {
+  const grip = gripOf(view.wrists, hand)?.point ?? view.grip
   const tip = { x: grip.x, y: grip.y - HELD_OBJECT_RULES.freeLength * view.width }
-  return lockOn(view, boxAround(grip, tip, view.width), 'free', tip)
+  return lockOn(view, boxAround(grip, tip, view.width), 'free', tip, hand)
 }
 
 /** A box seen in the hands at `grip`, moved along with them since: where the object is now. */

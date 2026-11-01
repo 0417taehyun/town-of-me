@@ -19,7 +19,8 @@ import { CAPTION_HOLD_MS, type Side, SWING_RULES, type SwingTracker, type Tracke
 // side as far as the tracker loads, up by the chest or shoulders, and held still. A wrist at the picture's edge or past
 // it is one the pose task only guesses, so the hands in view come before any height or place (right after swings,
 // hands at the edge are lowered ones, so the line asks for them raised). Hands-only mode follows both wrists, as its
-// swings do, so it wants both hands together. Stillness is the grip, smoothed, staying near its middle, so the pose
+// swings do, so it wants both hands together, unless it took over from an object lost from one hand: then that hand
+// alone, as before the loss. Stillness is the grip, smoothed, staying near its middle, so the pose
 // task's jitter on a still visitor does not count as moving. Lengths are the visitor's own shoulder widths (SW), so
 // they mean the same near the camera and far from it. None counts in a step's first second, whose line says the stance
 // is being checked rather than to keep holding a gauge that does not move. On the setup a visitor already in the

@@ -4,6 +4,7 @@ import {
   currentBox,
   type Detection,
   freeLock,
+  handsTogether,
   HELD_OBJECT_RULES,
   type HeldObjectLabel,
   type HeldObjectLock,
@@ -36,11 +37,12 @@ import {
 
 // The camera swing: searching → locked ⇄ loaded → sweeping → cooldown → locked. The held object is locked once
 // (heldObject.ts), by itself: what the detector finds next to the still hands, or after a while with nothing found,
-// none (free mode), which a real object that locks still replaces and which takes over at once from one lost, so the
-// tracker never searches again while the detector rests through a pitch. A swing is then the grip, loaded behind the
-// body's midline on the batting side, sweeping fast across it while the band it sweeps through lights up with motion
-// (motionEnergy.ts). It needs no pause at the load, because batters wind up and swing in one motion; it re-arms only
-// once the grip is back on a load side, so the bat coming back is never a second swing.
+// none (free mode), which a real object that locks still replaces and which takes over at once from one lost, in the
+// hand that held it, so the tracker never searches again while the detector rests through a pitch, and a lock that
+// keeps the hand followed keeps the load. A swing is then the grip, loaded behind the body's midline on the batting
+// side, sweeping fast across it while the band it sweeps through lights up with motion (motionEnergy.ts). It needs no
+// pause at the load, because batters wind up and swing in one motion; it re-arms only once the grip is back on a load
+// side, so the bat coming back is never a second swing.
 // The midline is the body's, measured from frontal frames only: turning the torso to load narrows the shoulders and
 // drags their midpoint, which would inflate every distance and speed. The contact moment is when the grip crosses that
 // midline, between the two frames either side of it, and the swing is reported on the first frame that meets every
@@ -68,6 +70,12 @@ export const SWING_RULES = {
   frameSamples: 120,
   /** A wrist hidden behind the turned torso is followed through the other wrist, or held, for this long. */
   bridgeGapMs: 700,
+  /**
+   * Free mode following the one hand an object was lost from follows both once they have held a still load together
+   * this long: in the drafts' real webcam log the pose task put the wrists together for one frame as it lost the
+   * shoulders.
+   */
+  joinHandsMs: 300,
   /** The grip this far behind the midline is loaded; moving `leaveLoad` toward it starts a sweep. */
   loadOffset: 0.25,
   leaveLoad: 0.1,
@@ -218,7 +226,8 @@ export type Candidate = MeasuredDetection & { seenAt: number; grip: Point }
  * `settingUp` says the visitor is on the setup step (the page's), where free mode looks for a real object to replace it
  * as often as a search does (objectDetectionInterval) and marks what it finds (marksCandidate). `candidate` is the best
  * object the detector lately found next to the hands, `search` the sightings toward its lock, and `searchSince` when
- * the hands came into view with nothing locked. `reason` is where the tracker is and `notice` the latest thing that
+ * the hands came into view with nothing locked; `togetherSince` is since when both hands have held a load together
+ * while free mode follows one (followedView). `reason` is where the tracker is and `notice` the latest thing that
  * happened; `followingThrough` says the grip is on its way out of a swing toward the far side, where its finish is no
  * wrong-side load. `cue` is what the latest frame cued the stage, if anything.
  */
@@ -231,6 +240,7 @@ export type SwingTracker = {
   aspect: number
   view: TrackerView | null
   lastGrip: LastGrip | null
+  togetherSince: number | null
   lock: HeldObjectLock | null
   candidate: Candidate | null
   search: LockSearch
@@ -277,6 +287,7 @@ export function createSwingTracker(battingSide: BattingSide): SwingTracker {
     aspect: 4 / 3,
     view: null,
     lastGrip: null,
+    togetherSince: null,
     lock: null,
     candidate: null,
     search: NO_SEARCH,
@@ -326,7 +337,7 @@ export function updateSwingTracker(
   tracker.energy = energy
   if (body) tracker.aspect = body.aspect
   if (body?.shoulders) tracker.frame = withShoulders(tracker.frame, body.shoulders)
-  const view = viewOf(tracker, body, time)
+  const view = followedView(tracker, body, time)
   tracker.view = view
   // What the detector found by the hands is gone with them, or once no run has seen it lately (the detector rests
   // through a pitch), rather than left marked and waited for where it was.
@@ -513,27 +524,69 @@ export function refreshHeldObject(
   const refreshed = refreshLock(lock, candidates, view, time, watching)
   tracker.lock = refreshed
   if (refreshed) return
-  // The hands take over at once, so play goes on: a search would wait for the detector to look for `handsOnlyAfterMs`,
-  // and it rests through every pitch. The caption says the object was lost, and that the hands will do meanwhile.
-  lockTracker(tracker, freeLock(view))
+  // The hand that held it takes over at once, load and all, so play goes on: a search would wait for the detector to
+  // look for `handsOnlyAfterMs`, and it rests through every pitch. Both wrists' middle would halve a one-handed swing:
+  // in the drafts' real webcam log the free hand hung 1.5 SW off the bottle's, and the next one fell short. The
+  // caption says the object was lost, and that the visitor carries on as they are: a loss lands while they keep still,
+  // most often holding a stance, so it never tells them to swing.
+  lockTracker(tracker, freeLock(view, lock.hand))
   notify(tracker, 'lost')
 }
 
+/**
+ * Locks `lock` in, ending any search. One that changes the hand followed tracks that hand from scratch; one that keeps
+ * it keeps the load, a sweep and all, so a detector that locks and loses an object in the same hand over and over (the
+ * drafts' real webcam log's bottle, three times in 15 s on the setup step) never makes the visitor load again.
+ */
 export function lockTracker(tracker: SwingTracker, lock: HeldObjectLock) {
+  const keepsHand = tracker.state !== 'searching' && lock.hand === tracker.hand
+  Object.assign(tracker, { lock, search: NO_SEARCH, searchSince: null } satisfies Partial<SwingTracker>)
+  if (!keepsHand) followHand(tracker, lock.hand)
+  notify(tracker, lock.kind === 'free' ? 'free' : 'locked')
+}
+
+/** Follows `hand` afresh: nothing loaded, and no grip yet to measure a speed from or bridge a hidden wrist by. */
+export function followHand(tracker: SwingTracker, hand: Hand) {
   Object.assign(tracker, {
     state: 'locked',
-    lock,
-    hand: lock.hand,
+    hand,
     arm: null,
     sweep: null,
-    search: NO_SEARCH,
-    searchSince: null,
     last: null,
     lastGrip: null,
     reason: 'pullBack',
     followingThrough: false,
   } satisfies Partial<SwingTracker>)
-  notify(tracker, lock.kind === 'free' ? 'free' : 'locked')
+}
+
+/**
+ * The frame's view (viewOf). Free mode following the one hand an object was lost from follows both once they have
+ * held a two-hand load for `joinHandsMs`, as for a visitor who never held anything, so hands that part again later
+ * read as no load rather than as the one that held it. Until then it keeps the hand, which a two-hand grip moves too:
+ * hands that only look together, as in a swing's turned finish or a frame the pose task gets wrong, change nothing.
+ * The switch says nothing: the hands already hold the stance together, so a caption could only break into its hold.
+ */
+export function followedView(tracker: SwingTracker, body: BodySample | null, time: number) {
+  const view = viewOf(tracker, body, time)
+  const since = view && loadedTogether(tracker, view) ? (tracker.togetherSince ?? time) : null
+  tracker.togetherSince = since
+  if (!view || since === null || time - since < SWING_RULES.joinHandsMs) return view
+  tracker.lock = freeLock(view, 'both')
+  followHand(tracker, 'both')
+  return viewOf(tracker, body, time)
+}
+
+/**
+ * Whether free mode follows one hand while both hold a still load together on the batting side, their middle too, so
+ * following both never un-counts a stance the one hand held.
+ */
+export function loadedTogether(tracker: SwingTracker, view: TrackerView) {
+  const oneHanded = standsInForObject(tracker) && tracker.hand !== 'both'
+  const loaded = tracker.state === 'loaded' && isStill(tracker, view)
+  const middle = gripOf(view.wrists, 'both')?.point
+  const depth = middle ? ((middle.x - view.midX) / view.width) * tracker.side : 0
+  const middleLoaded = depth >= SWING_RULES.loadOffset
+  return oneHanded && loaded && handsTogether(view.wrists, view.width) && middleLoaded
 }
 
 /**
