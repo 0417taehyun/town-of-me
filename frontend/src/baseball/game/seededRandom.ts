@@ -1,6 +1,7 @@
 // A run's random numbers: mulberry32, which steps a 32-bit integer with Math.imul, shifts, and xor only, so every
-// JavaScript engine draws the same sequence from the same seed. Only the pitch plan draws from it; how a swing lands is
-// never random. motionMath.seededFraction stays decoration because it is built on Math.sin.
+// JavaScript engine draws the same sequence from the same seed. The pitch plan draws from it, and so do the looks of
+// the people around the play (stadium/guestLooks.ts); how a swing lands is never random. motionMath.seededFraction
+// stays decoration because it is built on Math.sin.
 
 /** Uniform draws in [0, 1) from a 32-bit unsigned `seed`. */
 export function createSeededRandom(seed: number) {

@@ -5,7 +5,7 @@ import type { PlayerProfile } from '../../data/playerProfile'
 import type { BattingSide } from '../game/field'
 import { gameTime } from '../game/gameClock'
 import { Ball } from './Ball'
-import { type BallParts, drawBall } from './ballMeshes'
+import { type BallParts, type BallView, drawBall } from './ballMeshes'
 import { type BallplayerCast, posePitcherAt, posePlayers, settleBatter } from './ballplayerCast'
 import { Ballplayers } from './Ballplayers'
 import { aimCamera, centreInBand, createCameraRig, type FreeBand } from './cameraShots'
@@ -35,7 +35,7 @@ import { createStrikeZoneOutline, disposeStrikeZoneOutline, drawStrikeZoneOutlin
  * ignored like any swing with no pitch on its way. The run's clock stops while the page is hidden, when frames stop
  * too, so no pitch goes by unseen, and while it is `paused`, which the page sets only between pitches for a visitor out
  * of the camera's view, so no ball stops in the air. The picture is centred in `band` (px), the part of the screen the
- * camera panel leaves free.
+ * camera panel leaves free. Each frame's ball goes to `ballViewRef` for the stadium's watchers.
  */
 export function DerbyDirector({
   run,
@@ -47,6 +47,7 @@ export function DerbyDirector({
   band,
   paused,
   reducedMotion,
+  ballViewRef,
 }: {
   run: StageRunSetup | null
   profile: PlayerProfile
@@ -57,6 +58,7 @@ export function DerbyDirector({
   band: FreeBand
   paused: boolean
   reducedMotion: boolean
+  ballViewRef: MutableRefObject<BallView | null>
 }) {
   const ball = useRef<BallParts>(null)
   const players = useRef<BallplayerCast>(null)
@@ -106,6 +108,7 @@ export function DerbyDirector({
     const gameDelta = Math.max(0, nowMs - lastGameMs.current) / 1000
     lastGameMs.current = nowMs
     const view = stageBallView(current, nowMs, cast && posePitcherAt(cast, current, nowMs))
+    ballViewRef.current = view
     const { width, height } = state.size
     centreInBand(camera, rig, band, width, height, delta, reducedMotion)
     const aspect = band.width / Math.max(1, height)

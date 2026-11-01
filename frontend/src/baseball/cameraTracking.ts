@@ -20,7 +20,7 @@ import { clearCameraView, drawCameraView } from './ui/cameraOverlay'
 import { type CameraInput, type CameraStopReason, startCamera } from './vision/cameraInput'
 import { type Detection, type HeldObjectLabel, objectDetections } from './vision/heldObject'
 import { createMotionEnergy, type MotionEnergySampler } from './vision/motionEnergy'
-import type { FrameTiming } from './vision/performanceTier'
+import type { FrameTiming, PerformanceTier } from './vision/performanceTier'
 import type { Point } from './vision/poseLandmarks'
 import {
   AWAY_HOLD_MS,
@@ -68,7 +68,7 @@ export type CameraStatus =
   | { kind: 'starting' }
   | { kind: 'loading' }
   | { kind: 'measuring' }
-  | { kind: 'ready' }
+  | { kind: 'ready'; tier: PerformanceTier }
   | { kind: 'problem'; problem: CameraGameProblem }
   | { kind: 'tooSlow' }
 
@@ -190,7 +190,9 @@ export function followPose(
   if (signal.aborted) return tracker.close()
   signal.addEventListener('abort', () => tracker.close(), { once: true })
   onStatus({ kind: 'measuring' })
-  const handleFrame = createFrameHandler(camera, (tier) => onStatus({ kind: tier ? 'ready' : 'tooSlow' }))
+  const handleFrame = createFrameHandler(camera, (tier) =>
+    onStatus(tier ? { kind: 'ready', tier } : { kind: 'tooSlow' }),
+  )
   const onTracked = (frame: PoseFrame, timing: FrameTiming) => {
     handleFrame(frame, timing)
     onFrame(frame, timing.inferenceMs)

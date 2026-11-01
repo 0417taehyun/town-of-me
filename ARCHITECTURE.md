@@ -156,7 +156,10 @@ light the time of day, and its dugouts and foul poles the ballpark palette; none
 bowl (`bowlLayout.ts`, `GardenBowl.tsx`) and its landmarks (`landmarkLayout.ts`, `GardenLandmarks.tsx`) follow the same
 split: buildings in the palette's roles, nature in the season (town trees and flowers, with their snow). Nothing tall
 stands where a home run lands or the landing camera stands (`bowlLayout.test.ts`), and the treehouse scoreboard shows a
-pitch only once its ball is down, as the HUD does (`scoreboard.ts`).
+pitch only once its ball is down, as the HUD does (`scoreboard.ts`). The crowd (`crowdLayout.ts`, `Crowd.tsx`) is one
+instanced mesh whose vertex shader turns each fan toward the ball and makes it hop and wave as a result asks, so it costs
+one draw call and no per-fan work on the main thread; fans take approved guestbook looks, padded with random ones and
+never a name (`guestLooks.ts`), and a reduced performance tier draws half of them.
 
 `stage/actors/` builds the players in plain Three.js. `ballplayerRig.ts` is the town character's body, look, and
 proportions posed by joints (two-bone IK legs on planted feet, a chest turning about a tilted spine, elbow arms); the

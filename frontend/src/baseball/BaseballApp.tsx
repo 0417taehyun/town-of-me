@@ -458,6 +458,7 @@ export function DerbyScreen({
         reducedMotion={reducedMotion}
         hud={step === 'play' || step === 'result' ? hud : NEW_RUN_HUD}
         pitchCount={pitchCount}
+        reducedTier={status.kind === 'ready' && status.tier === 'reduced'}
         onUnavailable={onGraphicsUnavailable}
       />
       {/* The result card's figures stand out against the stadium dimmed behind them; the camera panel stays clear. */}

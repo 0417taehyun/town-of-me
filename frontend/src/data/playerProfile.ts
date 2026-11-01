@@ -179,7 +179,12 @@ export function pickRandom<Value>(options: readonly Value[], random: () => numbe
   return options[Math.min(options.length - 1, Math.floor(random() * options.length))]
 }
 
-export function randomizePlayerAppearance(profile: PlayerProfile, random: () => number = Math.random): PlayerProfile {
+/** A random look for `profile`; `customColorShare` of its colors are any color rather than a preset. */
+export function randomizePlayerAppearance(
+  profile: PlayerProfile,
+  random: () => number = Math.random,
+  customColorShare = 0.25,
+): PlayerProfile {
   const pick = <Value>(options: readonly Value[]) => pickRandom(options, random)
   const choices = Object.fromEntries(
     appearanceFields.map((field) => [field, pick(PROFILE_CHOICES[field].options as readonly string[])]),
@@ -187,7 +192,7 @@ export function randomizePlayerAppearance(profile: PlayerProfile, random: () => 
   const colors = Object.fromEntries(
     colorFields.map((field) => [
       field,
-      random() < 0.75
+      random() < 1 - customColorShare
         ? pick<readonly [string, string]>(COLOR_CHOICES[field].presets)[1]
         : `#${Math.floor(random() * 0x1000000)
             .toString(16)
