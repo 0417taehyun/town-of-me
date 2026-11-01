@@ -223,8 +223,8 @@ export type SwingCue = { kind: 'started'; crossingAtMs: number } | { kind: 'chec
 export type Candidate = MeasuredDetection & { seenAt: number; grip: Point }
 
 /**
- * `settingUp` says the visitor is on the setup step (the page's), where free mode looks for a real object to replace it
- * as often as a search does (objectDetectionInterval) and marks what it finds (marksCandidate). `candidate` is the best
+ * `settingUp` says the visitor is on the setup step (the page's), where free mode glances for a real object more often
+ * (objectDetectionInterval) and marks what the detector finds by the hands (marksCandidate). `candidate` is the best
  * object the detector lately found next to the hands, `search` the sightings toward its lock, and `searchSince` when
  * the hands came into view with nothing locked; `togetherSince` is since when both hands have held a load together
  * while free mode follows one (followedView). `reason` is where the tracker is and `notice` the latest thing that
@@ -496,19 +496,22 @@ export function isLookingForObject(tracker: SwingTracker) {
 }
 
 /**
- * How long (ms) the object detector waits between runs at `time`. Searching, setting up in free mode, or with something
- * by the hands, as briefly as a search, and on while any sighting toward a lock is still in its window, so a detector
- * that misses between sightings still locks the object; with a detected object locked, long enough to keep it fresh.
- * Otherwise in free mode it only glances now and then for a real object, since each run holds up the pose frames on the
- * main thread. Null with a tapped lock, which no run refreshes or replaces, so the detector need not run at all.
+ * How long (ms) the object detector waits between runs at `time`, since each run holds up the pose frames on the main
+ * thread. Searching, or in free mode with something by the hands, at a search's pace, kept while any sighting toward a
+ * lock is still in its window, so a detector that misses between sightings still locks the object. With a detected
+ * object locked it only glances now and then to keep it fresh, back at a search's pace once a glance misses it, so a
+ * few misses in a row by a patchy detector never drop an object still held, and one put down goes soon. In free mode
+ * with nothing by the hands it glances too, twice as often on the setup step, where the visitor picks up what they
+ * swing. Null with a tapped lock, which no run refreshes or replaces, and while the latest frame showed no hands,
+ * against which alone a run's finds are judged (readDetections), so the detector need not run.
  */
 export function objectDetectionInterval(tracker: SwingTracker, time: number) {
-  const { searching, locked, handsOnly } = OBJECT_DETECTION_INTERVAL_MS
-  if (tracker.lock?.kind === 'manual') return null
-  if (!isLookingForObject(tracker)) return locked
-  const { state, settingUp, candidate, search } = tracker
-  const earnest = state === 'searching' || settingUp || isFresh(candidate, time) || isLockUnderWay(search, time)
-  return earnest ? searching : handsOnly
+  const { searching, glance, setupGlance } = OBJECT_DETECTION_INTERVAL_MS
+  const { lock, view, state, settingUp, candidate, search } = tracker
+  if (lock?.kind === 'manual' || !view) return null
+  if (!isLookingForObject(tracker)) return lock !== null && lock.misses > 0 ? searching : glance
+  if (state === 'searching' || isFresh(candidate, time) || isLockUnderWay(search, time)) return searching
+  return settingUp ? setupGlance : glance
 }
 
 export function refreshHeldObject(

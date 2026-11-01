@@ -273,7 +273,7 @@ export type CameraTrackingOptions = {
   /** Hears the moment the camera sees the visitor begin a swing, or end one without a swing, for the batter's look. */
   onSwingCue: (cue: RealTimeSwingCue) => void
   stance: StanceWatch
-  /** Whether the visitor is on the setup step, where free mode looks for a real object as often as a search does. */
+  /** Whether the visitor is on the setup step, where free mode glances for a real object more often and marks it. */
   settingUp: boolean
   /** What the camera panel calls each object it marks, in the visitor's language. */
   objectNames: Record<HeldObjectLabel, string>

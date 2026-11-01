@@ -167,7 +167,7 @@ async function playedSession() {
   frames(session, 10, { offset: -0.9, energy: QUIET })
   forgetDiagnosedCamera(session.diagnostics)
   Object.assign(session, { reading: newReading(session.scene), hold: null, objects: session.detector })
-  frames(session, 15, { offset: LOAD, energy: QUIET })
+  frames(session, 20, { offset: LOAD, energy: QUIET })
   tapTheHands(session)
   frames(session, 10, { offset: LOAD, energy: QUIET })
   return session

@@ -206,13 +206,25 @@ two-hand, without a caption, once the hands have held a still load together for 
 together for a frame or in a swing's turned finish) with their middle loaded too, so that the switch never un-counts a
 stance the one hand held, or follows another hand once an object locks in it. A lock or a loss that
 keeps the hand followed keeps the load too, so the detector locking and losing the log's bottle three times in 15 s on
-the setup step never makes the visitor load again. The detector waits until the computer is timed, then runs about 9
-times a second while looking for an object (searching, in free mode on the setup step, or from a sighting by the hands
-until a lock window passes without another, so a detector that misses now and then still locks it), 4 to keep a detected
-one fresh, once a second in free mode otherwise, since each run holds up the pose frames for some 40–60 ms, and never
-for a tapped one (the design doc has only the 9 and the 4). It rests from each windup until the pitch's ball is down
-(the cadence is the tracker's, `objectDetectionInterval`, the pause the page's, since both follow the tracker and the
-derby rather than the camera).
+the setup step never makes the visitor load again. The detector waits until the computer is timed, then runs 4 times a
+second while looking for an object (searching, or from a sighting by the hands until a lock window passes without
+another), and otherwise only glances: once a second to keep a detected one fresh, back at 4 a second once a glance
+misses it until it is seen again or let go, and in free mode, to spot a real one, once a second in play and twice on the
+setup step, where the visitor picks up what they swing. It never runs while no hands show, as with nobody in view, since
+what it finds is judged against them, nor for a tapped lock. The design doc has 9 a second while looking and 4 once
+locked, but each run holds up the pose frames for some 40–65 ms: on a 30 fps fake camera, runs due every 110 ms left the
+setup screen 15–16 pose frames a second, every 250 ms 22–25, every 500 ms 26–27, and once a second 27–29, against 29–30
+with none. A lock still takes three sightings, so a held bottle locks about 0.5 s after the first run that sees it, or
+1.1 s if the detector misses every other run, which the lock window (1.5 s rather than the drafts' 1 s) still fits; in
+free mode the glance that first sees it comes up to half a second later on the setup step, a second in play. One picked
+up on the setup step in free mode so locks 0.5–1 s later (0.8 s typically) if the detector finds it on every run, but
+some 1.7 s, one time in ten nearly 4 s or more, if on half its runs: a wait of a few seconds is a patchy detector, not a
+fault. Replaying the drafts' real webcam log, its bottle locks 1.3 s after it came within reach from a search and 1.5 s
+from free mode, the visitor moving it in between (within 0.3 s at 9 runs a second). A detected object is let go after
+six misses over 1.5 s with the hands still, so a few misses in a row never drop one still held, and one put down goes
+1.6–2.6 s after it left the hands (the drafts' six misses at 4 a second took 1.5 s from the first). It rests from each
+windup until the pitch's ball is down (the cadence is the tracker's, `objectDetectionInterval`, the pause the page's,
+since both follow the tracker and the derby rather than the camera).
 `swingTracker.ts` follows the grip against the shoulders of frontal frames only (a turned torso narrows them), arms on a
 load, and fires at the interpolated midline crossing once the sweep is fast and long enough, the head
 stayed (a visitor walking by moves both), and `motionEnergy.ts` saw the band it swept through change; a swing whose

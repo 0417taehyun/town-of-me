@@ -53,20 +53,30 @@ export function isHeldObjectLabel(label: string): label is HeldObjectLabel {
 
 /**
  * Checked against the drafts' one real webcam log (2026-10-31-real-webcam-1.json): a held bottle locked within 0.3 s
- * of coming within `candidateReach` of a wrist, and a lower `candidateScore` would have locked a 0.27 "cup" by the
- * wrists in its place. The detector boxes a held bottle above the fist, so its box keeps some way off the wrist: 39 of
- * the log's 41 sightings sure enough were within 1 SW of one, only 17 within 0.6. A visitor whose object the detector
- * cannot find (it seldom finds a bat) plays in free mode.
+ * of coming within `candidateReach` of a wrist while the detector ran 9 times a second; replayed at the pace it runs
+ * now (OBJECT_DETECTION_INTERVAL_MS), it locks 1.3 s after from a search and 1.5 s after from free mode, the visitor
+ * moving it in between. A lower `candidateScore` would have locked a 0.27 "cup" by the wrists in its place. The
+ * detector boxes a held bottle above the fist, so its box keeps some way off the wrist: 39 of the log's 41 sightings
+ * sure enough were within 1 SW of one, only 17 within 0.6. A visitor whose object the detector cannot find (it seldom
+ * finds a bat) plays in free mode.
  */
 export const HELD_OBJECT_RULES = {
   /** A detection less sure than this, or farther than `candidateReach` from a wrist, is not what the hands hold. */
   candidateScore: 0.35,
   candidateReach: 1,
-  /** A lock takes `lockHits` sightings of one place, overlapping by `lockOverlap` (IoU), within `lockWindowMs`. */
+  /**
+   * A lock takes `lockHits` sightings of one place, overlapping by `lockOverlap` (IoU), within `lockWindowMs`: some six
+   * runs at a search's pace (OBJECT_DETECTION_INTERVAL_MS), so an object the detector misses every other run still
+   * locks.
+   */
   lockHits: 3,
-  lockWindowMs: 1000,
+  lockWindowMs: 1500,
   lockOverlap: 0.4,
-  /** A detected object unseen `lostMisses` times in a row, for over `lostAfterMs`, while the hands are still, is gone. */
+  /**
+   * A detected object unseen `lostMisses` times in a row, for over `lostAfterMs`, while the hands are still, is gone.
+   * The detector looks again at a search's pace once a glance misses it (OBJECT_DETECTION_INTERVAL_MS), so one put down
+   * goes some 1.6 s after the first glance that misses it, 1.6–2.6 s after it left the hands.
+   */
   lostMisses: 6,
   lostAfterMs: 1500,
   /**
@@ -75,10 +85,11 @@ export const HELD_OBJECT_RULES = {
    */
   handsOnlyAfterMs: 2000,
   /**
-   * What the detector found by the hands, unseen by any run for this long (it rests through a pitch, and runs seldom in
-   * free mode), is gone, so its box never stays marked where nothing has been seen since.
+   * What the detector found by the hands, unseen by any run for this long (it rests through a pitch, and only glances
+   * in free mode), is gone, so its box never stays marked where nothing has been seen since. It outlasts a search's
+   * pace by a dropped frame or two, so the next run still finds it fresh and keeps that pace.
    */
-  candidateFreshMs: 300,
+  candidateFreshMs: 400,
   /** Wrists this close together hold the object together. */
   twoHands: 0.6,
   /** With no object, a hand-held stick this long, pointing up, stands in for one. */
@@ -95,10 +106,13 @@ export const HELD_OBJECT_RULES = {
 }
 
 /**
- * How long (ms) the object detector waits between runs: briefly while looking for an object, longer to keep a locked
- * one fresh, and longest in free mode with nothing by the hands (swingTracker.ts objectDetectionInterval).
+ * How long (ms) the object detector waits between runs (swingTracker.ts objectDetectionInterval): a search's pace while
+ * it looks for an object or a locked one was just missed, and otherwise a glance now and then, to keep a locked one
+ * fresh or spot a real one in free mode, more often on the setup step. Each run holds up the pose frames on the main
+ * thread for some 40–65 ms: with a 30 fps fake camera on Metal, a run every 110 ms left 15–16 pose frames a second,
+ * every 250 ms 22–25, every 500 ms 26–27, and once a second 27–29, against 29–30 with none.
  */
-export const OBJECT_DETECTION_INTERVAL_MS = { searching: 110, locked: 250, handsOnly: 1000 }
+export const OBJECT_DETECTION_INTERVAL_MS = { searching: 250, glance: 1000, setupGlance: 500 }
 
 /** One object the detector found: what it is, how sure the detector is, and its box as shares of the image. */
 export type Detection = { label: HeldObjectLabel; score: number; box: Box }

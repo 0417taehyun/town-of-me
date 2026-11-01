@@ -51,12 +51,12 @@ const BOTTLE_IN_HANDS: ObjectDetector = {
 
 const FINDS_NOTHING: ObjectDetector = { detect: () => ({ detections: [] }), close: () => undefined }
 
-/** A patchy detector: it finds the bottle in `standing`'s hands on every other run, the first one missing it. */
-function everyOtherRun(): ObjectDetector {
+/** A patchy detector: it finds the bottle in `standing`'s hands on just every `runsApart`-th run, the first missing. */
+function findsEvery(runsApart: number): ObjectDetector {
   let runs = 0
   const detect = (frame: TexImageSource, frameTime: number) => {
     runs += 1
-    return (runs % 2 === 0 ? BOTTLE_IN_HANDS : FINDS_NOTHING).detect(frame, frameTime)
+    return (runs % runsApart === 0 ? BOTTLE_IN_HANDS : FINDS_NOTHING).detect(frame, frameTime)
   }
   return { detect, close: () => undefined }
 }
@@ -80,9 +80,18 @@ function readFrames(
   )
 }
 
-/** How many times the object detector runs over `seconds` of frames of `body` for `tracker`, `paused` or not. */
-function detectorRuns(body: BodySample | null, tracker: SwingTracker, paused: boolean, seconds = 1) {
-  const detect = vi.fn(() => ({ detections: [] }))
+/**
+ * How many times the object detector runs over `seconds` of frames of `body` for `tracker`, `paused` or not, finding
+ * what `objects` finds.
+ */
+function detectorRuns(
+  body: BodySample | null,
+  tracker: SwingTracker,
+  paused: boolean,
+  seconds = 1,
+  objects: ObjectDetector = FINDS_NOTHING,
+) {
+  const detect = vi.fn(objects.detect)
   readFrames(readingOf(tracker), body, { detect, close: () => undefined }, paused, framesFor(seconds * 1000))
   return detect.mock.calls.length
 }
@@ -133,32 +142,60 @@ describe('camera tracking', () => {
     expect(statuses).toEqual([{ kind: 'loading' }, { kind: 'problem', problem: 'tracking' }])
   })
 
-  it('rests the object detector during a pitch, and runs it often while looking for an object, less once locked', () => {
-    expect(detectorRuns(null, createSwingTracker('right'), true)).toBe(0)
+  it('rests the object detector during a pitch, while no hands show, and for a tapped lock', () => {
+    expect(detectorRuns(standing, createSwingTracker('right'), true)).toBe(0)
     expect(detectorRuns(standing, bottleTracker(), true)).toBe(0)
-    const searching = detectorRuns(null, createSwingTracker('right'), false)
-    const locked = detectorRuns(standing, bottleTracker(), false)
-    expect(locked).toBeGreaterThanOrEqual(3)
-    expect(searching).toBeGreaterThan(1.5 * locked)
-    // Free mode on the setup step still looks for a real object as often as a search does.
-    expect(detectorRuns(standing, freeTracker(true), false)).toBe(searching)
+    // What a run finds is judged against the hands, so with nobody in view, as in a fake camera's picture, none runs.
+    expect(detectorRuns(null, createSwingTracker('right'), false)).toBe(0)
     // A tapped lock is the visitor's own word, which no run refreshes or replaces.
     expect(detectorRuns(standing, bottleTracker('manual'), false)).toBe(0)
   })
 
-  it('only glances for an object between pitches in hands-only play, and locks one a patchy detector finds', () => {
-    // Nothing by the hands: a run about once a second, so the detector seldom holds up a pose frame.
+  it('searches at a pace that fits a lock with every other sighting missed, then only glances', () => {
+    const { lockHits, lockWindowMs } = HELD_OBJECT_RULES
+    const searching = detectorRuns(standing, createSwingTracker('right'), false, lockWindowMs / 1000)
+    expect(searching).toBeGreaterThanOrEqual(2 * lockHits - 1)
+    // Each run holds up the pose frames, so with an object locked and seen, or nothing by the hands, a run comes about
+    // once a second, and with nothing by them on the setup step, where the visitor picks up what they swing, twice.
+    expect(detectorRuns(standing, bottleTracker(), false, 3, BOTTLE_IN_HANDS)).toBeLessThanOrEqual(3)
     expect(detectorRuns(standing, freeTracker(false), false, 3)).toBeLessThanOrEqual(3)
-    // A bottle the detector finds on every other run, the first glance missing it: the next glance finds it, unmarked
-    // on the picture, and the misses between later sightings keep the pace of a search, so it locks well within the
-    // couple of seconds between two pitches.
+    expect(detectorRuns(standing, freeTracker(true), false, 3)).toBeLessThanOrEqual(6)
+  })
+
+  it('keeps a bottle in the still hands that a patchy detector misses three runs in a row', () => {
+    const reading = readingOf(bottleTracker())
+    readFrames(reading, standing, findsEvery(4), false, framesFor(6000))
+    expect(reading.tracker.lock?.kind).toBe('detected')
+  })
+
+  it('lets a bottle go within some 2.6 s of being put down, even just after a glance found it', () => {
+    // The first frame brings the hands into view, and the second's run finds the bottle, put down just after.
+    const reading = readingOf(bottleTracker())
+    readFrames(reading, standing, BOTTLE_IN_HANDS, false, 2)
+    readFrames(reading, standing, FINDS_NOTHING, false, framesFor(2700) - 2, 2 * FRAME_MS)
+    expect(reading.tracker.lock?.kind).toBe('free')
+  })
+
+  it('locks a bottle picked up in hands-only mode on the setup step within about a second', () => {
+    // The first frame brings the hands into view, the second's glance finds them empty, and the next, half a second
+    // on, finds the bottle, which a search's pace then locks.
+    const setup = readingOf(freeTracker(true))
+    readFrames(setup, standing, FINDS_NOTHING, false, 2)
+    readFrames(setup, standing, BOTTLE_IN_HANDS, false, framesFor(1200) - 2, 2 * FRAME_MS)
+    expect(setup.tracker.lock).toMatchObject({ kind: 'detected', label: 'bottle' })
+  })
+
+  it('locks a bottle a patchy detector finds while it glances in hands-only play', () => {
+    // A bottle the detector finds on every other run, the first glance missing it: the next glance, a second later,
+    // finds it, unmarked on the picture, and the misses between later sightings keep the pace of a search, so it locks
+    // little more than a second after that.
     const relocking = readingOf(freeTracker(false))
-    const patchy = everyOtherRun()
-    const glanced = framesFor(1050)
+    const patchy = findsEvery(2)
+    const glanced = framesFor(1100)
     readFrames(relocking, standing, patchy, false, glanced)
     expect(relocking.tracker.candidate).toMatchObject({ label: 'bottle' })
     expect(objectMark(relocking.tracker, glanced * FRAME_MS)).toBeNull()
-    readFrames(relocking, standing, patchy, false, framesFor(2000) - glanced, glanced * FRAME_MS)
+    readFrames(relocking, standing, patchy, false, framesFor(2300) - glanced, glanced * FRAME_MS)
     expect(relocking.tracker.lock).toMatchObject({ kind: 'detected', label: 'bottle' })
   })
 
