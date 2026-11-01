@@ -378,19 +378,24 @@ describe('the camera swing tracker', () => {
     expect(nextCaption(swing, tracker, 100 + CAPTION_HOLD_MS).caption).toBe('loaded')
   })
 
-  it('plays free mode by itself once the detector has found nothing for a while, but not while it rests or hands move', () => {
+  it('plays free mode by itself once the hands have shown a while with nothing by them, but not while hands move', () => {
     const { handsOnlyAfterMs } = HELD_OBJECT_RULES
-    // The detector resting (this computer being timed): searching however long the hands wait.
+    // Hands in view while the detector rests (this computer being timed): the search's time runs, but nothing ends it
+    // until the detector has looked; its first run that finds nothing by the still hands plays free.
+    const timed = camera()
+    hold(timed, { offset: LOAD }, framesFor(handsOnlyAfterMs * 2))
+    expect(timed.tracker.state).toBe('searching')
+    hold(timed, { offset: LOAD }, 3, { detector: 'nothing' })
+    expect(timed.tracker.lock?.kind).toBe('free')
+    // Told all along that the camera is looking (which says the hands will do), never that it is locking, then that
+    // the hands will do.
+    expect(timed.captions).toEqual(['looking', 'free'])
+    // Hands that show only once the detector runs: searching still just short of the time, free just after it.
     const run = camera()
-    hold(run, { offset: LOAD }, framesFor(handsOnlyAfterMs * 2))
-    expect(run.tracker.state).toBe('searching')
-    // Looking, and finding nothing: searching still just short of the time, free just after it.
     hold(run, { offset: LOAD }, framesFor(handsOnlyAfterMs) - 4, { detector: 'nothing' })
     expect(run.tracker.state).toBe('searching')
     hold(run, { offset: LOAD }, 8, { detector: 'nothing' })
     expect(run.tracker.lock?.kind).toBe('free')
-    // Told all along that the camera is looking, never that something is missing, then that the hands will do.
-    expect(run.captions).toEqual(['looking', 'free'])
     // Hands that keep moving wait for a still moment, and are asked for one once the time is up.
     const restless = camera()
     const fidget = (detector: StepOptions['detector']) => (_: unknown, index: number) =>

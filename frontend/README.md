@@ -57,9 +57,9 @@ npm run build
   and season like the town's, without changing the score. Phones, tablets, and browsers without WebGL 2 see why they
   cannot play, with an address to copy. With the camera you swing what you hold (a bat, a bottle) across your body:
   the camera boxes what it finds by your hands and locks it by itself while you hold it still, and when nothing has
-  locked after about three seconds of looking, it lets you play with empty hands from the next moment yours are still (a
-  real object it finds while you set up still takes over; a tap on the camera picture corrects a wrong lock). Choose to
-  bat right- or left-handed on the setup card. The one click on `Start with the camera` is the only one needed: from
+  locked about two seconds after your hands show, it lets you play with empty hands held together as if gripping a bat
+  (a real object it finds while you set up still takes over; a tap on the camera picture corrects a wrong lock). Choose
+  to bat right- or left-handed on the setup card. The one click on `Start with the camera` is the only one needed: from
   there you go on hands-free, once the camera has locked what you swing, by holding your batting stance (hands raised
   by your back shoulder) still for about three seconds, or with the step's button; the line under the ring says what
   it still waits for. That takes you to five practice pitches, which tell each swing only `A bit early`, `Good`, or

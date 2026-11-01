@@ -66,10 +66,10 @@ export const HELD_OBJECT_RULES = {
   lostMisses: 6,
   lostAfterMs: 1500,
   /**
-   * Looking this long from the detector's first look at the hands, with nothing locked and nothing by the hands, a
-   * still visitor plays free (swingTracker.ts handsOnlyDue).
+   * Looking this long from when the hands came into view, with nothing locked and nothing by the hands, a still visitor
+   * plays free from the detector's next run that finds nothing (swingTracker.ts handsOnlyDue).
    */
-  handsOnlyAfterMs: 3000,
+  handsOnlyAfterMs: 2000,
   /**
    * What the detector found by the hands, unseen by any run for this long (it rests through a pitch, and runs seldom in
    * free mode), is gone, so its box never stays marked where nothing has been seen since.

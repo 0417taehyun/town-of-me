@@ -218,9 +218,9 @@ export type Candidate = MeasuredDetection & { seenAt: number; grip: Point }
  * `settingUp` says the visitor is on the setup step (the page's), where free mode looks for a real object to replace it
  * as often as a search does (objectDetectionInterval) and marks what it finds (marksCandidate). `candidate` is the best
  * object the detector lately found next to the hands, `search` the sightings toward its lock, and `searchSince` when
- * the detector first looked at the hands with nothing locked. `reason` is where the tracker is and `notice` the latest
- * thing that happened; `followingThrough` says the grip is on its way out of a swing toward the far side, where its
- * finish is no wrong-side load. `cue` is what the latest frame cued the stage, if anything.
+ * the hands came into view with nothing locked. `reason` is where the tracker is and `notice` the latest thing that
+ * happened; `followingThrough` says the grip is on its way out of a swing toward the far side, where its finish is no
+ * wrong-side load. `cue` is what the latest frame cued the stage, if anything.
  */
 export type SwingTracker = {
   state: TrackerState
@@ -446,19 +446,23 @@ export function isFresh(candidate: Candidate | null, time: number) {
   return candidate !== null && time - candidate.seenAt <= HELD_OBJECT_RULES.candidateFreshMs
 }
 
-/** A detector run while searching: it starts the clock that runs out to free mode, and sights the candidate. */
+/**
+ * A detector run while searching: it sights the candidate, and once the search has run out with nothing by the still
+ * hands, free mode starts from it, so the hands take over only after the detector has looked at them.
+ */
 export function searchWith(tracker: SwingTracker, view: TrackerView, time: number) {
-  tracker.searchSince ??= time
   sightCandidate(tracker, view, time)
+  if (handsOnlyDue(tracker, view, time)) lockTracker(tracker, freeLock(view))
 }
 
 /**
- * The caption while searching: looking, while nothing is by the hands and the search has time left; otherwise the
- * hands must keep still, for what is by them to lock or, with nothing there, for free mode to start.
+ * The caption while searching: locking while something is by the still hands, looking while nothing is (the caption
+ * says the hands will do if there is nothing to hold); the hands must keep still for what is by them to lock or, once
+ * the search has run out, for free mode to start.
  */
 export function searchReason(found: boolean, ranOut: boolean, still: boolean): TrackerReason {
-  if (!found && !ranOut) return 'looking'
-  return still ? 'locking' : 'holdStill'
+  if (still) return found ? 'locking' : 'looking'
+  return found || ranOut ? 'holdStill' : 'looking'
 }
 
 /** The best candidate next to the still hands, sighted toward its lock: enough sightings of one place lock it. */
@@ -546,9 +550,10 @@ export function lockByHand(tracker: SwingTracker, point: Point) {
 export type TrackerStep = (tracker: SwingTracker, view: TrackerView | null, time: number) => TrackedSwing | null
 
 /**
- * Searching: asks for the hands, and once the detector has looked at them for `handsOnlyAfterMs` with nothing locked,
- * plays free mode from the next moment they are still with nothing by them. The clock starts at the detector's first
- * look (searchWith), so it waits while the detector rests, and starts again once the tracker has lost the hands.
+ * Searching: asks for the hands, and counts how long they have been in view with nothing locked, the object detector
+ * running or not: it rests while this computer is timed, and a visitor with nothing to hold should not wait out the
+ * timing and then the search. Once that is `handsOnlyAfterMs`, the detector's next run that finds nothing by the still
+ * hands plays free mode (searchWith). The clock starts again once the tracker has lost the visitor.
  */
 export function stepSearching(tracker: SwingTracker, view: TrackerView | null, time: number) {
   if (!view) tracker.searchSince = null
@@ -556,12 +561,12 @@ export function stepSearching(tracker: SwingTracker, view: TrackerView | null, t
     tracker.reason = 'showHands'
     return null
   }
+  tracker.searchSince ??= time
   tracker.reason = searchReason(tracker.candidate !== null, searchRanOut(tracker, time), isStill(tracker, view))
-  if (handsOnlyDue(tracker, view, time)) lockTracker(tracker, freeLock(view))
   return null
 }
 
-/** Whether the detector has looked at the hands for `handsOnlyAfterMs` by `time` with nothing locked. */
+/** Whether the hands have been in view for `handsOnlyAfterMs` by `time` with nothing locked. */
 export function searchRanOut(tracker: SwingTracker, time: number) {
   const since = tracker.searchSince
   return since !== null && time - since >= HELD_OBJECT_RULES.handsOnlyAfterMs

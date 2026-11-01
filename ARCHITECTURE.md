@@ -188,20 +188,21 @@ the camera on while the visitor moves, and holds whether it sees them through br
 the held object is locked, loaded behind the body on the batting side, and swept across the body's midline:
 `heldObject.ts` locks by itself an object EfficientDet-Lite0 finds next to the visitor's still hands (an allow list of
 things a visitor might hold, never a person) once enough sightings agree, or one they tap on the camera picture, and
-lets a detected one go after enough misses while they stand still. When nothing has locked after about three seconds of
-the detector looking, and nothing is by the hands, `swingTracker.ts` plays free mode from the next moment the hands are
-still. On every step a real object that locks later still takes over, and one lost hands back to free mode at once, its
-caption saying so, so play goes on with the hands: the design doc has a lost lock search again, which waits those three
-seconds of looking while the detector rests through every pitch, so a pitch or two could not be swung at. While
-searching, the caption says it looks for what the visitor swings and that the hands will do without one, and free mode's
-asks for both hands together. Free mode follows where the wrists meet, so a visitor who held the object in one hand
-swings (and holds a stance) with the hands together until it locks again. The detector waits until the computer is
-timed, then runs about 9 times a second while looking for an object (searching, in free mode on the setup step, or from
-a sighting by the hands until a lock window passes without another, so a detector that misses now and then still locks
-it), 4 to keep a detected one fresh, once a second in free mode otherwise, since each run holds up the pose frames for
-some 40–60 ms, and never for a tapped one (the design doc has only the 9 and the 4). It rests from each windup until the
-pitch's ball is down (the cadence is the tracker's, `objectDetectionInterval`, the pause the page's, since both follow
-the tracker and the derby rather than the camera).
+lets a detected one go after enough misses while they stand still. When nothing has locked about two seconds after the
+hands came into view, `swingTracker.ts` plays free mode on the detector's next run that finds nothing by the still
+hands. That time runs while the detector still rests for the speed check, so a visitor with nothing to hold waits out
+the check, not the check and then a search, and free mode never starts before the detector has looked. On every step a
+real object that locks later still takes over, and one lost hands back to free mode at once, its caption saying so, so
+play goes on with the hands: the design doc has a lost lock search again, which waits for the detector while it rests
+through every pitch, so a pitch or two could not be swung at. While searching, the caption says it looks for what the
+visitor swings and that the hands will do without one, and free mode's asks for both hands together. Free mode follows
+where the wrists meet, so a visitor who held the object in one hand swings (and holds a stance) with the hands together
+until it locks again. The detector waits until the computer is timed, then runs about 9 times a second while looking for
+an object (searching, in free mode on the setup step, or from a sighting by the hands until a lock window passes without
+another, so a detector that misses now and then still locks it), 4 to keep a detected one fresh, once a second in free
+mode otherwise, since each run holds up the pose frames for some 40–60 ms, and never for a tapped one (the design doc
+has only the 9 and the 4). It rests from each windup until the pitch's ball is down (the cadence is the tracker's,
+`objectDetectionInterval`, the pause the page's, since both follow the tracker and the derby rather than the camera).
 `swingTracker.ts` follows the grip against the shoulders of frontal frames only (a turned torso narrows them), arms on a
 load, and fires at the interpolated midline crossing once the sweep is fast and long enough, the head
 stayed (a visitor walking by moves both), and `motionEnergy.ts` saw the band it swept through change; a swing whose
