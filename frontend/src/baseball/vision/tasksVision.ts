@@ -168,7 +168,7 @@ export async function buildObjectDetector(
     runningMode: 'VIDEO',
     scoreThreshold: HELD_OBJECT_RULES.candidateScore,
     maxResults: 6,
-    categoryAllowlist: HELD_OBJECT_LABELS,
+    categoryAllowlist: [...HELD_OBJECT_LABELS],
   })
 }
 

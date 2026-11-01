@@ -177,13 +177,16 @@ tracker share. `poseLoop.ts` runs the pose task on each camera frame from the vi
 by the browser's capture time (so a swing is timed when it happened, not after the frame was carried and tracked), keeps
 the camera on while the visitor moves, and holds whether it sees them through brief flickers. A swing counts only once
 the held object is locked, loaded behind the body on the batting side, and swept across the body's midline:
-`heldObject.ts` locks an object EfficientDet-Lite0 finds next to the visitor's still hands (an allow list of things a
-visitor might hold, never a person), one they tap on the camera picture or lock with the "lock this object" button, or
-none in free mode, and lets a detected one go after enough misses while they stand still. The detector waits until the
-computer is timed, then runs about 9 times a second while searching and 4 once locked, and rests during each windup and
-pitch (the cadence is `heldObject.ts`'s, the pause the page's, since both follow the tracker and the derby rather than
-the camera). `swingTracker.ts` follows the grip against the shoulders of frontal frames only (a turned torso narrows
-them), arms on a load, and fires at the interpolated midline crossing once the sweep is fast and long enough, the head
+`heldObject.ts` locks by itself an object EfficientDet-Lite0 finds next to the visitor's still hands (an allow list of
+things a visitor might hold, never a person) once enough sightings agree, or one they tap on the camera picture, and
+lets a detected one go after enough misses while they stand still. When nothing has locked after about three seconds of
+the detector looking, and nothing is by the hands, `swingTracker.ts` plays free mode from the next moment the hands are
+still (while the visitor sets up, a real object that locks later still takes over, and one lost then hands back to free
+mode at once, so a stance held through it goes on). The detector waits until the computer is timed, then runs about 9
+times a second while looking for an object and 4 once locked, and rests during each windup and pitch (the cadence is
+`heldObject.ts`'s, the pause the page's, since both follow the tracker and the derby rather than the camera).
+`swingTracker.ts` follows the grip against the shoulders of frontal frames only (a turned torso narrows them), arms on a
+load, and fires at the interpolated midline crossing once the sweep is fast and long enough, the head
 stayed (a visitor walking by moves both), and `motionEnergy.ts` saw the band it swept through change; a swing whose
 wrists blur out just before the midline still counts, with its bat height unknown. It confirms a swing within 150 ms of
 the crossing, and the derby waits long enough past the last touching moment for that, a 15 fps frame, and the frame's
@@ -196,11 +199,11 @@ frame rate; nothing is stored). `deviceGate.ts` names why the camera game cannot
 or failed; tracking could not start), which the page shows with another try; a computer too slow
 to track is blocked like a phone. `cameraTracking.ts` runs the camera for the page, loading the pose task and the object
 detector while the browser asks for the camera, and draws each frame mirrored with the upper body on the camera panel's
-canvas (`ui/cameraOverlay.ts`) with the locked object's box. It reads swings on the same frames and hands each to the
-page the moment it is seen, so React hears only status changes, whether the camera sees the visitor, and the tracker's
-two- or three-word caption: where the tracker is, held at least 0.7 s so it never flickers, or at once what just
-happened (a lock, a swing, a sweep that was not one). Once the camera is off, the motion sampler's last picture and the
-tracked body are wiped along with the panel's.
+canvas (`ui/cameraOverlay.ts`) with the object it marks: a found one's box, name, and lock progress, or a locked one's
+box. It reads swings on the same frames and hands each to the page the moment it is seen, so React hears only status
+changes, whether the camera sees the visitor, and the tracker's two- or three-word caption: where the tracker is, held
+at least 0.7 s so it never flickers, or at once what just happened (a lock, a swing, a sweep that was not one). Once the
+camera is off, the motion sampler's last picture and the tracked body are wiped along with the panel's.
 
 ### The `/baseball` page
 

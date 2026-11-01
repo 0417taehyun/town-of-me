@@ -18,12 +18,12 @@ import {
   type Detection,
   type HandsView,
   HELD_OBJECT_RULES,
-  heldDetection,
   type HeldObjectLock,
   intersectionOverUnion,
   lockCandidates,
   measureDetection,
   OBJECT_DETECTION_INTERVAL_MS,
+  objectDetections,
   toImageBox,
 } from './vision/heldObject'
 import type { PoseFrame } from './vision/poseLoop'
@@ -58,9 +58,6 @@ export const DIAGNOSTICS_WINDOWS = {
   /** How often (ms) the panel redraws while shown. */
   redrawMs: 250,
 }
-
-/** A held object the detector found, with its COCO label. */
-export type LabelledDetection = Detection & { label: string }
 
 /** The detection nearest to being what the hands hold: its label, its score, and its reach (SW) to a wrist. */
 export type CandidateNote = { label: string; score: number; reach: number }
@@ -241,7 +238,7 @@ export function diagnoseFrame(
   const objects = diagnostics.pendingObjects
   diagnostics.pendingObjects = null
   diagnostics.video = { width: video.videoWidth, height: video.videoHeight }
-  const detections = objects?.result ? labelledDetections(objects.result, video.videoWidth, video.videoHeight) : null
+  const detections = objects?.result ? objectDetections(objects.result, video.videoWidth, video.videoHeight) : null
   const candidate = detections && tracker.view ? bestCandidate(detections, tracker.view, tracker.aspect) : null
   if (detections) diagnostics.candidate = { at: now, best: candidate }
   const matched = detections && tracker.lock ? lockedDetection(tracker.lock, detections, tracker.aspect) : null
@@ -285,20 +282,8 @@ export function dropOlder(notes: { handledAt: number }[], since: number) {
   notes.splice(0, firstKept < 0 ? notes.length : firstKept)
 }
 
-/** The held objects in a detector `result` for an image `width` by `height` pixels, with their labels. */
-export function labelledDetections(result: ObjectDetectorResult, width: number, height: number): LabelledDetection[] {
-  if (!width || !height) return []
-  return result.detections.flatMap((detection) =>
-    heldDetection(detection, width, height).map((held) => ({ ...held, label: detection.categories[0].categoryName })),
-  )
-}
-
 /** The detection the tracker would lock first (vision/heldObject.ts lockCandidates), or else the nearest; null for none. */
-export function bestCandidate(
-  detections: readonly LabelledDetection[],
-  view: HandsView,
-  aspect: number,
-): CandidateNote | null {
+export function bestCandidate(detections: readonly Detection[], view: HandsView, aspect: number): CandidateNote | null {
   const nearest = () =>
     detections
       .map((detection) => measureDetection(detection, view, aspect))
@@ -309,7 +294,7 @@ export function bestCandidate(
 }
 
 /** The detection a detector-found `lock` was just seen as: the one its box overlaps most, if any. */
-export function lockedDetection(lock: HeldObjectLock, detections: readonly LabelledDetection[], aspect: number) {
+export function lockedDetection(lock: HeldObjectLock, detections: readonly Detection[], aspect: number) {
   if (lock.kind !== 'detected') return null
   const overlaps = detections.map((detection) => ({
     detection,
@@ -323,7 +308,7 @@ export function lockedDetection(lock: HeldObjectLock, detections: readonly Label
 export function nextLockNote(
   previous: LockNote | null,
   lock: HeldObjectLock | null,
-  matched: LabelledDetection | null,
+  matched: Detection | null,
 ): LockNote | null {
   if (!lock) return null
   if (matched) return { kind: lock.kind, label: matched.label, score: matched.score }

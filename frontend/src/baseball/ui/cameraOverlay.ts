@@ -1,3 +1,4 @@
+import type { HeldObjectLabel } from '../vision/heldObject'
 import {
   type Box,
   isVisible,
@@ -7,10 +8,13 @@ import {
   type Keypoints,
   type Point,
 } from '../vision/poseLandmarks'
+import type { ObjectMark } from '../vision/swingTracker'
 
 // The camera panel's picture, drawn on its canvas by the vision loop for every camera frame, never through React: the
-// frame mirrored, as a visitor expects to see themselves, with the upper body the pose task found on it and the box of
-// the object it locked. The panel's words are its DOM (CameraPanel.tsx), so nothing drawn here is ever read backwards.
+// frame mirrored, as a visitor expects to see themselves, with the upper body the pose task found on it and the object
+// the swing tracker marks: the box of what the detector found by the hands, dashed, with its name and a bar that fills
+// as the lock comes, or solid once locked. The marks are placed mirrored like the picture but drawn unmirrored, so the
+// name reads the right way round; the panel's other words are its DOM (CameraPanel.tsx).
 
 /** The upper body's bones, shoulder to shoulder and down each arm. */
 export const UPPER_BODY_BONES: readonly (readonly [KeypointName, KeypointName])[] = [
@@ -28,6 +32,12 @@ export const OVERLAY_STYLE = {
   outline: 'rgba(31, 42, 38, 0.7)',
   wrist: '#f2b544',
   heldObject: '#ef7d57',
+  /** A box found but not locked yet, and the name on its chip's dark ground. */
+  candidate: '#fffef9',
+  chip: 'rgba(31, 42, 38, 0.82)',
+  chipFontSize: 13,
+  /** How much of the picture's top the panel's caption covers (in the side panel; less on the stage). */
+  captionBand: 0.18,
   /** The canvas width that draws lines at their nominal width; a wider frame draws them wider. */
   referenceWidth: 320,
 }
@@ -56,14 +66,15 @@ export function clearCameraView(canvas: HTMLCanvasElement) {
 }
 
 /**
- * Draws `video`'s current frame mirrored on `canvas`, with `keypoints` and the locked object's `heldBox` (both in the
- * raw, unmirrored image; the box in image units) over it.
+ * Draws `video`'s current frame mirrored on `canvas`, with `keypoints` (in the raw, unmirrored image) and the object
+ * `mark` (in its image units) over it, the mark named by `names`.
  */
 export function drawCameraView(
   canvas: HTMLCanvasElement,
   video: HTMLVideoElement,
   keypoints: Keypoints | null,
-  heldBox: Box | null,
+  mark: ObjectMark | null,
+  names: Record<HeldObjectLabel, string>,
 ) {
   const context = canvas.getContext('2d')
   if (!context || !video.videoWidth) return
@@ -75,23 +86,97 @@ export function drawCameraView(
   context.fillStyle = OVERLAY_STYLE.shade
   context.fillRect(0, 0, width, height)
   if (keypoints) drawUpperBody(context, keypoints, width, height)
-  if (heldBox) drawHeldBox(context, heldBox, width, height)
   context.restore()
+  if (mark) drawObjectMark(context, mark, mark.label && names[mark.label], width, height)
 }
 
-/** The locked object's box, `box` in image units (x scaled by the aspect), on a `width` by `height` canvas. */
-export function drawHeldBox(context: CanvasRenderingContext2D, box: Box, width: number, height: number) {
+/**
+ * Where `box` (raw image units, x scaled by the aspect) shows on a `width` by `height` canvas of the mirrored
+ * picture, in canvas pixels: an image unit is the picture's height in pixels, across as well as down.
+ */
+export function shownBox(box: Box, width: number, height: number): Box {
+  return {
+    x: width - (box.x + box.width) * height,
+    y: box.y * height,
+    width: box.width * height,
+    height: box.height * height,
+  }
+}
+
+/**
+ * The object `mark` on a `width` by `height` canvas, drawn unmirrored at its mirrored place: its box, solid once
+ * locked and dashed before, and over it a chip with its `name` that fills as the lock comes.
+ */
+export function drawObjectMark(
+  context: CanvasRenderingContext2D,
+  mark: ObjectMark,
+  name: string | null,
+  width: number,
+  height: number,
+) {
   const unit = width / OVERLAY_STYLE.referenceWidth
-  // An image unit is the picture's height in pixels, across as well as down.
-  const pixels = height
+  const shown = shownBox(mark.box, width, height)
   context.beginPath()
-  context.roundRect(box.x * pixels, box.y * pixels, box.width * pixels, box.height * pixels, 6 * unit)
+  context.roundRect(shown.x, shown.y, shown.width, shown.height, 6 * unit)
+  context.setLineDash(mark.locked ? [] : [7 * unit, 5 * unit])
   context.strokeStyle = OVERLAY_STYLE.outline
   context.lineWidth = 6 * unit
   context.stroke()
-  context.strokeStyle = OVERLAY_STYLE.heldObject
+  context.strokeStyle = mark.locked ? OVERLAY_STYLE.heldObject : OVERLAY_STYLE.candidate
   context.lineWidth = 3 * unit
   context.stroke()
+  context.setLineDash([])
+  if (name) drawNameChip(context, name, mark.progress, shown, unit, width, height)
+}
+
+/**
+ * A chip with `name` by the `shown` box (chipPlace), filled `progress` (0..1) across, in the page's font for its
+ * language, which the canvas inherits.
+ */
+export function drawNameChip(
+  context: CanvasRenderingContext2D,
+  name: string,
+  progress: number,
+  shown: Box,
+  unit: number,
+  width: number,
+  height: number,
+) {
+  context.font = `800 ${OVERLAY_STYLE.chipFontSize * unit}px ${getComputedStyle(context.canvas).fontFamily}`
+  const chip = chipPlace(shown, context.measureText(name).width, unit, width, height)
+  context.save()
+  context.beginPath()
+  context.roundRect(chip.x, chip.y, chip.width, chip.height, chip.height / 2)
+  context.clip()
+  context.fillStyle = OVERLAY_STYLE.chip
+  context.fillRect(chip.x, chip.y, chip.width, chip.height)
+  context.fillStyle = OVERLAY_STYLE.heldObject
+  context.fillRect(chip.x, chip.y, chip.width * progress, chip.height)
+  context.restore()
+  const centreX = chip.x + chip.width / 2
+  const centreY = chip.y + chip.height / 2 + unit
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  context.lineJoin = 'round'
+  context.lineWidth = 3 * unit
+  context.strokeStyle = OVERLAY_STYLE.outline
+  context.strokeText(name, centreX, centreY)
+  context.fillStyle = OVERLAY_STYLE.candidate
+  context.fillText(name, centreX, centreY)
+}
+
+/**
+ * The name chip for a name `textWidth` px wide (at `unit` px a reference pixel) by the `shown` box on a `width` by
+ * `height` canvas: at its top edge's left, raised above it, but never into the caption's band at the top (lower, inside
+ * or under the box, instead), and kept within the canvas. A short name still gets a chip wide enough for its progress
+ * to read.
+ */
+export function chipPlace(shown: Box, textWidth: number, unit: number, width: number, height: number): Box {
+  const chipWidth = Math.max(textWidth + 16 * unit, 48 * unit)
+  const chipHeight = 22 * unit
+  const x = Math.min(Math.max(shown.x, 0), Math.max(width - chipWidth, 0))
+  const y = Math.max(shown.y - chipHeight - 3 * unit, OVERLAY_STYLE.captionBand * height)
+  return { x, y, width: chipWidth, height: chipHeight }
 }
 
 /**

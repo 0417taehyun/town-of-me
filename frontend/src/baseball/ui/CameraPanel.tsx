@@ -4,12 +4,12 @@ import { tappedImagePoint } from './cameraOverlay'
 import type { CameraPanelLayout } from './cameraPanelLayout'
 
 /**
- * The camera panel: the mirrored camera with the visitor's pose and the locked object (drawn by the vision loop,
- * cameraOverlay.ts) and a chip saying what the camera and the swing tracker see. `layout` places it
- * (cameraPanelLayout.ts); the side panel's width is the layout's, so the play's band matches it, and the other sizes
- * are baseball.css's. Tapping the picture locks the object tapped (`onTap`, with the point in the raw image); the "lock
- * this object" button does the same from the keyboard. It is decorative to a screen reader, which hears the camera's
- * state from the setup card or the HUD instead.
+ * The camera panel: the mirrored camera with the visitor's pose and the object found by their hands or locked (drawn
+ * by the vision loop, cameraOverlay.ts) and a chip saying what the camera and the swing tracker see. `layout` places
+ * it (cameraPanelLayout.ts); the side panel's width is the layout's, so the play's band matches it, and the other
+ * sizes are baseball.css's. The object locks by itself; tapping the picture is only a quiet correction that locks the
+ * object tapped (`onTap`, with the point in the raw image). It is decorative to a screen reader, which hears the
+ * camera's state from the setup card or the HUD instead.
  */
 export function CameraPanel({
   video,

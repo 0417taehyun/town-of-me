@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { BattingSide } from '../game/field'
 import { STRIKE_ZONE } from '../game/field'
-import type { Detection } from './heldObject'
+import { type Detection, HELD_OBJECT_RULES } from './heldObject'
 import type { Energy } from './motionEnergy'
 import { bodySample, type Keypoints } from './poseLandmarks'
 import {
@@ -12,6 +12,7 @@ import {
   lockByHand,
   nextCaption,
   notify,
+  objectMark,
   SWING_RULES,
   type SwingTracker,
   type TrackedSwing,
@@ -45,8 +46,9 @@ const TURNED: Torso = { width: 0.3, shift: -0.3 }
 const FREE_HAND_DROP = 0.7
 
 /**
- * The grip at `offset` SW from the body's midline, the body standing at `centre`: both hands together, or the right
- * hand alone (`oneHanded`) with the left below it; `gripSeen` hides the right wrist alone.
+ * The grip at `offset` SW from the body's midline, the body standing at `centre`: both hands together (`armsApart` SW
+ * apart, around the grip), or the right hand alone (`oneHanded`) with the left below it; `gripSeen` hides the right
+ * wrist alone.
  */
 type Pose = {
   offset: number
@@ -56,6 +58,7 @@ type Pose = {
   torso?: Torso
   oneHanded?: boolean
   gripSeen?: boolean
+  armsApart?: number
 }
 type Run = {
   tracker: SwingTracker
@@ -65,7 +68,8 @@ type Run = {
   shown: HeldCaption | null
   captions: TrackerReason[]
 }
-type StepOptions = { energy?: Energy; detect?: boolean }
+/** The object detector, when it runs: finding the bottle in the hands, or nothing. */
+type StepOptions = { energy?: Energy; detector?: 'bottle' | 'nothing' }
 
 function keypointsFor(pose: Pose): Keypoints {
   const { offset, gripY = LEVEL_Y, centre = 0.5, wristsSeen = true, torso = FRONTAL, oneHanded = false } = pose
@@ -73,7 +77,8 @@ function keypointsFor(pose: Pose): Keypoints {
   const wristScore = wristsSeen ? 0.9 : 0.1
   const shouldersX = centre + torso.shift * SHOULDER_WIDTH_X
   const halfWidth = (torso.width * SHOULDER_WIDTH_X) / 2
-  const apart = oneHanded ? 0 : 0.008
+  const together = pose.armsApart === undefined ? 0.008 : (pose.armsApart * SHOULDER_WIDTH_X) / 2
+  const apart = oneHanded ? 0 : together
   return {
     nose: { x: centre, y: 0.2, score: 0.95 },
     leftShoulder: { x: shouldersX + halfWidth, y: SHOULDER_Y, score: 0.95 },
@@ -88,22 +93,27 @@ function keypointsFor(pose: Pose): Keypoints {
 /** A bottle standing up out of the hands at `pose`'s grip, as the detector boxes it. */
 function bottleAt({ offset, gripY = LEVEL_Y, centre = 0.5 }: Pose): Detection {
   const gripX = centre + offset * SHOULDER_WIDTH_X
-  return { score: 0.8, box: { x: gripX - 0.03, y: gripY - 0.28, width: 0.06, height: 0.3 } }
+  return { label: 'bottle', score: 0.8, box: { x: gripX - 0.03, y: gripY - 0.28, width: 0.06, height: 0.3 } }
 }
 
-function camera(side: BattingSide = 'right', freeMode = false): Run {
-  return { tracker: createSwingTracker(side, freeMode), swings: [], time: 1000, frames: 0, shown: null, captions: [] }
+function camera(side: BattingSide = 'right'): Run {
+  return { tracker: createSwingTracker(side), swings: [], time: 1000, frames: 0, shown: null, captions: [] }
+}
+
+/** What the detector finds in a frame of `pose` when it runs: the bottle in the hands, or nothing. */
+function detectionsFor(pose: Pose, detector: StepOptions['detector']) {
+  return detector === 'bottle' ? [bottleAt(pose)] : []
 }
 
 /**
- * One frame of `pose` (null: nobody in view); the detector runs on every third frame while `detect` is on. Each new
- * caption the camera panel would show goes into `captions`.
+ * One frame of `pose` (null: nobody in view); a `detector` runs on every third frame. Each new caption the camera
+ * panel would show goes into `captions`.
  */
-function step(run: Run, pose: Pose | null, { energy = QUIET, detect = false }: StepOptions = {}) {
+function step(run: Run, pose: Pose | null, { energy = QUIET, detector }: StepOptions = {}) {
   run.time += FRAME_MS
   run.frames += 1
   const body = pose && bodySample(keypointsFor(pose), ASPECT)
-  const detections = pose && detect && run.frames % 3 === 0 ? [bottleAt(pose)] : null
+  const detections = pose && detector && run.frames % 3 === 0 ? detectionsFor(pose, detector) : null
   const swing = updateSwingTracker(run.tracker, { time: run.time, body, detections, energy })
   if (swing) run.swings.push(swing)
   const shown = nextCaption(run.shown, run.tracker, run.time)
@@ -117,8 +127,18 @@ function hold(run: Run, pose: Pose | null, frames: number, options: StepOptions 
 
 /** Holds a bottle still at the load until the detector has seen it enough to lock it, then stands loaded. */
 function lockAndLoad(run: Run, offset = LOAD, pose: Partial<Pose> = {}) {
-  hold(run, { ...pose, offset }, 12, { detect: true })
+  hold(run, { ...pose, offset }, 12, { detector: 'bottle' })
   hold(run, { ...pose, offset }, 10)
+}
+
+/** Frames enough to span `ms`. */
+function framesFor(ms: number) {
+  return Math.ceil(ms / FRAME_MS)
+}
+
+/** Holds the empty hands still at the load, the detector finding nothing, until the tracker plays free mode. */
+function goFree(run: Run) {
+  hold(run, { offset: LOAD }, framesFor(HELD_OBJECT_RULES.handsOnlyAfterMs) + 4, { detector: 'nothing' })
 }
 
 function minimumJerk(fraction: number) {
@@ -281,16 +301,17 @@ describe('the camera swing tracker', () => {
     expect(slowing.swings).toEqual([])
   })
 
-  it('swings in free mode on the pose and motion alone, and after locking the thing in the hands by hand', () => {
-    const free = camera('right', true)
-    hold(free, { offset: LOAD }, 10)
+  it('swings in free mode on the pose and motion alone, and after a tap on the thing in the hands', () => {
+    const free = camera()
+    goFree(free)
     expect(free.tracker.lock?.kind).toBe('free')
     sweepAcross(free, LOAD, 0.7, 0.2)
     expect(free.swings).toHaveLength(1)
 
     const byHand = camera()
     hold(byHand, { offset: LOAD }, 4)
-    lockByHand(byHand.tracker, null)
+    // The tap lands on the hands, in the raw image's units (x scaled by the aspect).
+    lockByHand(byHand.tracker, { x: (0.5 + LOAD * SHOULDER_WIDTH_X) * ASPECT, y: LEVEL_Y })
     expect(byHand.tracker.lock?.kind).toBe('manual')
     hold(byHand, { offset: LOAD }, 10)
     sweepAcross(byHand, LOAD, 0.7, 0.2)
@@ -338,7 +359,7 @@ describe('the camera swing tracker', () => {
   })
 
   it('holds the caption against a state that keeps changing, but says what just happened at once', () => {
-    const tracker = createSwingTracker('right', false)
+    const tracker = createSwingTracker('right')
     tracker.reason = 'pullBack'
     const pullBack = nextCaption(null, tracker, 0)
     tracker.reason = 'loaded'
@@ -348,6 +369,96 @@ describe('the camera swing tracker', () => {
     const swing = nextCaption(pullBack, tracker, 100)
     expect(swing.caption).toBe('swing')
     expect(nextCaption(swing, tracker, 100 + CAPTION_HOLD_MS).caption).toBe('loaded')
+  })
+
+  it('plays free mode by itself once the detector has found nothing for a while, but not while it rests or hands move', () => {
+    const { handsOnlyAfterMs } = HELD_OBJECT_RULES
+    // The detector resting (this computer being timed): searching however long the hands wait.
+    const run = camera()
+    hold(run, { offset: LOAD }, framesFor(handsOnlyAfterMs * 2))
+    expect(run.tracker.state).toBe('searching')
+    // Looking, and finding nothing: searching still just short of the time, free just after it.
+    hold(run, { offset: LOAD }, framesFor(handsOnlyAfterMs) - 4, { detector: 'nothing' })
+    expect(run.tracker.state).toBe('searching')
+    hold(run, { offset: LOAD }, 8, { detector: 'nothing' })
+    expect(run.tracker.lock?.kind).toBe('free')
+    // Told all along that the camera is looking, never that something is missing, then that the hands will do.
+    expect(run.captions).toEqual(['looking', 'free'])
+    // Hands that keep moving wait for a still moment, and are asked for one once the time is up.
+    const restless = camera()
+    const fidget = (detector: StepOptions['detector']) => (_: unknown, index: number) =>
+      step(restless, { offset: LOAD + (index % 2) * 0.3 }, { detector })
+    Array.from({ length: framesFor(handsOnlyAfterMs * 2) }, fidget('nothing'))
+    expect(restless.tracker.state).toBe('searching')
+    expect(restless.captions).toEqual(['looking', 'holdStill'])
+    // An object that shows up in hands still moving locks once they stop, rather than free mode at their first still
+    // moment; so does one that shows up just before the time is up.
+    Array.from({ length: 6 }, fidget('bottle'))
+    hold(restless, { offset: LOAD }, 12, { detector: 'bottle' })
+    expect(restless.tracker.lock?.kind).toBe('detected')
+    const late = camera()
+    hold(late, { offset: LOAD }, framesFor(handsOnlyAfterMs) - 3, { detector: 'nothing' })
+    hold(late, { offset: LOAD }, 9, { detector: 'bottle' })
+    expect(late.tracker.lock?.kind).toBe('detected')
+  })
+
+  it('reads arms hanging apart in free mode as no load at all, rather than a load on the side of either wrist', () => {
+    const relaxed = camera()
+    const hanging = { offset: 0, armsApart: 1.4 }
+    hold(relaxed, hanging, framesFor(HELD_OBJECT_RULES.handsOnlyAfterMs) + 4, { detector: 'nothing' })
+    hold(relaxed, hanging, framesFor(CAPTION_HOLD_MS) + 1)
+    expect([relaxed.tracker.lock?.kind, relaxed.tracker.state, relaxed.captions.at(-1)]).toEqual([
+      'free',
+      'locked',
+      'pullBack',
+    ])
+  })
+
+  it('takes a real object found later in place of free mode while the visitor sets up, and keeps the stance', () => {
+    const settingUp = camera()
+    settingUp.tracker.settingUp = true
+    goFree(settingUp)
+    expect([settingUp.tracker.lock?.kind, settingUp.tracker.state]).toEqual(['free', 'loaded'])
+    hold(settingUp, { offset: LOAD }, 12, { detector: 'bottle' })
+    expect(settingUp.tracker.lock).toMatchObject({ kind: 'detected', label: 'bottle' })
+    expect(settingUp.tracker.state).toBe('loaded')
+    // Lost while the visitor holds the stance still: their hands take over at once, and the stance never breaks.
+    const states = new Set<SwingTracker['state']>()
+    Array.from({ length: framesFor(HELD_OBJECT_RULES.lostAfterMs) + 12 }, () => {
+      step(settingUp, { offset: LOAD }, { detector: 'nothing' })
+      states.add(settingUp.tracker.state)
+    })
+    expect(settingUp.tracker.lock?.kind).toBe('free')
+    expect([...states]).toEqual(['loaded'])
+    const playing = camera()
+    goFree(playing)
+    hold(playing, { offset: LOAD }, 12, { detector: 'bottle' })
+    expect(playing.tracker.lock?.kind).toBe('free')
+  })
+
+  it('marks what the detector finds by the hands with its lock’s progress, then the locked object solid', () => {
+    const run = camera()
+    hold(run, { offset: LOAD }, 3, { detector: 'bottle' })
+    const found = objectMark(run.tracker, run.time)
+    expect(found).toMatchObject({ label: 'bottle', locked: false, progress: 1 / HELD_OBJECT_RULES.lockHits })
+    // Between detector runs the box goes along with the hands.
+    step(run, { offset: LOAD + 0.1 })
+    const foundX = found?.box.x ?? Number.NaN
+    expect(objectMark(run.tracker, run.time)?.box.x).toBeCloseTo(foundX + 0.1 * SHOULDER_WIDTH_X * ASPECT, 9)
+    hold(run, { offset: LOAD }, 9, { detector: 'bottle' })
+    expect(objectMark(run.tracker, run.time)).toMatchObject({ label: 'bottle', locked: true })
+    // Once no detector run has seen it lately (the detector resting through a pitch), it is no longer marked.
+    const resting = camera()
+    hold(resting, { offset: LOAD }, 3, { detector: 'bottle' })
+    hold(resting, { offset: LOAD }, framesFor(HELD_OBJECT_RULES.candidateFreshMs) + 1)
+    expect(objectMark(resting.tracker, resting.time)).toBeNull()
+    // In free mode there is nothing to mark, unless the visitor is setting up and something shows by the hands.
+    const free = camera()
+    goFree(free)
+    expect(objectMark(free.tracker, free.time)).toBeNull()
+    free.tracker.settingUp = true
+    hold(free, { offset: LOAD }, 3, { detector: 'bottle' })
+    expect(objectMark(free.tracker, free.time)).toMatchObject({ label: 'bottle', locked: false })
   })
 
   it('loads a left-handed batter on the picture’s right and takes only their swing toward the left', () => {

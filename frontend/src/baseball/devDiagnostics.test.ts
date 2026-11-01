@@ -10,6 +10,7 @@ import {
   forgetDiagnosedCamera,
 } from './devDiagnostics'
 import type { RealTimeSwing, StageEvent } from './stage/stageRun'
+import type { HeldObjectLabel } from './vision/heldObject'
 import { createSwingTracker, type Side, type Sweep, type SwingTracker, type TrackerView } from './vision/swingTracker'
 
 const video = { videoWidth: 640, videoHeight: 480 }
@@ -138,7 +139,7 @@ describe('the camera diagnostics', () => {
 
   it('keeps only the last minute of frames and sweeps to save', () => {
     const diagnostics = createDiagnostics()
-    const tracker = createSwingTracker('right', false)
+    const tracker = createSwingTracker('right')
     sweepEnds(diagnostics, tracker, sweepFrom(-1), 0)
     expect(diagnostics.sweeps).toHaveLength(1)
     Array.from({ length: 70 * 30 }, (_, index) => 100 + index * (1000 / 30)).forEach((capturedAt) =>
@@ -154,7 +155,7 @@ describe('the camera diagnostics', () => {
   it('times each swing from its crossing to the stage judging it, and keeps no sweep of the bat coming back', () => {
     const diagnostics = createDiagnostics()
     // A right-handed batter loads on the image's left.
-    const tracker = createSwingTracker('right', false)
+    const tracker = createSwingTracker('right')
     // One swing between pitches, which the stage never judges, then one at a pitch.
     sweepEnds(diagnostics, tracker, sweepFrom(-1, { startedAt: 900, crossTime: 1010 }), 1000, swingAt(1010))
     sweepEnds(diagnostics, tracker, sweepFrom(-1, { startedAt: 2900, crossTime: 3010 }), 3000, swingAt(3010))
@@ -180,7 +181,7 @@ describe('the camera diagnostics', () => {
 
   it('names the rules a sweep toward the batting side had not met when it ended', () => {
     const diagnostics = createDiagnostics()
-    const tracker = createSwingTracker('right', false)
+    const tracker = createSwingTracker('right')
     sweepEnds(diagnostics, tracker, sweepFrom(-1, { crossTime: 1010, peak: 2, headShift: 0.8 }), 1000)
     sweepEnds(diagnostics, tracker, sweepFrom(-1, { crossTime: null }), 2000)
     expect(diagnostics.sweeps.map((sweep) => [sweep.swing, sweep.failures])).toEqual([
@@ -191,7 +192,7 @@ describe('the camera diagnostics', () => {
 
   it('tells a swing the dropout rules judged, and a crossing they predicted, from a swing seen to the end', () => {
     const diagnostics = createDiagnostics()
-    const tracker = createSwingTracker('right', false)
+    const tracker = createSwingTracker('right')
     // Short and slow by the rules for a grip seen to the end, but closing fast when the wrists blurred out.
     const dropout = { travel: 0.5, peak: 3.5, velocity: -5 }
     // Lost before the crossing, which the tracker predicts on the frame it reports the swing.
@@ -213,9 +214,9 @@ describe('the camera diagnostics', () => {
 
   it('forgets the sweep it followed once the camera turns off, so the next camera starts with none', () => {
     const diagnostics = createDiagnostics()
-    followSweep(diagnostics, createSwingTracker('right', false), sweepFrom(-1, { startedAt: 900 }), 1000)
+    followSweep(diagnostics, createSwingTracker('right'), sweepFrom(-1, { startedAt: 900 }), 1000)
     forgetDiagnosedCamera(diagnostics)
-    noteFrame(diagnostics, createSwingTracker('right', false), 40000)
+    noteFrame(diagnostics, createSwingTracker('right'), 40000)
     expect(diagnostics.sweeps).toEqual([])
   })
 
@@ -227,7 +228,7 @@ describe('the camera diagnostics', () => {
       width: 0.2,
     }
     /** A detection `x` across the image (as a share of its width), from the shoulders down. */
-    const foundAt = (label: string, score: number, x: number) => ({
+    const foundAt = (label: HeldObjectLabel, score: number, x: number) => ({
       label,
       score,
       box: { x, y: 0.3, width: 0.06, height: 0.3 },

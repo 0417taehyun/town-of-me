@@ -10,11 +10,13 @@ import {
   visibleWrists,
 } from './poseLandmarks'
 
-// What the visitor swings: a held object the object detector finds next to their still hands (or one they point out
-// by hand, or none at all in free mode), locked once and then trusted. Detectors lose thin, blurred objects mid-swing,
-// so a swing is judged from the pose and the lock's geometry (swingTracker.ts), never from a detection during it; the
-// detector only keeps the lock fresh between swings and lets it go once the object is gone. Everything is in the raw,
-// unmirrored image with x scaled by its aspect ratio (poseLandmarks.ts); lengths are in the body's shoulder widths.
+// What the visitor swings: a held object the object detector finds next to their still hands, locked by itself once
+// enough sightings agree and then trusted; none at all in free mode, which a visitor whose object the detector cannot
+// find plays (as a tap on the camera picture can point one out by hand). Detectors lose thin, blurred objects
+// mid-swing, so a swing is judged from the pose and the lock's geometry (swingTracker.ts), never from a detection
+// during it; the detector only keeps the lock fresh between swings and lets it go once the object is gone. Everything
+// is in the raw, unmirrored image with x scaled by its aspect ratio (poseLandmarks.ts); lengths are in the body's
+// shoulder widths.
 
 /** COCO labels a visitor might plausibly swing or hold. A person is never the held object. */
 export const HELD_OBJECT_LABELS = [
@@ -39,8 +41,19 @@ export const HELD_OBJECT_LABELS = [
   'hair drier',
   'vase',
   'mouse',
-]
+] as const
 
+export type HeldObjectLabel = (typeof HELD_OBJECT_LABELS)[number]
+
+export function isHeldObjectLabel(label: string): label is HeldObjectLabel {
+  return (HELD_OBJECT_LABELS as readonly string[]).includes(label)
+}
+
+/**
+ * Checked against the drafts' one real webcam log (2026-10-31-real-webcam-1.json): a held bottle locked within 0.3 s
+ * of coming within `candidateReach` of a wrist, and a lower `candidateScore` would have locked a 0.27 "cup" by the
+ * wrists in its place. A visitor whose object the detector cannot find (it seldom finds a bat) plays in free mode.
+ */
 export const HELD_OBJECT_RULES = {
   /** A detection less sure than this, or farther than `candidateReach` from a wrist, is not what the hands hold. */
   candidateScore: 0.35,
@@ -52,8 +65,13 @@ export const HELD_OBJECT_RULES = {
   /** A detected object unseen `lostMisses` times in a row, for over `lostAfterMs`, while the hands are still, is gone. */
   lostMisses: 6,
   lostAfterMs: 1500,
-  /** In view this long with nothing to lock, the visitor is told they can tap the object or play without one. */
-  helpAfterMs: 4000,
+  /**
+   * Looking this long from the detector's first look at the hands, with nothing locked and nothing by the hands, a
+   * still visitor plays free (swingTracker.ts handsOnlyDue).
+   */
+  handsOnlyAfterMs: 3000,
+  /** What the detector found by the hands, unseen by any run for this long (it rests through a pitch), is gone. */
+  candidateFreshMs: 300,
   /** Wrists this close together hold the object together. */
   twoHands: 0.6,
   /** With no object, a hand-held stick this long, pointing up, stands in for one. */
@@ -72,8 +90,8 @@ export const HELD_OBJECT_RULES = {
 /** How long (ms) the object detector waits between runs: briefly while looking for an object, longer once locked. */
 export const OBJECT_DETECTION_INTERVAL_MS = { searching: 110, locked: 250 }
 
-/** One object the detector found (one of HELD_OBJECT_LABELS): how sure it is, and its box as shares of the image. */
-export type Detection = { score: number; box: Box }
+/** One object the detector found: what it is, how sure the detector is, and its box as shares of the image. */
+export type Detection = { label: HeldObjectLabel; score: number; box: Box }
 
 /** A detection in image units, and how far (shoulder widths) it is from the nearest visible wrist. */
 export type MeasuredDetection = Detection & { imageBox: Box; reach: number }
@@ -82,12 +100,13 @@ export type MeasuredDetection = Detection & { imageBox: Box; reach: number }
 export type HandsView = { wrists: BodySample['wrists']; grip: Point; width: number }
 
 /**
- * A locked object: found by the detector, pointed out by hand, or none (free mode); the hand that holds it, its box and
- * the grip it was last seen at, its length from the grip to its tip (shoulder widths), and how often and since when the
- * detector has missed it.
+ * A locked object: found by the detector (with what it took it for), pointed out by hand, or none (free mode); the
+ * hand that holds it, its box and the grip it was last seen at, its length from the grip to its tip (shoulder widths),
+ * and how often and since when the detector has missed it.
  */
 export type HeldObjectLock = {
   kind: 'detected' | 'manual' | 'free'
+  label: HeldObjectLabel | null
   hand: Hand
   box: Box
   grip: Point
@@ -113,10 +132,12 @@ export function heldDetection(
   height: number,
 ): Detection[] {
   const category = detection.categories.at(0)
+  const label = category?.categoryName ?? ''
   const box = detection.boundingBox
-  if (!category || !box || !HELD_OBJECT_LABELS.includes(category.categoryName)) return []
+  if (!category || !box || !isHeldObjectLabel(label)) return []
   return [
     {
+      label,
       score: category.score,
       box: { x: box.originX / width, y: box.originY / height, width: box.width / width, height: box.height / height },
     },
@@ -159,13 +180,12 @@ export function farthestCorner(box: Box, point: Point): Point {
   return corners.reduce((farthest, corner) => (distance(corner, point) > distance(farthest, point) ? corner : farthest))
 }
 
-/** Which hand holds the object: both if the wrists are together, else the one nearest `box`, else the raised one. */
-export function chooseHand(wrists: BodySample['wrists'], shoulderWidth: number, box: Box | null): Hand {
+/** Which hand holds the object in `box`: both if the wrists are together, else the one nearest it. */
+export function chooseHand(wrists: BodySample['wrists'], shoulderWidth: number, box: Box): Hand {
   const { left, right } = wrists
   if (!left || !right) return left ? 'left' : right ? 'right' : 'both'
   if (distance(left, right) <= HELD_OBJECT_RULES.twoHands * shoulderWidth) return 'both'
-  if (box) return boxDistance(box, left) <= boxDistance(box, right) ? 'left' : 'right'
-  return left.y < right.y ? 'left' : 'right'
+  return boxDistance(box, left) <= boxDistance(box, right) ? 'left' : 'right'
 }
 
 /** `detection` in image units, with its reach to the nearest visible wrist (Infinity when none is visible). */
@@ -193,28 +213,42 @@ export function lockCandidates<Found extends Detection>(detections: readonly Fou
  * many of the rest overlap this one. The object locks once the progress reaches `lockHits`.
  */
 export function searchForLock(search: LockSearch, box: Box, time: number): LockSearch {
-  const { lockWindowMs, lockOverlap } = HELD_OBJECT_RULES
-  const recent = search.sightings.filter((sighting) => time - sighting.time <= lockWindowMs)
+  const recent = search.sightings.filter((sighting) => time - sighting.time <= HELD_OBJECT_RULES.lockWindowMs)
   const sightings = [...recent, { time, box }]
-  const progress = sightings.filter((sighting) => intersectionOverUnion(sighting.box, box) >= lockOverlap).length
-  return { sightings, progress }
+  return { sightings, progress: agreeingSightings(sightings, box, time).length }
+}
+
+/** The sightings within the lock window before `time` that overlap `box` enough to be the same object. */
+export function agreeingSightings(sightings: LockSearch['sightings'], box: Box, time: number) {
+  const { lockWindowMs, lockOverlap } = HELD_OBJECT_RULES
+  return sightings.filter(
+    (sighting) => time - sighting.time <= lockWindowMs && intersectionOverUnion(sighting.box, box) >= lockOverlap,
+  )
+}
+
+/** How far a lock on `box` has come by `time` (0..1): the recent sightings agreeing with it, of `lockHits` needed. */
+export function lockProgress(search: LockSearch, box: Box, time: number) {
+  return Math.min(1, agreeingSightings(search.sightings, box, time).length / HELD_OBJECT_RULES.lockHits)
 }
 
 export function isLockedBy(search: LockSearch) {
   return search.progress >= HELD_OBJECT_RULES.lockHits
 }
 
-/** Locks `box` held in `view`'s hands; its tip is `tip`, or the box's corner farthest from the grip. */
+/**
+ * Locks `box` held in `view`'s hands, with no label (a detected lock adds its own); its tip is `tip`, or the box's
+ * corner farthest from the grip. Free mode holds nothing to choose a hand by, so it follows both.
+ */
 export function lockOn(
   view: HandsView,
   box: Box,
   kind: HeldObjectLock['kind'],
   tip: Point | null = null,
 ): HeldObjectLock {
-  const hand = chooseHand(view.wrists, view.width, kind === 'free' ? null : box)
+  const hand = kind === 'free' ? 'both' : chooseHand(view.wrists, view.width, box)
   const grip = gripOf(view.wrists, hand)?.point ?? view.grip
   const length = distance(tip ?? farthestCorner(box, grip), grip) / view.width
-  return { kind, hand, box, grip, length, misses: 0, missingSince: null }
+  return { kind, label: null, hand, box, grip, length, misses: 0, missingSince: null }
 }
 
 /** The box around a stick from `grip` to `tip`, with a margin, for a body `shoulderWidth` wide. */
@@ -229,31 +263,32 @@ export function boxAround(grip: Point, tip: Point, shoulderWidth: number): Box {
 }
 
 /**
- * Locks what the visitor pointed out: `point` (image units) when it is near their hands, or the thing in their hands,
- * taken to point up, when `point` is on the hands or null (the "lock this object" button). Null when no wrist shows or
- * the point is too far from the hands to be held.
+ * Locks what the visitor tapped: `point` (image units) when it is near their hands, or the thing in their hands, taken
+ * to point up, when `point` is on the hands. Null when no wrist shows or the point is too far from the hands.
  */
-export function manualLock(view: HandsView, point: Point | null): HeldObjectLock | null {
+export function manualLock(view: HandsView, point: Point): HeldObjectLock | null {
   const wrists = visibleWrists(view.wrists)
   if (wrists.length === 0) return null
   const grip = meanPoint(wrists)
   const heldTip = { x: grip.x, y: grip.y - HELD_OBJECT_RULES.heldLength * view.width }
-  const tip = point && distance(point, grip) >= HELD_OBJECT_RULES.onHands * view.width ? point : heldTip
+  const tip = distance(point, grip) >= HELD_OBJECT_RULES.onHands * view.width ? point : heldTip
   if (distance(tip, grip) > HELD_OBJECT_RULES.manualReach * view.width) return null
   return lockOn({ ...view, grip }, boxAround(grip, tip, view.width), 'manual', tip)
 }
 
-/** Free mode: no object at all, so a stick in the hands, pointing up, stands in for one. */
+/**
+ * Free mode: no object at all, so a stick in both hands, pointing up, stands in for one. The grip is where the wrists
+ * meet, so arms hanging at the sides read as no load at all, rather than whichever wrist is a hair higher.
+ */
 export function freeLock(view: HandsView): HeldObjectLock {
-  const hand = chooseHand(view.wrists, view.width, null)
-  const grip = gripOf(view.wrists, hand)?.point ?? view.grip
+  const grip = gripOf(view.wrists, 'both')?.point ?? view.grip
   const tip = { x: grip.x, y: grip.y - HELD_OBJECT_RULES.freeLength * view.width }
   return lockOn(view, boxAround(grip, tip, view.width), 'free', tip)
 }
 
-/** The lock's box moved along with the hands since it was last seen: where the object is now. */
-export function currentBox(lock: HeldObjectLock, grip: Point): Box {
-  return { ...lock.box, x: lock.box.x + grip.x - lock.grip.x, y: lock.box.y + grip.y - lock.grip.y }
+/** A box seen in the hands at `grip`, moved along with them since: where the object is now. */
+export function currentBox(seen: Pick<HeldObjectLock, 'box' | 'grip'>, grip: Point): Box {
+  return { ...seen.box, x: seen.box.x + grip.x - seen.grip.x, y: seen.box.y + grip.y - seen.grip.y }
 }
 
 /**

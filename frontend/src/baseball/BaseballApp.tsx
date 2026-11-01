@@ -216,13 +216,13 @@ const DerbyDiagnostics = import.meta.env.DEV ? DiagnosticsPanel : null
  * button swings: the swings are the ones the camera sees (cameraTracking.ts), handed to the stage the moment they are
  * seen. Practice tells each swing only a bit early, good, or a bit late, and calibrates the runs after it; practice and
  * a run pause between pitches while the visitor is out of the camera's view. A camera that fails names its cause and
- * offers another try, and the derby cannot be played without it. The object detector rests from each windup until the
- * pitch is judged. A computer that tracks too slowly is blocked for the visit. Every run reads the KST month when it
- * starts, never when the page loaded. A `preview`, the admin's try of next month's rules, plays those scheduled (or
- * this month's when none are) and says so on every screen; it is never ranked. V (or the camera view button) resizes
- * or hides the camera panel beside the play, the "lock this object" button there and on the setup card locks what the
- * visitor holds, the result screen can turn the camera off, and Escape leaves from any of these screens: for the town,
- * or from a preview back to the editor.
+ * offers another try, and the derby cannot be played without it. The camera locks what the visitor holds by itself (or
+ * lets them swing with their hands), and its object detector rests from each windup until the pitch is judged. A
+ * computer that tracks too slowly is blocked for the visit. Every run reads the KST month when it starts, never when
+ * the page loaded. A `preview`, the admin's try of next month's rules, plays those scheduled (or this month's when none
+ * are) and says so on every screen; it is never ranked. V (or the camera view button) resizes or hides the camera
+ * panel beside the play, the result screen can turn the camera off, and Escape leaves from any of these screens: for
+ * the town, or from a preview back to the editor.
  */
 export function DerbyScreen({
   ballpark,
@@ -287,7 +287,14 @@ export function DerbyScreen({
     ring.setAttribute('aria-valuenow', String(Math.round(progress * 100)))
   }, [])
   const stance: StanceWatch = { wait: stanceWait(flow), onProgress: onStanceProgress, onHeld: start }
-  const camera = useCameraTracking({ side, objectsPaused: cameraSwinging && pitching, onSwing: onCameraSwing, stance })
+  const camera = useCameraTracking({
+    side,
+    objectsPaused: cameraSwinging && pitching,
+    onSwing: onCameraSwing,
+    stance,
+    settingUp: flow.step === 'setup',
+    objectNames: cameraCopy.objects,
+  })
   const status = camera.status
   const step = derbyStep(flow, status.kind)
   const run = shownRun(flow, step)
@@ -422,15 +429,12 @@ export function DerbyScreen({
           cameraState={cameraState}
           panelSide={panel.side}
           side={side}
-          freeMode={camera.freeMode}
           gauge={gauge}
           language={language}
           onSideChange={setChosenSide}
           onStart={start}
           onRetry={startWithCamera}
           onTurnOff={camera.turnOff}
-          onLockHeld={() => camera.lockAt(null)}
-          onToggleFreeMode={camera.toggleFreeMode}
         />
       )}
       {step === 'rules' && (
@@ -491,11 +495,6 @@ export function DerbyScreen({
             {cameraCopy.panel}
             <span aria-hidden="true">{panelSizeLabel}</span>
             <kbd aria-hidden="true">V</kbd>
-          </button>
-        )}
-        {screen === 'play' && !camera.freeMode && (
-          <button className="derby-camera-toggle" type="button" onClick={() => camera.lockAt(null)}>
-            {cameraCopy.lockHeld}
           </button>
         )}
         {/* The panel is hidden here while the camera stays on for another go, so the way to turn it off is too. */}

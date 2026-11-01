@@ -7,6 +7,7 @@ import {
   isLockedBy,
   lockCandidates,
   lockOn,
+  lockProgress,
   NO_SEARCH,
   objectDetections,
   refreshLock,
@@ -66,6 +67,12 @@ describe('the held object', () => {
     expect(isLockedBy(searched(steady, slow))).toBe(false)
     const wandering = steady.map((box, index) => shifted(box, index * box.width))
     expect(isLockedBy(searched(wandering, quick))).toBe(false)
+    // The progress the camera panel shows counts only the recent sightings of that place.
+    const almost = searched(steady.slice(1), quick)
+    const lastSighting = quick[lockHits - 2]
+    expect(lockProgress(almost, bottle, lastSighting)).toBeCloseTo((lockHits - 1) / lockHits, 9)
+    expect(lockProgress(almost, shifted(bottle, bottle.width * 2), lastSighting)).toBe(0)
+    expect(lockProgress(almost, bottle, quick[0] + lockWindowMs + 1)).toBeLessThan((lockHits - 1) / lockHits)
   })
 
   it('never takes a person, or anything a visitor would not swing, for the held object', () => {

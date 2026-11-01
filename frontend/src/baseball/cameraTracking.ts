@@ -15,7 +15,7 @@ import type { BattingSide } from './game/field'
 import type { RealTimeSwing } from './stage/stageRun'
 import { clearCameraView, drawCameraView } from './ui/cameraOverlay'
 import { type CameraInput, type CameraStopReason, startCamera } from './vision/cameraInput'
-import { type Detection, objectDetectionDue, objectDetections } from './vision/heldObject'
+import { type Detection, type HeldObjectLabel, objectDetectionDue, objectDetections } from './vision/heldObject'
 import { createMotionEnergy, type MotionEnergySampler } from './vision/motionEnergy'
 import type { FrameTiming } from './vision/performanceTier'
 import type { Point } from './vision/poseLandmarks'
@@ -32,10 +32,10 @@ import {
   createSwingTracker,
   forgetCamera,
   type HeldCaption,
-  heldObjectBox,
+  isLookingForObject,
   lockByHand,
   nextCaption,
-  setTrackerFreeMode,
+  objectMark,
   setTrackerSide,
   type SwingTracker,
   type TrackedSwing,
@@ -120,8 +120,8 @@ export const BROWSER_CAMERA_PARTS: CameraTrackingParts = {
  * after `starting`, and nothing once `signal` aborts; the caller aborts it when a status leaves the camera off. The
  * pose task and the object detector load while the browser asks for the camera, so a first visit waits for all at
  * once; a camera that does not start names its cause, and a pose task that does not (or fails later) is a tracking
- * problem, not the camera's. The game needs no object detector: without one the visitor locks an object by hand or
- * plays without one.
+ * problem, not the camera's. The game needs no object detector: without one the visitor plays in free mode, or taps
+ * the object in the camera picture.
  */
 export async function trackCamera(
   video: HTMLVideoElement,
@@ -195,8 +195,8 @@ export function followPose(
 /** One camera's swing reading: the tracker, the motion sampler, and when the object detector last ran. */
 export type SwingReading = { tracker: SwingTracker; energy: MotionEnergySampler; objectsRanAt: number }
 
-export function createSwingReading(side: BattingSide, freeMode: boolean): SwingReading {
-  return { tracker: createSwingTracker(side, freeMode), energy: createMotionEnergy(), objectsRanAt: -Infinity }
+export function createSwingReading(side: BattingSide): SwingReading {
+  return { tracker: createSwingTracker(side), energy: createMotionEnergy(), objectsRanAt: -Infinity }
 }
 
 /** Wipes what a reading kept of the camera once it is off: the motion sampler's last picture and the tracked body. */
@@ -223,18 +223,23 @@ export function readSwingFrame(
   return swing && cameraSwing(swing)
 }
 
-/** The held objects on `video`'s frame at `nowMs` when the detector is ready and due; null when it does not run. */
+/**
+ * The held objects on `video`'s frame at `nowMs` when the detector is due; null when it does not run. While the tracker
+ * looks for an object, a detector not at hand (still loading, failed, or being rebuilt) finds nothing, so the search
+ * still runs out to free mode.
+ */
 export function detectObjects(
   reading: SwingReading,
   nowMs: number,
   video: HTMLVideoElement,
   objects: ObjectDetector | null,
 ): Detection[] | null {
-  const searching = reading.tracker.state === 'searching'
-  if (!objects || !objectDetectionDue(searching, reading.objectsRanAt, nowMs)) return null
+  const looking = isLookingForObject(reading.tracker)
+  if (!objectDetectionDue(looking, reading.objectsRanAt, nowMs)) return null
   reading.objectsRanAt = nowMs
-  const result = objects.detect(video, nowMs)
-  return result && objectDetections(result, video.videoWidth, video.videoHeight)
+  const result = objects?.detect(video, nowMs) ?? null
+  if (result) return objectDetections(result, video.videoWidth, video.videoHeight)
+  return looking ? [] : null
 }
 
 /** A tracked swing for the stage: the camera's, on the clock of the frames it was seen in (performance.now() ms). */
@@ -250,6 +255,10 @@ export type CameraTrackingOptions = {
   /** Hears each swing the camera sees, the moment it is seen. */
   onSwing: (swing: RealTimeSwing) => void
   stance: StanceWatch
+  /** Whether the visitor is on the setup step, where a real object that locks replaces free mode. */
+  settingUp: boolean
+  /** What the camera panel calls each object it marks, in the visitor's language. */
+  objectNames: Record<HeldObjectLabel, string>
 }
 
 /**
@@ -275,30 +284,36 @@ export function visitorFrame(frame: PoseFrame, tracker: SwingTracker): { seen: b
 
 /**
  * The camera for a page: `turnOn` starts it into the `video` element the camera panel mounts, and the vision loop
- * draws on the panel's `canvas`, reads swings for `onSwing`, and follows the stance hold `stance` waits for. `seen`
- * says whether the camera sees the visitor, held through brief flickers (vision/poseLoop.ts), and `present` the same
- * held longer, as long as practice and a run wait before they pause (AWAY_HOLD_MS); `caption` is what the swing
- * tracker says (nextCaption). `lockAt` locks what the visitor pointed out (a point in the raw image, or null for the
- * thing in their hands), and `toggleFreeMode` plays without an object. The camera turns off on `turnOff`, when its
- * status leaves it off, and when the page's component unmounts; its last picture, the motion sampler's copy, and the
- * tracked body are wiped each time.
+ * draws on the panel's `canvas` (with the object it marks, named by `objectNames`), locks the held object by itself,
+ * reads swings for `onSwing`, and follows the stance hold `stance` waits for. `seen` says whether the camera sees the
+ * visitor, held through brief flickers (vision/poseLoop.ts), and `present` the same held longer, as long as practice
+ * and a run wait before they pause (AWAY_HOLD_MS); `caption` is what the swing tracker says (nextCaption). `lockAt`
+ * locks what the visitor tapped on the camera picture (a point in the raw image). The camera turns off on `turnOff`,
+ * when its status leaves it off, and when the page's component unmounts; its last picture, the motion sampler's copy,
+ * and the tracked body are wiped each time.
  */
-export function useCameraTracking({ side, objectsPaused, onSwing, stance }: CameraTrackingOptions) {
+export function useCameraTracking({
+  side,
+  objectsPaused,
+  onSwing,
+  stance,
+  settingUp,
+  objectNames,
+}: CameraTrackingOptions) {
   const video = useRef<HTMLVideoElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const reading = useRef<SwingReading | null>(null)
-  const page = useRef({ objectsPaused, onSwing, stance })
+  const page = useRef({ objectsPaused, onSwing, stance, settingUp, objectNames })
   const [request, setRequest] = useState<symbol | null>(null)
   const [status, setStatus] = useState<CameraStatus>(CAMERA_OFF)
   const [seen, setSeen] = useState(false)
   const [present, setPresent] = useState(false)
   const [caption, setCaption] = useState<TrackerReason | null>(null)
-  const [freeMode, setFreeMode] = useState(false)
 
   useLayoutEffect(() => {
-    page.current = { objectsPaused, onSwing, stance }
+    page.current = { objectsPaused, onSwing, stance, settingUp, objectNames }
     if (reading.current) setTrackerSide(reading.current.tracker, side)
-  }, [objectsPaused, onSwing, stance, side])
+  }, [objectsPaused, onSwing, stance, settingUp, objectNames, side])
 
   useEffect(() => {
     const feed = video.current
@@ -320,10 +335,12 @@ export function useCameraTracking({ side, objectsPaused, onSwing, stance }: Came
       if (!isCameraOn(next)) setRequest(null)
     }
     const onFrame = (frame: PoseFrame, objects: ObjectDetector | null, poseMs: number) => {
+      current.tracker.settingUp = page.current.settingUp
       const tracked = readSwingFrame(current, frame, feed, objects, !timed || page.current.objectsPaused)
       const swing = tracked ?? DEV_SWING?.(frame.capturedAt)
       if (swing) page.current.onSwing(swing)
-      drawCameraView(picture, feed, frame.keypoints, heldObjectBox(current.tracker))
+      const mark = objectMark(current.tracker, frame.capturedAt)
+      drawCameraView(picture, feed, frame.keypoints, mark, page.current.objectNames)
       const visitor = visitorFrame(frame, current.tracker)
       hold = watchStance(hold, timed, visitor.stance, page.current.stance, shownProgress)
       DEV_DIAGNOSE?.({
@@ -357,23 +374,19 @@ export function useCameraTracking({ side, objectsPaused, onSwing, stance }: Came
   }, [request])
 
   const turnOn = useCallback(() => {
-    reading.current = createSwingReading(side, freeMode)
+    reading.current = createSwingReading(side)
     setSeen(false)
     setPresent(false)
     setCaption(null)
     setStatus({ kind: 'starting' })
     setRequest(Symbol('camera'))
-  }, [side, freeMode])
+  }, [side])
   const turnOff = useCallback(() => {
     setStatus(CAMERA_OFF)
     setRequest(null)
   }, [])
-  const lockAt = useCallback((point: Point | null) => {
+  const lockAt = useCallback((point: Point) => {
     if (reading.current) lockByHand(reading.current.tracker, point)
   }, [])
-  const toggleFreeMode = useCallback(() => {
-    setFreeMode(!freeMode)
-    if (reading.current) setTrackerFreeMode(reading.current.tracker, !freeMode)
-  }, [freeMode])
-  return { video, canvas, status, seen, present, caption, freeMode, turnOn, turnOff, lockAt, toggleFreeMode }
+  return { video, canvas, status, seen, present, caption, turnOn, turnOff, lockAt }
 }

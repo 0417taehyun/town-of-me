@@ -3,13 +3,15 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   type CameraStatus,
   type CameraTrackingParts,
+  type ObjectDetector,
   readSwingFrame,
   readyObjectDetector,
   trackCamera,
 } from './cameraTracking'
+import { freeLock, HELD_OBJECT_RULES } from './vision/heldObject'
 import { NO_ENERGY } from './vision/motionEnergy'
 import type { BodySample } from './vision/poseLandmarks'
-import { createSwingTracker } from './vision/swingTracker'
+import { createSwingTracker, type SwingTracker } from './vision/swingTracker'
 import type { VisionTask } from './vision/tasksVision'
 
 const video = { videoWidth: 640, videoHeight: 480 } as HTMLVideoElement
@@ -22,21 +24,31 @@ const standing: BodySample = {
   aspect: 4 / 3,
 }
 
-/**
- * How many times the object detector runs over a second of 30 fps frames of `body`, `paused` or not, for a tracker
- * looking for an object (or, in `freeMode`, locked at once without one).
- */
-function detectorRuns(body: BodySample | null, freeMode: boolean, paused: boolean) {
-  const detect = vi.fn(() => ({ detections: [] }))
-  const reading = {
-    tracker: createSwingTracker('right', freeMode),
-    energy: { measure: () => NO_ENERGY, clear: () => undefined },
-    objectsRanAt: -Infinity,
-  }
-  Array.from({ length: 30 }, (_, index) => index * (1000 / 30)).forEach((capturedAt) =>
-    readSwingFrame(reading, { keypoints: null, body, capturedAt }, video, { detect, close: () => undefined }, paused),
+/** `seconds` of 30 fps frames of `body` read by `tracker`, with `objects` as the detector, `paused` or not. */
+function readFrames(
+  tracker: SwingTracker,
+  body: BodySample | null,
+  objects: ObjectDetector | null,
+  paused: boolean,
+  seconds = 1,
+) {
+  const reading = { tracker, energy: { measure: () => NO_ENERGY, clear: () => undefined }, objectsRanAt: -Infinity }
+  Array.from({ length: seconds * 30 }, (_, index) => index * (1000 / 30)).forEach((capturedAt) =>
+    readSwingFrame(reading, { keypoints: null, body, capturedAt }, video, objects, paused),
   )
+}
+
+/** How many times the object detector runs over a second of frames of `body` for `tracker`, `paused` or not. */
+function detectorRuns(body: BodySample | null, tracker: SwingTracker, paused: boolean) {
+  const detect = vi.fn(() => ({ detections: [] }))
+  readFrames(tracker, body, { detect, close: () => undefined }, paused)
   return detect.mock.calls.length
+}
+
+/** A tracker locked on the free mode stand-in, on the setup step or not. */
+function freeTracker(settingUp: boolean): SwingTracker {
+  const hands = { wrists: standing.wrists, grip: { x: 0.67, y: 0.6 }, width: 0.2 }
+  return { ...createSwingTracker('right'), state: 'locked', settingUp, lock: freeLock(hands) }
 }
 
 /** Tracks the camera with `parts` and returns the statuses it reported. */
@@ -75,12 +87,20 @@ describe('camera tracking', () => {
   })
 
   it('rests the object detector during a pitch, and runs it often while looking for an object, less once locked', () => {
-    expect(detectorRuns(null, false, true)).toBe(0)
-    expect(detectorRuns(standing, true, true)).toBe(0)
-    const searching = detectorRuns(null, false, false)
-    const locked = detectorRuns(standing, true, false)
+    expect(detectorRuns(null, createSwingTracker('right'), true)).toBe(0)
+    expect(detectorRuns(standing, freeTracker(false), true)).toBe(0)
+    const searching = detectorRuns(null, createSwingTracker('right'), false)
+    const locked = detectorRuns(standing, freeTracker(false), false)
     expect(locked).toBeGreaterThanOrEqual(3)
     expect(searching).toBeGreaterThan(1.5 * locked)
+    // Free mode on the setup step still looks for a real object as often as a search does.
+    expect(detectorRuns(standing, freeTracker(true), false)).toBe(searching)
+  })
+
+  it('plays free mode without an object detector at hand, as when the detector finds nothing', () => {
+    const tracker = createSwingTracker('right')
+    readFrames(tracker, standing, null, false, Math.ceil(HELD_OBJECT_RULES.handsOnlyAfterMs / 1000) + 1)
+    expect(tracker.lock?.kind).toBe('free')
   })
 
   it('closes an object detector that finishes loading after the camera turned off, and hands out none after', async () => {

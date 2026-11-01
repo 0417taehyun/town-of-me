@@ -10,40 +10,34 @@ const BATTING_SIDES: readonly BattingSide[] = ['right', 'left']
 /**
  * The camera game's setup card beside the camera panel's stage: what the camera is doing (asking, loading the pose
  * task, timing this computer), the promise about its picture, which side the visitor bats from (the batter, the
- * camera panel, and where a swing loads follow it), how to lock what the visitor swings (or play without an object)
- * once the camera follows them, and the way on once this computer has been timed fast enough: holding the batting
- * stance fills `gauge` and starts practice, as the "start practice" button does. A camera problem takes its place with
- * the cause and another try; there is no other way to play. `cameraState` is the panel chip's words, which a screen
- * reader hears from here. The lock button is the keyboard's way to do what tapping the camera picture does.
+ * camera panel, and where a swing loads follow it), how the camera finds what the visitor swings by itself (or lets
+ * them swing with their hands) once it follows them, and the way on once this computer has been timed fast enough:
+ * holding the batting stance fills `gauge` and starts practice, as the "start practice" button does. A camera problem
+ * takes its place with the cause and another try; there is no other way to play. `cameraState` is the panel chip's
+ * words, which a screen reader hears from here.
  */
 export function SetupView({
   status,
   cameraState,
   panelSide,
   side,
-  freeMode,
   gauge,
   language,
   onSideChange,
   onStart,
   onRetry,
   onTurnOff,
-  onLockHeld,
-  onToggleFreeMode,
 }: {
   status: Exclude<CameraStatus, { kind: 'off' } | { kind: 'tooSlow' }>
   cameraState: string | null
   panelSide: PanelSide
   side: BattingSide
-  freeMode: boolean
   gauge: Ref<HTMLDivElement>
   language: AppLanguage
   onSideChange: (side: BattingSide) => void
   onStart: () => void
   onRetry: () => void
   onTurnOff: () => void
-  onLockHeld: () => void
-  onToggleFreeMode: () => void
 }) {
   const copy = languageCopy[language].baseball
   if (status.kind === 'problem') {
@@ -85,21 +79,7 @@ export function SetupView({
           </label>
         ))}
       </fieldset>
-      {following && (
-        <div className="derby-lock">
-          <p className="baseball-note">{copy.camera.lockHint}</p>
-          <div className="derby-actions">
-            {!freeMode && (
-              <button className="derby-secondary" type="button" onClick={onLockHeld}>
-                {copy.camera.lockHeld}
-              </button>
-            )}
-            <button className="derby-secondary" type="button" aria-pressed={freeMode} onClick={onToggleFreeMode}>
-              {copy.camera.freeMode}
-            </button>
-          </div>
-        </div>
-      )}
+      {following && <p className="baseball-note">{copy.camera.lockHint}</p>}
       {status.kind === 'ready' && <StanceGauge ref={gauge} label={copy.flow.stance} hint={copy.flow.toPractice} />}
       <p className="baseball-note">{copy.camera.notice}</p>
       <p className="baseball-note">{copy.camera.panelKey}</p>

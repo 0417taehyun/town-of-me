@@ -138,7 +138,7 @@ describe('the stance hold', () => {
 
 /** A tracker following a visitor whose shoulders are 0.2 wide at height 0.4, its grip at `grip`, in `state`. */
 function trackerAt(state: SwingTracker['state'], grip: Point): SwingTracker {
-  const tracker = createSwingTracker('right', true)
+  const tracker = createSwingTracker('right')
   const shoulders = { width: WIDTH, midX: 0.6, midY: 0.4 }
   tracker.state = state
   tracker.frame = { samples: [shoulders], frontal: shoulders }
