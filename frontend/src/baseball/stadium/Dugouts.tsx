@@ -5,9 +5,15 @@ import { createShedGeometries } from './landmarkLayout'
 
 /**
  * The two dugouts as garden sheds in the ballpark's building colors, so an admin's walls, roof, trim, and accent show
- * here; their round windows keep their glass.
+ * here; their round windows keep their glass, lit warm while the town's lamps are on (`lampsOn`).
  */
-export function Dugouts({ materials }: { materials: VenueMaterials<keyof BallparkPalette> }) {
+export function Dugouts({
+  materials,
+  lampsOn,
+}: {
+  materials: VenueMaterials<keyof BallparkPalette>
+  lampsOn: boolean
+}) {
   const sheds = useMemo(() => createShedGeometries(), [])
   useEffect(() => () => Object.values(sheds).forEach((geometry) => geometry.dispose()), [sheds])
   return (
@@ -17,7 +23,12 @@ export function Dugouts({ materials }: { materials: VenueMaterials<keyof Ballpar
       <mesh geometry={sheds.trim} material={materials.trim} castShadow receiveShadow />
       <mesh geometry={sheds.accent} material={materials.accent} castShadow receiveShadow />
       <mesh geometry={sheds.glass}>
-        <meshStandardMaterial color="#425566" roughness={0.4} />
+        <meshStandardMaterial
+          color="#425566"
+          emissive="#ffc979"
+          emissiveIntensity={lampsOn ? 1.6 : 0}
+          roughness={0.4}
+        />
       </mesh>
     </group>
   )

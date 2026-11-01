@@ -1,11 +1,19 @@
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { MutableRefObject } from 'react'
-import { type Group, type InstancedMesh, type MeshStandardMaterial, type MeshToonMaterial, Object3D } from 'three'
+import {
+  AdditiveBlending,
+  type Group,
+  type InstancedMesh,
+  type MeshStandardMaterial,
+  type MeshToonMaterial,
+  Object3D,
+} from 'three'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import { getSeasonColors, type Season, seasonPalettes } from '../../scene/environment/season'
 import { getSnowCover, seasonClock, type SeasonChange } from '../../scene/environment/seasonTransition'
 import { useSeasonalColor } from '../../scene/environment/useSeasonChange'
+import { getGlowTexture } from '../../scene/glowTexture'
 import { writeInstanceMatrices } from '../../scene/instancedMeshes'
 import { createGradientMap } from '../../scene/objects/foliageMaterial'
 import type { BallparkPalette } from '../../scene/venues/ballpark/ballparkThemes'
@@ -18,9 +26,11 @@ import {
   drawFenceLabels,
   FENCE_LABEL_ROW,
   FENCE_SIGN_SPRAYS,
+  glowPositions,
   landmarkLights,
   OAK,
   OAK_SNOW,
+  towerLampGlowSpots,
 } from './landmarkLayout'
 import { redrawScoreboard, scoreboardSummary } from './scoreboard'
 
@@ -34,8 +44,9 @@ const oakCrownColors = Object.fromEntries(
 /**
  * The garden's landmarks (landmarkLayout.ts). Their buildings and the towers' blossoms take the ballpark's colors; the
  * oak's crown, the topiaries' hedge, and the towers' stems follow the season. The scoreboard shows the run as the HUD
- * does, a pitch at a time once its ball is down. The towers' lamps and the string lights are unlit for now. Nothing
- * here casts a shadow: it all stands far outside the sun's shadow frame round the plate and the mound.
+ * does, a pitch at a time once its ball is down. While the town's lamps are on (`lampsOn`), the towers' lamps, the
+ * string lights, and the treehouse's window glow, with painted halos rather than lights, and the scoreboard brightens.
+ * Nothing here casts a shadow: it all stands far outside the sun's shadow frame round the plate and the mound.
  */
 export function GardenLandmarks({
   materials,
@@ -43,15 +54,21 @@ export function GardenLandmarks({
   language,
   hud,
   pitchCount,
+  lampsOn,
 }: {
   materials: VenueMaterials<keyof BallparkPalette>
   seasonChange: MutableRefObject<SeasonChange>
   language: AppLanguage
   hud: DerbyHudState
   pitchCount: number
+  lampsOn: boolean
 }) {
   const geometries = useMemo(() => createLandmarkGeometries(), [])
   const bulbSpots = useMemo(() => landmarkLights().bulbs, [])
+  const glows = useMemo(
+    () => ({ bulbs: glowPositions(bulbSpots), towers: glowPositions(towerLampGlowSpots()) }),
+    [bulbSpots],
+  )
   const textures = useMemo(
     () => ({
       scoreboard: createCanvasTexture(1024, () => undefined, 512),
@@ -123,17 +140,30 @@ export function GardenLandmarks({
       <mesh geometry={geometries.walls} material={materials.walls} receiveShadow />
       <mesh geometry={geometries.trim} material={materials.trim} receiveShadow />
       <mesh geometry={geometries.glass}>
-        <meshStandardMaterial color="#3f4f5e" roughness={0.4} />
+        <meshStandardMaterial
+          color="#3f4f5e"
+          emissive="#ffc979"
+          emissiveIntensity={lampsOn ? 1.6 : 0}
+          roughness={0.4}
+        />
       </mesh>
       <mesh geometry={geometries.screen}>
         <meshStandardMaterial
           map={textures.scoreboard}
           emissive="#ffffff"
           emissiveMap={textures.scoreboard}
-          emissiveIntensity={0.35}
+          emissiveIntensity={lampsOn ? 0.9 : 0.35}
           roughness={0.9}
         />
       </mesh>
+      {/* By day a lamp's face is trim like the rest of the blossom's white. */}
+      {lampsOn ? (
+        <mesh geometry={geometries.lamps}>
+          <meshStandardMaterial color="#fff6dc" emissive="#ffd894" emissiveIntensity={2.2} roughness={0.5} />
+        </mesh>
+      ) : (
+        <mesh geometry={geometries.lamps} material={materials.trim} receiveShadow />
+      )}
       <mesh geometry={geometries.hedge} receiveShadow>
         <meshStandardMaterial ref={hedge} map={textures.leaves} roughness={1} />
       </mesh>
@@ -160,8 +190,36 @@ export function GardenLandmarks({
       </lineSegments>
       <instancedMesh ref={bulbs} args={[undefined, undefined, bulbSpots.length]}>
         <sphereGeometry args={[1, 8, 6]} />
-        <meshStandardMaterial color="#fff4d6" emissive="#ffcf7a" emissiveIntensity={0.2} roughness={0.5} />
+        <meshStandardMaterial
+          color="#fff4d6"
+          emissive="#ffcf7a"
+          emissiveIntensity={lampsOn ? 2.6 : 0.2}
+          roughness={0.5}
+        />
       </instancedMesh>
+      {lampsOn && <Halos positions={glows.bulbs} size={1.6} />}
+      {lampsOn && <Halos positions={glows.towers} size={26} />}
     </group>
+  )
+}
+
+/** Painted halos, one soft glow per point, `size` m across. */
+export function Halos({ positions, size }: { positions: Float32Array; size: number }) {
+  return (
+    <points frustumCulled={false}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+      </bufferGeometry>
+      <pointsMaterial
+        map={getGlowTexture()}
+        color="#ffd896"
+        size={size}
+        transparent
+        opacity={0.75}
+        depthWrite={false}
+        blending={AdditiveBlending}
+        toneMapped={false}
+      />
+    </points>
   )
 }

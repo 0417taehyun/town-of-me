@@ -1,7 +1,7 @@
-import { Color, type Object3D, Shape, ShapeGeometry } from 'three'
+import { Color, type Object3D, Shape, ShapeGeometry, type Vector3 } from 'three'
 import type { Vec3 } from '../../data/models'
 import { clamp01, seededFraction } from '../../motionMath'
-import { getSeasonalParticleColor, positiveModulo } from '../../scene/environment/atmosphereMotion'
+import { getFireflyGlow, getSeasonalParticleColor, positiveModulo } from '../../scene/environment/atmosphereMotion'
 import type { Season } from '../../scene/environment/season'
 import { flowerColors } from '../../scene/objects/flowers/flowerLayout'
 import { FENCE_HEIGHT, fenceDistance, FOUL_ANGLE } from '../game/field'
@@ -12,10 +12,10 @@ import { LIGHT_TOWERS } from './landmarkLayout'
 // The garden's breeze (GardenBreeze.tsx): petals or leaves drifting round the park, butterflies over the flower beds
 // by day, and a burst of petals when a home run clears the hedge. None of it is near the pitch or in front of the ball.
 
-/** What each performance tier draws: drifting petals, the share of a burst's petals, and butterflies. */
+/** What each performance tier draws: drifting petals, the share of a burst's petals, butterflies, and fireflies. */
 export const BREEZE_COUNTS = {
-  full: { drift: 120, burst: 1, butterflies: 10 },
-  reduced: { drift: 40, burst: 0.4, butterflies: 4 },
+  full: { drift: 120, burst: 1, butterflies: 10, fireflies: 70 },
+  reduced: { drift: 40, burst: 0.4, butterflies: 4, fireflies: 28 },
 }
 
 /**
@@ -57,9 +57,9 @@ export function sightClearance(point: Vec3, { eye, ball }: Sight) {
 
 /**
  * The `index`th drifting petal `elapsed` s into the breeze: carried round the park on its own circle and falling,
- * shrinking away at the drift's edges and the ground so none pops in or out.
+ * shrinking away at the drift's edges and the ground so none pops in or out, and as `shown` (0–1) falls at night.
  */
-export function poseDriftPetal(dummy: Object3D, index: number, elapsed: number, sight: Sight) {
+export function poseDriftPetal(dummy: Object3D, index: number, elapsed: number, sight: Sight, shown = 1) {
   const { nearest, farthest, spray, top, bottom, sway } = DRIFT_FIELD
   const distance = nearest + sway + seededFraction(index, 71) * (farthest - nearest - sway)
   const phase = elapsed * (0.5 + seededFraction(index, 72) * 0.6) + seededFraction(index, 73) * Math.PI * 2
@@ -71,7 +71,7 @@ export function poseDriftPetal(dummy: Object3D, index: number, elapsed: number, 
   dummy.position.set(x, height, z)
   dummy.rotation.set(Math.sin(phase) * 0.75, phase * 0.4, phase)
   const edge = clamp01((spray - Math.abs(angle)) / 0.15) * clamp01((height - bottom) / 0.6)
-  const size = (1.2 + seededFraction(index, 76) * 0.9) * edge * sightClearance(dummy.position, sight)
+  const size = (1.2 + seededFraction(index, 76) * 0.9) * edge * shown * sightClearance(dummy.position, sight)
   dummy.scale.set(0.36 * size, 0.16 * size, 0.22 * size)
 }
 
@@ -247,4 +247,39 @@ export function burstForHomeRun(pool: PetalPool, ball: Vec3, season: Season, ela
   const { fence, towers } = burstOrigins(ball)
   burstPetals(pool, fence, Math.round(BURST.fence * share), colors, elapsed)
   towers.forEach((tower) => burstPetals(pool, tower, Math.round(BURST.tower * share), colors, elapsed, 10))
+}
+
+/** Where the fireflies wander at night: the drift's ground, low over the grass and the flower beds. */
+export const FIREFLY_FIELD = { bottom: 0.6, rise: 3, wander: 2.5 }
+
+/**
+ * The `index`th firefly `elapsed` s into the night, in `out`, wandering a slow loop of its own in the drift's ground;
+ * returns how brightly it glows, its blink (the town's) dimmed near the camera's line to the ball.
+ */
+export function placeFirefly(out: Vector3, index: number, elapsed: number, sight: Sight) {
+  const { nearest, farthest, spray } = DRIFT_FIELD
+  const { bottom, rise, wander } = FIREFLY_FIELD
+  const distance = nearest + wander + seededFraction(index, 61) * (farthest - nearest - 2 * wander)
+  const angle = (seededFraction(index, 62) * 2 - 1) * (spray - 0.1)
+  const loop = elapsed * (0.18 + seededFraction(index, 63) * 0.22) + seededFraction(index, 64) * Math.PI * 2
+  const [x, , z] = sweptPoint(angle, distance, 0)
+  out.set(
+    x + Math.sin(loop) * wander,
+    bottom + seededFraction(index, 65) * rise + Math.sin(loop * 1.7) * 0.4,
+    z + Math.cos(loop * 0.83) * wander,
+  )
+  return getFireflyGlow(index, elapsed, false) * sightClearance(out, sight)
+}
+
+/** Every firefly `elapsed` s into the night: where it is in `positions`, and how brightly it glows in `glows`. */
+export function writeFireflies(
+  { positions, glows, firefly }: { positions: Float32Array; glows: Float32Array; firefly: Vector3 },
+  elapsed: number,
+  sight: Sight,
+) {
+  for (let index = 0; index < positions.length / 3; index += 1) {
+    const glow = placeFirefly(firefly, index, elapsed, sight)
+    firefly.toArray(positions, index * 3)
+    glows.fill(glow, index * 3, index * 3 + 3)
+  }
 }

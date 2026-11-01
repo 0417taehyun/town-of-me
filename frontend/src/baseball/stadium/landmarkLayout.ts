@@ -232,7 +232,7 @@ export function towerGreenParts(tower: LightTower): PlacedPart[] {
   ]
 }
 
-/** The blossom's lamp face and eight petals, alternately `white` and colored; `colored` picks which to return. */
+/** The blossom's eight petals, alternately white and colored; `colored` picks which to return. */
 export function towerBlossomParts(tower: LightTower, colored: boolean): PlacedPart[] {
   const petals = Array.from({ length: 8 }, (_, index) => {
     const angle = (index / 8) * Math.PI * 2
@@ -244,8 +244,22 @@ export function towerBlossomParts(tower: LightTower, colored: boolean): PlacedPa
       colored: index % 2 === 1,
     }
   }).filter((petal) => petal.colored === colored)
-  const face = { geometry: new CylinderGeometry(1.7, 1.3, 0.7, 20), at: [0, 0.2, 0] as Triple }
-  return placeInFrame(colored ? petals : [face, ...petals], blossomFrame(tower))
+  return placeInFrame(petals, blossomFrame(tower))
+}
+
+/** The lamp at the heart of the blossom, which lights up when the town's lamps do. */
+export function towerLampParts(tower: LightTower): PlacedPart[] {
+  return placeInFrame([{ geometry: new CylinderGeometry(1.7, 1.3, 0.7, 20), at: [0, 0.2, 0] }], blossomFrame(tower))
+}
+
+/** Points as one flat array of coordinates, for a points geometry. */
+export function glowPositions(spots: readonly Vector3[]) {
+  return new Float32Array(spots.flatMap((spot) => spot.toArray()))
+}
+
+/** Where each tower lamp's glow is painted: just in front of its face, toward the field. */
+export function towerLampGlowSpots() {
+  return LIGHT_TOWERS.map((tower) => new Vector3(0, 1.4, 0).applyMatrix4(blossomFrame(tower)))
 }
 
 /** Parts given in `frame`'s space, as parts in the world: their geometry carries the frame. */
@@ -584,6 +598,7 @@ export function createLandmarkGeometries() {
       ...LIGHT_TOWERS.flatMap((tower) => towerBlossomParts(tower, false)),
     ]),
     glass: mergeParts(treehouseGlassParts(), oak),
+    lamps: mergeParts(LIGHT_TOWERS.flatMap(towerLampParts)),
     screen: mergeParts([{ geometry: new PlaneGeometry(SCOREBOARD.width, SCOREBOARD.height), at: SCOREBOARD.at }], oak),
     hedge: mergeParts([
       ...placeInFrame(corgi.hedge, corgiFrame),

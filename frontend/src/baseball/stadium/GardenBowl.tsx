@@ -57,18 +57,21 @@ const CLOUD_DRIFT = 0.004
 
 /**
  * The garden bowl around the field (bowlLayout.ts). The stands and the conservatory's ribs take the ballpark's building
- * colors; the hedge, trees, hills, and flowers follow the visitor's season like the town's, with its snow.
+ * colors; the hedge, trees, hills, and flowers follow the visitor's season like the town's, with its snow. The
+ * conservatory glows warm while the town's lamps are on (`lampsOn`).
  */
 export function GardenBowl({
   materials,
   seasonChange,
   dayChange,
   reducedMotion,
+  lampsOn,
 }: {
   materials: VenueMaterials<keyof BallparkPalette>
   seasonChange: MutableRefObject<SeasonChange>
   dayChange: MutableRefObject<DayChange>
   reducedMotion: boolean
+  lampsOn: boolean
 }) {
   const geometries = useMemo(
     () => ({
@@ -179,7 +182,15 @@ export function GardenBowl({
         />
       ))}
       <mesh geometry={geometries.glass} renderOrder={2}>
-        <meshStandardMaterial map={textures.glass} transparent depthWrite={false} side={DoubleSide} roughness={0.45} />
+        <meshStandardMaterial
+          map={textures.glass}
+          emissive="#ffcf8a"
+          emissiveIntensity={lampsOn ? 0.8 : 0.04}
+          transparent
+          depthWrite={false}
+          side={DoubleSide}
+          roughness={0.45}
+        />
       </mesh>
       <instancedMesh ref={ribs} args={[geometries.rib, materials.trim, conservatoryRibYaws().length]} />
       <mesh geometry={geometries.hedge} receiveShadow>

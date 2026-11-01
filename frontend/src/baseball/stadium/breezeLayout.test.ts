@@ -1,4 +1,4 @@
-import { Color, Object3D } from 'three'
+import { Color, Object3D, Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
 import { MOUND_DISTANCE } from '../game/field'
 import {
@@ -6,6 +6,7 @@ import {
   burstPetals,
   createPetalPool,
   homeRunBurstDue,
+  placeFirefly,
   poseDriftPetal,
   sightClearance,
 } from './breezeLayout'
@@ -13,13 +14,18 @@ import {
 const noBall = { eye: { x: 0, y: 1.6, z: 6 }, ball: null }
 
 describe('the garden breeze', () => {
-  it('keeps every drifting petal off the pitch and in front of the batting camera at any moment', () => {
+  it('keeps every drifting petal and firefly off the pitch and in front of the batting camera at any moment', () => {
     const petal = new Object3D()
+    const firefly = new Vector3()
+    const spots = (index: number, elapsed: number) => {
+      poseDriftPetal(petal, index, elapsed, noBall)
+      placeFirefly(firefly, index, elapsed, noBall)
+      return [petal.position, firefly]
+    }
     const nearest = Array.from({ length: 400 }, (_, step) => step * 1.37).flatMap((elapsed) =>
-      Array.from({ length: BREEZE_COUNTS.full.drift }, (_, index) => {
-        poseDriftPetal(petal, index, elapsed, noBall)
-        return { distance: Math.hypot(petal.position.x, petal.position.z), z: petal.position.z }
-      }),
+      Array.from({ length: BREEZE_COUNTS.full.drift }, (_, index) =>
+        spots(index, elapsed).map((spot) => ({ distance: Math.hypot(spot.x, spot.z), z: spot.z })),
+      ).flat(),
     )
     expect(Math.min(...nearest.map((spot) => spot.distance))).toBeGreaterThan(MOUND_DISTANCE + 10)
     expect(Math.max(...nearest.map((spot) => spot.z))).toBeLessThan(0)

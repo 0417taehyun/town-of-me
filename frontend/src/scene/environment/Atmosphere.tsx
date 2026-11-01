@@ -71,6 +71,7 @@ export function Atmosphere({
   motionEnabled,
   treeObjects,
   editing,
+  fireflies = true,
 }: {
   dayChange: MutableRefObject<DayChange>
   seasonChange: MutableRefObject<SeasonChange>
@@ -79,6 +80,8 @@ export function Atmosphere({
   treeObjects: TownObject[]
   /** Holds the falling particles and fireflies still, so the editor shows the town as it stands. */
   editing: boolean
+  /** Fireflies gather round the camera; a scene that keeps them somewhere else leaves these out. */
+  fireflies?: boolean
 }) {
   const sky = useRef<Group>(null)
   const joiningParticles = useRef<InstancedMesh>(null)
@@ -147,13 +150,15 @@ export function Atmosphere({
         <FallingParticles ref={joiningParticles} capacity={SEASONAL_PARTICLE_COUNT} />
         <FallingParticles ref={leavingParticles} capacity={SEASONAL_PARTICLE_COUNT} />
         <FallingParticles ref={leafDrop} capacity={LEAF_DROP_CAPACITY} />
-        <Fireflies
-          dayChange={dayChange}
-          seasonChange={seasonChange}
-          reducedMotion={reducedMotion}
-          motionEnabled={motionEnabled}
-          editing={editing}
-        />
+        {fireflies && (
+          <Fireflies
+            dayChange={dayChange}
+            seasonChange={seasonChange}
+            reducedMotion={reducedMotion}
+            motionEnabled={motionEnabled}
+            editing={editing}
+          />
+        )}
       </group>
     </>
   )

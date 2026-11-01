@@ -1,6 +1,7 @@
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useMemo, useRef, type MutableRefObject } from 'react'
 import {
+  AdditiveBlending,
   CircleGeometry,
   DoubleSide,
   DynamicDrawUsage,
@@ -9,11 +10,15 @@ import {
   MeshBasicMaterial,
   MeshLambertMaterial,
   Object3D,
+  type Points,
+  type PointsMaterial,
+  Vector3,
 } from 'three'
 import { damp } from '../../motionMath'
 import { createDayLighting, writeDayLighting, type DayChange } from '../../scene/environment/dayTransition'
 import type { Season } from '../../scene/environment/season'
 import { seasonClock, type SeasonChange } from '../../scene/environment/seasonTransition'
+import { getGlowTexture } from '../../scene/glowTexture'
 import { writeInstanceColors, writeInstanceMatrices } from '../../scene/instancedMeshes'
 import type { BallView } from '../stage/ballMeshes'
 import { flowerBeds } from './bowlLayout'
@@ -32,13 +37,15 @@ import {
   poseButterflyWing,
   poseDriftPetal,
   type Sight,
+  writeFireflies,
 } from './breezeLayout'
 
 /**
- * The garden's breeze (breezeLayout.ts): the season's petals or leaves drifting round the park, butterflies over the
- * flower beds by day, and a burst of petals over the hedge and from the far light towers when a `homeRun`'s ball
- * clears the hedge. Everything keeps clear of the pitch and of the camera's line to `ballViewRef`'s ball; a `reduced`
- * tier draws fewer. Three instanced meshes; the page leaves the breeze out under reduced motion.
+ * The garden's breeze (breezeLayout.ts): the season's petals or leaves drifting round the park and butterflies over the
+ * flower beds by day, fireflies at night, and a burst of petals over the hedge and from the far light towers when a
+ * `homeRun`'s ball clears the hedge. Everything keeps clear of the pitch and of the camera's line to `ballViewRef`'s
+ * ball; a `reduced` tier draws fewer. Three instanced meshes and a points cloud; the page leaves the breeze out under
+ * reduced motion.
  */
 export function GardenBreeze({
   seasonChange,
@@ -105,13 +112,14 @@ export function GardenBreeze({
     const season = seasonChange.current.to
     const view = ballViewRef.current
     const sight: Sight = { eye: camera.position, ball: view?.visible ? view.position : null }
+    writeDayLighting(dayChange.current, seasonClock(), lighting)
 
     if (season !== state.season) writeInstanceColors(drift.current, counts.drift, (index) => petalColor(season, index))
     state.season = season
     const driftCount = Math.round(counts.drift * DRIFT_SHARE[season])
     if (drift.current) drift.current.count = driftCount
     writeInstanceMatrices(drift.current, dummies.petal, driftCount, (petal, index) =>
-      poseDriftPetal(petal, index, elapsed, sight),
+      poseDriftPetal(petal, index, elapsed, sight, 1 - lighting.night),
     )
 
     const due = homeRunBurstDue(homeRunNow.current, state.burst, view)
@@ -126,7 +134,6 @@ export function GardenBreeze({
         poseBurstPetal(petal, pool, index, elapsed, sight),
       )
 
-    writeDayLighting(dayChange.current, seasonClock(), lighting)
     const daylight = (1 - lighting.night) * Number(season !== 'winter')
     state.butterflies = damp(state.butterflies, daylight, 1.5, step)
     const flying = state.butterflies > 0.02
@@ -160,6 +167,73 @@ export function GardenBreeze({
         visible={false}
         frustumCulled={false}
       />
+      <GardenFireflies
+        seasonChange={seasonChange}
+        dayChange={dayChange}
+        ballViewRef={ballViewRef}
+        count={counts.fireflies}
+      />
     </group>
+  )
+}
+
+/**
+ * Fireflies over the garden's grass and flower beds at night in every season but winter, blinking as the town's do,
+ * where the drift goes by day (breezeLayout.ts) and dimmed near the camera's line to `ballViewRef`'s ball.
+ */
+export function GardenFireflies({
+  seasonChange,
+  dayChange,
+  ballViewRef,
+  count,
+}: {
+  seasonChange: MutableRefObject<SeasonChange>
+  dayChange: MutableRefObject<DayChange>
+  ballViewRef: MutableRefObject<BallView | null>
+  count: number
+}) {
+  const points = useRef<Points>(null)
+  const material = useRef<PointsMaterial>(null)
+  const buffers = useMemo(
+    () => ({ positions: new Float32Array(count * 3), glows: new Float32Array(count * 3), firefly: new Vector3() }),
+    [count],
+  )
+  const lighting = useMemo(() => createDayLighting(), [])
+  const night = useRef({ elapsed: 0, presence: 0 })
+  useFrame(({ camera }, delta) => {
+    const swarm = points.current
+    if (!swarm || !material.current) return
+    const state = night.current
+    const step = Math.min(delta, 0.1)
+    writeDayLighting(dayChange.current, seasonClock(), lighting)
+    state.presence = damp(state.presence, lighting.night * Number(seasonChange.current.to !== 'winter'), 1.5, step)
+    swarm.visible = state.presence > 0.01
+    if (!swarm.visible) return
+    state.elapsed += step
+    material.current.opacity = state.presence
+    const view = ballViewRef.current
+    const sight: Sight = { eye: camera.position, ball: view?.visible ? view.position : null }
+    writeFireflies(buffers, state.elapsed, sight)
+    swarm.geometry.attributes.position.needsUpdate = true
+    swarm.geometry.attributes.color.needsUpdate = true
+  })
+  return (
+    <points ref={points} key={count} frustumCulled={false} visible={false}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[buffers.positions, 3]} />
+        <bufferAttribute attach="attributes-color" args={[buffers.glows, 3]} />
+      </bufferGeometry>
+      <pointsMaterial
+        ref={material}
+        map={getGlowTexture()}
+        color="#ffe9a6"
+        size={1.4}
+        vertexColors
+        transparent
+        depthWrite={false}
+        blending={AdditiveBlending}
+        toneMapped={false}
+      />
+    </points>
   )
 }
