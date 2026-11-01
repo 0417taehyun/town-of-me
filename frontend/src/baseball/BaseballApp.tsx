@@ -69,8 +69,11 @@ import { DerbyHud } from './ui/DerbyHud'
 import { DiagnosticsPanel } from './ui/DiagnosticsPanel'
 import {
   betweenPitches,
+  cameraPanelWords,
   chasingHomeRun,
   derbySoundFor,
+  HELD_WORD_MS,
+  heldStanceWord,
   hudAfterEvent,
   judgedResult,
   NEW_RUN_HUD,
@@ -317,10 +320,18 @@ export function DerbyScreen({
     },
     [sounds],
   )
+  // A full gauge dings and says in a big word what it starts, for a visitor too far back to read the card.
+  const [heldWord, setHeldWord] = useState<string | null>(null)
   const onStanceHeld = () => {
     sounds.play('ding')
+    setHeldWord(heldStanceWord(flow.step, language))
     start()
   }
+  useEffect(() => {
+    if (heldWord === null) return
+    const timer = window.setTimeout(() => setHeldWord(null), HELD_WORD_MS)
+    return () => window.clearTimeout(timer)
+  }, [heldWord])
   const stance: StanceWatch = { wait: stanceWait(flow), onProgress: onStanceProgress, onHeld: onStanceHeld }
   const camera = useCameraTracking({
     side,
@@ -348,6 +359,7 @@ export function DerbyScreen({
   // Once the camera sees the visitor, the swing tracker says what to do next, or the stance a step waits for does.
   const trackerState = stateId === 'seen' ? seenCameraState(camera.caption, stanceNeed, language) : null
   const cameraState = trackerState ?? (stateId && cameraCopy.states[stateId])
+  const panelWords = cameraPanelWords(stateId, camera.caption, stanceNeed, language)
   const panelShown = panel.placement !== 'hidden'
   // A panel the visitor hid that is back while the camera looks for them, or a step waits for their stance, says so, or V
   // would seem to do nothing.
@@ -453,10 +465,14 @@ export function DerbyScreen({
         video={camera.video}
         canvas={camera.canvas}
         layout={panel}
-        state={cameraState}
-        seen={camera.seen}
+        words={panelWords}
         onTap={camera.lockAt}
       />
+      {heldWord && (
+        <p className="derby-held-word" aria-hidden="true">
+          {heldWord}
+        </p>
+      )}
       {step === 'practice' && run && (
         <PracticeView
           hud={hud}

@@ -9,6 +9,7 @@ import {
   bannerResult,
   bannerText,
   betweenPitches,
+  cameraPanelWords,
   chasingHomeRun,
   type DerbyHudState,
   distanceText,
@@ -237,5 +238,17 @@ describe('the camera chip', () => {
     expect(seenCameraState('locking', waiting, 'en')).toBe(tracker.locking)
     // In practice and a run, where no step waits, the tracker says when to swing.
     expect(seenCameraState('loaded', null, 'en')).toBe(tracker.loaded)
+  })
+
+  it('pops for a swing and reds a sweep to fix in play, but only says loaded or ready while the stance is held', () => {
+    const waiting = stanceNeedText('hold', 'right', 'en')
+    const tones = (need: string | null) =>
+      (['loaded', 'swing', 'faster', 'showHands'] as const).map(
+        (caption) => cameraPanelWords('seen', caption, need, 'en')?.tone,
+      )
+    expect(tones(null)).toEqual(['loaded', 'swing', 'help', 'help'])
+    expect(tones(waiting)).toEqual(['loaded', 'locked', 'locked', 'help'])
+    // A caption left from before the visitor stepped away never colours the chip while the camera looks for them.
+    expect(cameraPanelWords('searching', 'swing', null, 'en')?.tone).toBe('searching')
   })
 })

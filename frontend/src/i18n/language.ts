@@ -622,7 +622,7 @@ export const languageCopy = {
         needs: {
           show: 'Step back so your upper body shows',
           handsInView: 'Step back a little so your hands show',
-          lock: 'Hold still a moment, with your object or hands together',
+          lock: 'Hold your object or join your hands, and stay still',
           together: 'Hands together, as if gripping a bat',
           raise: { right: 'Raise your hands by your right shoulder', left: 'Raise your hands by your left shoulder' },
           retake: 'Lower your hands, then take your stance',
@@ -632,6 +632,8 @@ export const languageCopy = {
         },
         startPractice: 'Start practice',
         playBall: 'Play ball',
+        /** The big word as the held stance fills the gauge, by what it starts. */
+        held: { practice: 'Practice!', play: 'Play ball!', again: 'Again!' },
       },
       practice: {
         title: 'Practice',
@@ -746,6 +748,10 @@ export const languageCopy = {
           seen: 'Camera sees you',
           stopped: 'Camera off',
         },
+        /** The camera panel's chip once it sees the visitor, a word for where the swing tracker is (derbyCues.ts). */
+        tones: { searching: 'Looking', help: 'Oops', locked: 'Ready', loaded: 'Loaded', swing: 'Swing!' },
+        /** The camera panel's line under its picture while the camera looks for the visitor. */
+        stepIn: 'Stand where the camera sees your upper body and hands',
         stopped: {
           idle: 'The camera turned off after 2 minutes without movement.',
           pagehide: 'The camera turned off when you left the page.',
@@ -1411,7 +1417,7 @@ export const languageCopy = {
         needs: {
           show: '상체가 다 보이게 뒤로 물러서요',
           handsInView: '손이 화면에 보이게 조금 뒤로 물러서요',
-          lock: '물건을 들거나 두 손을 모은 채 잠깐 멈춰요',
+          lock: '물건을 들거나 손을 모으고 멈춰요',
           together: '배트를 쥐듯 두 손을 모아요',
           raise: { right: '손을 오른쪽 어깨 옆으로 올려요', left: '손을 왼쪽 어깨 옆으로 올려요' },
           retake: '손을 내렸다가 다시 자세를 잡아요',
@@ -1421,6 +1427,7 @@ export const languageCopy = {
         },
         startPractice: '연습 시작',
         playBall: '경기 시작',
+        held: { practice: '연습!', play: '플레이 볼!', again: '다시!' },
       },
       practice: {
         title: '연습',
@@ -1529,6 +1536,8 @@ export const languageCopy = {
           vase: '꽃병',
         },
         states: { starting: '카메라 켜는 중', searching: '사람을 찾는 중', seen: '보여요', stopped: '카메라 꺼짐' },
+        tones: { searching: '찾는 중', help: '앗!', locked: '준비', loaded: '장전', swing: '스윙!' },
+        stepIn: '카메라에 상체와 손이 보이게 서요',
         stopped: {
           idle: '2분 동안 움직임이 없어서 카메라를 껐어요.',
           pagehide: '페이지를 떠나서 카메라를 껐어요.',

@@ -257,8 +257,10 @@ swings and their cues on the same frames and hands each to the page the moment i
 status changes, whether the camera sees the visitor, and the tracker's short caption: where the tracker is, held at
 least 0.7 s so it never flickers, or at once what just happened (a lock, a lost object, a swing, a sweep that was not
 one). The design doc asks for two- or three-word captions; the search caption is longer on purpose, so it also tells a
-visitor with nothing to hold that both hands together will do, and the panel's chip wraps within the picture for it and
-for what a step waits for, which the chip shows in its place. Once the camera is off, the motion sampler's last picture
+visitor with nothing to hold that both hands together will do. The panel reads from 2 m: above the picture a 9vh chip
+says in a word where the camera and the tracker are, coloured by it (dark looking, red to put right, blue ready, green
+loaded, coral with a pop for a swing), and under it a 6vh line says the caption, or what a step waits for in its
+place (`ui/derbyCues.ts cameraPanelWords`). Once the camera is off, the motion sampler's last picture
 and the tracked body are wiped along with the panel's (a dev build's diagnostics keep their notes, below).
 
 ### The `/baseball` page
@@ -297,8 +299,9 @@ place), the lock, both hands together as on a bat in two-hand free mode, raised 
 held still, and in a step's first second, while the ring cannot fill, that the stance is being checked rather than to
 keep holding. Right after swings, hands at the picture's edge are taken for lowered ones, so the line asks for a fresh
 stance and then for the hands raised rather than to step back. React renders only when a step or the line changes, and
-while a step waits the camera panel's chip says the same in place of the swing tracker's directions to swing
-(`ui/derbyCues.ts seenCameraState`). A lock that lands mid-hold leaves the ring filling: the grip moves to one hand only
+while a step waits the camera panel's line says the same in place of the swing tracker's directions to swing
+(`ui/derbyCues.ts seenCameraState`). The ring and the line beside it are sized for 2 m, and a full ring dings and
+flashes a big word for what it starts (practice, play ball, again). A lock that lands mid-hold leaves the ring filling: the grip moves to one hand only
 when the wrists are too far apart to hold a stance in free mode, or the other is hidden and the grip was that hand
 already. Practice pitches the game core's practice schedule at the practice pace as a derby of its own, and it takes
 swings as late as the calibration still counts one past the contact point, so a slow camera's late swings still teach

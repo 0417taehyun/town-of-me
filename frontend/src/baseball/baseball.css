@@ -18,8 +18,11 @@
     linear-gradient(180deg, #b9ddd8 0%, #dce5bd 58%, #abc77f 100%);
 }
 .derby-screen {
-  /* The camera's picture while it sets up, as wide as a 4:3 picture 90% of the screen's height can be. */
-  --camera-stage-width: min(56vw, 90vh);
+  /*
+   * The camera's panel while it sets up, its 4:3 picture with the chip above and three lines under it within the
+   * screen's height.
+   */
+  --camera-stage-width: min(52vw, 72vh);
   overflow: hidden;
   background: #b9ddd8;
 }
@@ -273,7 +276,7 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
  * of the top).
  */
 .derby-screen .derby-setup {
-  width: min(560px, calc(100% - var(--camera-stage-width) - 64px));
+  width: min(700px, calc(100% - var(--camera-stage-width) - 64px));
   max-height: calc(100% - 128px);
   overflow-y: auto;
   padding: 32px 32px 28px;
@@ -295,7 +298,7 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   font-size: clamp(1.8rem, 3vw, 2.6rem);
 }
 .derby-setup .baseball-note {
-  margin-top: 14px;
+  margin-top: 12px;
 }
 .derby-setup .baseball-note.derby-safety {
   line-height: 1.45;
@@ -339,19 +342,24 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
 }
 
 /*
- * The stance hold's ring (ui/StanceGauge.tsx) beside what holding starts. The vision loop sets --stance-progress (0..1)
- * on the ring whenever the hold changes; a path length of 1 makes it the share of the circle drawn.
+ * The stance hold's ring (ui/StanceGauge.tsx) with what it waits for beside it, both sized to be read from where the
+ * visitor bats, and what holding starts under them. The vision loop sets --stance-progress (0..1) on the ring whenever
+ * the hold changes; a path length of 1 makes it the share of the circle drawn.
  */
 .stance-gauge {
+  --stance-ring: clamp(88px, 18vh, 220px);
+  --stance-gap: 20px;
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
-  gap: 10px 16px;
-  margin-top: 22px;
+  gap: 8px var(--stance-gap);
+  margin-top: 12px;
+  /* The line beside the ring sizes to the room the card leaves it. */
+  container-type: inline-size;
 }
 .stance-gauge-ring {
   --stance-progress: 0;
-  width: clamp(64px, 12vh, 140px);
+  width: var(--stance-ring);
   aspect-ratio: 1;
 }
 .stance-gauge-ring svg {
@@ -373,38 +381,32 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   stroke-dasharray: 1;
   stroke-dashoffset: calc(1 - var(--stance-progress));
 }
-.stance-gauge p {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-}
-.stance-gauge strong {
-  font-size: clamp(1.2rem, 3.6vh, 2.2rem);
-  font-weight: 800;
-  line-height: 1.1;
-}
-.stance-gauge span {
-  color: var(--muted);
-  line-height: 1.45;
-}
 /*
- * Under the ring, what the hold waits for, sized to be read from where the visitor bats; two lines are kept for it, so
- * the card does not shift as the line changes.
+ * What the hold waits for, at 6vh where it fits in about two lines beside the ring (--need-ems, its length), smaller
+ * where it is longer, so the card never outgrows the screen.
  */
 .stance-gauge .stance-gauge-need {
-  display: block;
-  grid-column: 1 / -1;
-  min-height: 2.6em;
+  margin: 0;
   color: var(--leaf-dark);
-  font-size: clamp(1rem, 2.8vh, 1.7rem);
-  font-weight: 700;
-  line-height: 1.3;
+  font-size: max(
+    1.2rem,
+    min(6vh, 4rem, (100cqi - var(--stance-ring) - var(--stance-gap)) * 2.2 / (var(--need-ems) + 1))
+  );
+  font-weight: 800;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+.stance-gauge .stance-gauge-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
 }
 
 /* After practice and a run, the card that waits for the next one stands in the band the camera panel leaves the play. */
 .derby-screen :is(.derby-practice-done, .derby-result) {
   left: var(--play-centre, 50%);
-  width: min(520px, calc(var(--play-width, 100vw) - 32px));
+  width: min(600px, calc(var(--play-width, 100vw) - 32px));
 }
 /* Practice's caption says how a swing was timed in a word, tinted so the word reads at a glance. */
 .derby-caption[data-feedback='good'] {
@@ -426,26 +428,34 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
 }
 
 /*
- * The camera panel (ui/cameraPanelLayout.ts): the mirrored camera as the stage while it sets up, then during a run a
- * column under the scoreboard on the side opposite the batter, as wide as the layout says (the play's band is the
- * rest), and a corner chip while the camera chases a home run. It eases between them; styles.css stills that when the
- * visitor prefers reduced motion.
+ * The camera panel (ui/cameraPanelLayout.ts): a card with the chip, the mirrored camera, and the line under it, sized to
+ * be read from where the visitor bats (the chip about 9vh, the line 6vh). It is the stage while the camera sets up,
+ * then during a run a column under the scoreboard on the side opposite the batter, as wide as the layout says (the
+ * play's band is the rest), and only the picture, as a corner chip, while the camera chases a home run. It eases
+ * between them; styles.css stills that when the visitor prefers reduced motion.
  */
 .camera-panel {
   --camera-chip-width: 160px;
+  --camera-panel-gap: 1vh;
   position: absolute;
   top: 15vh;
+  display: grid;
+  gap: var(--camera-panel-gap);
   width: var(--camera-panel-width);
-  aspect-ratio: 4 / 3;
-  overflow: hidden;
-  border: 3px solid var(--surface);
+  box-sizing: border-box;
+  padding: var(--camera-panel-gap);
   border-radius: var(--radius-md);
-  background: #1f2a26;
+  background: var(--surface);
   box-shadow: var(--shadow);
+  /* The chip and the line size their words to the panel's width. */
+  container-type: inline-size;
   transition:
     width var(--ease),
     top var(--ease),
     transform var(--ease);
+}
+.camera-panel[hidden] {
+  display: none;
 }
 .camera-panel[data-side='right'] {
   right: var(--camera-panel-edge);
@@ -461,8 +471,18 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
 .camera-panel[data-placement='chip'] {
   top: calc(100% - 2vh - var(--camera-chip-width) * 0.75);
   width: var(--camera-chip-width);
+  padding: 3px;
 }
-.camera-panel canvas {
+.camera-panel[data-placement='chip'] :is(.camera-state, .camera-headline) {
+  display: none;
+}
+.camera-picture {
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: #1f2a26;
+}
+.camera-picture canvas {
   display: block;
   width: 100%;
   height: 100%;
@@ -470,31 +490,88 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   /* A tap on the picture locks the object there: a quiet correction for a wrong lock. */
   cursor: crosshair;
 }
-/* The chip keeps to one line while it fits, and wraps within the picture when a caption or a step's need is longer. */
+/*
+ * Where the camera and the swing tracker are, in a word on a chip coloured by it (derbyCues.ts CameraTone): dark while
+ * looking, red for something to put right, blue ready to load, green loaded, and coral with a pop for a swing seen.
+ * Its word sets as large as the chip's height allows, or as the panel's width does for its length (--chip-ems).
+ */
 .camera-state {
-  position: absolute;
-  top: 1.2vh;
-  left: 50%;
-  width: max-content;
-  max-width: calc(100% - 2.4vh);
+  --chip-height: 9vh;
+  height: var(--chip-height);
   margin: 0;
-  padding: 0.6vh 1.8vh;
-  border-radius: 999px;
+  overflow: hidden;
+  padding: 0 0.4em;
+  border-radius: var(--radius-sm);
   color: #fffef9;
-  background: rgba(31, 42, 38, 0.75);
-  font-size: clamp(14px, 3vh, 36px);
+  background: #3d4a45;
+  font-size: max(16px, min(var(--chip-height) * 0.78, 92cqi / (var(--chip-ems) + 0.8)));
+  font-weight: 900;
+  line-height: var(--chip-height);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.camera-state[data-tone='help'] {
+  background: #9c3a30;
+}
+.camera-state[data-tone='locked'] {
+  background: #3f6f8f;
+}
+.camera-state[data-tone='loaded'] {
+  background: #3d7a55;
+}
+.camera-state[data-tone='swing'] {
+  background: #e0704f;
+  animation: camera-chip-pop 320ms cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+@keyframes camera-chip-pop {
+  from {
+    transform: scale(0.8);
+  }
+}
+/* What to do, under the picture: two lines kept so the panel does not jump as it changes, three at most. */
+.camera-headline {
+  display: -webkit-box;
+  min-height: 2.3em;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: max(16px, min(6vh, 13.5cqi));
   font-weight: 800;
+  line-height: 1.15;
   text-align: center;
   text-wrap: balance;
-  transform: translateX(-50%);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
-.camera-panel[data-seen='true'] .camera-state {
-  background: rgba(71, 111, 96, 0.92);
+/* The stage is centred, so it keeps all three lines and stays put. */
+.camera-panel[data-placement='stage'] .camera-headline {
+  min-height: 3.45em;
 }
-.camera-panel[data-placement='chip'] .camera-state {
-  top: 6px;
-  padding: 2px 8px;
-  font-size: 12px;
+
+/* The big word as the held stance fills the gauge, saying what it starts, centred in the play's band. */
+.derby-held-word {
+  position: absolute;
+  top: 42%;
+  left: var(--play-centre, 50%);
+  margin: 0;
+  padding: 1.5vh 5vh;
+  border-radius: 3vh;
+  color: var(--coral);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-size: clamp(56px, 16vh, 220px);
+  font-weight: 900;
+  line-height: 1.1;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+  animation: derby-held-word-in 360ms cubic-bezier(0.2, 1.6, 0.4, 1);
+  pointer-events: none;
+}
+@keyframes derby-held-word-in {
+  from {
+    transform: translate(-50%, -50%) scale(0.6);
+  }
 }
 
 .derby-result-stats {

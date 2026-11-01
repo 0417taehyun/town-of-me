@@ -1,6 +1,7 @@
 import type { DerbySound } from '../../audio/derbySounds'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
-import type { PracticeFeedback } from '../flow/derbyFlow'
+import type { CameraStateId } from '../cameraTracking'
+import type { DerbyStep, PracticeFeedback } from '../flow/derbyFlow'
 import { STANCE_HOLD_RULES, type StanceNeed } from '../flow/stanceHold'
 import type { DerbyPhase } from '../game/derby'
 import { homeRunTotals, type PitchResult } from '../game/derbyScore'
@@ -176,13 +177,94 @@ export const SWING_DIRECTIONS: ReadonlySet<TrackerReason> = new Set<TrackerReaso
 ])
 
 /**
- * The camera panel chip's words once the camera sees the visitor: the swing tracker's `caption`, except while a step
- * waits for the stance, whose `stanceNeed` (null while none waits) stands in for a swing's directions, so the chip
- * never tells a visitor holding the stance to swing; the lock's captions still show.
+ * Whether a step's `stanceNeed` (null while none waits) stands in for the swing tracker's `caption`: in place of a
+ * swing's directions, so the camera panel never tells a visitor holding the stance to swing; the lock's captions still
+ * show.
+ */
+export function stanceStandsIn(caption: TrackerReason | null, stanceNeed: string | null) {
+  return stanceNeed !== null && (caption === null || SWING_DIRECTIONS.has(caption))
+}
+
+/**
+ * The camera's words once it sees the visitor, under the camera panel's picture and in a screen reader's ear: the
+ * swing tracker's `caption`, or the stance a step waits for in place of a swing's directions (stanceStandsIn).
  */
 export function seenCameraState(caption: TrackerReason | null, stanceNeed: string | null, language: AppLanguage) {
-  if (stanceNeed !== null && (caption === null || SWING_DIRECTIONS.has(caption))) return stanceNeed
+  if (stanceStandsIn(caption, stanceNeed)) return stanceNeed
   return caption && languageCopy[language].baseball.camera.tracker[caption]
+}
+
+/**
+ * The camera panel chip's colour and word, for where the swing tracker is: looking for the visitor or an object, put
+ * right (a hand out of view, the wrong side, a sweep that was no swing), ready to load, loaded, or a swing seen.
+ */
+export type CameraTone = 'searching' | 'help' | 'locked' | 'loaded' | 'swing'
+
+export const CAPTION_TONES: Record<TrackerReason, CameraTone> = {
+  showHands: 'help',
+  looking: 'searching',
+  holdStill: 'searching',
+  locking: 'searching',
+  locked: 'locked',
+  free: 'locked',
+  lost: 'locked',
+  tapNearHands: 'help',
+  pullBack: 'locked',
+  otherSide: 'help',
+  loaded: 'loaded',
+  swing: 'swing',
+  swingThrough: 'help',
+  faster: 'help',
+  bigger: 'help',
+  unclear: 'help',
+  stayPut: 'help',
+}
+
+/** The camera panel's words: a chip above the picture, coloured by `tone`, and a line under it to read from 2 m. */
+export type CameraPanelWords = { tone: CameraTone; chip: string; headline: string | null }
+
+/**
+ * The camera panel's words for the camera's state (`stateId`, cameraStateId): while it starts or looks for the
+ * visitor, the chip says so; once it sees them, the chip follows the swing tracker's `caption` and the line under it
+ * says what to do. While a step's `stanceNeed` stands in for a swing's directions, the chip says only whether the hands
+ * are loaded, never a swing to fix or a swing seen. Null while the camera is off.
+ */
+export function cameraPanelWords(
+  stateId: CameraStateId | null,
+  caption: TrackerReason | null,
+  stanceNeed: string | null,
+  language: AppLanguage,
+): CameraPanelWords | null {
+  const copy = languageCopy[language].baseball.camera
+  if (stateId === 'starting') return { tone: 'searching', chip: copy.states.starting, headline: null }
+  if (stateId === 'searching') return { tone: 'searching', chip: copy.states.searching, headline: copy.stepIn }
+  if (stateId !== 'seen') return null
+  const tone = stanceStandsIn(caption, stanceNeed) ? stanceTone(caption) : CAPTION_TONES[caption ?? 'looking']
+  return { tone, chip: copy.tones[tone], headline: seenCameraState(caption, stanceNeed, language) }
+}
+
+export function stanceTone(caption: TrackerReason | null): CameraTone {
+  return caption === 'loaded' ? 'loaded' : 'locked'
+}
+
+/**
+ * About how many ems wide `text` sets: a Hangul or other wide character takes one, anything else a little over half,
+ * so the camera panel's chip can set a word as large as its width allows.
+ */
+export function textEms(text: string) {
+  const wide = text.match(/[\u1100-\u11ff\u3000-\u9fff\uac00-\ud7af\uff00-\uffef]/gu)?.length ?? 0
+  return wide + (text.length - wide) * 0.58
+}
+
+/** How long (ms) the big word stays up once the held stance has filled the gauge. */
+export const HELD_WORD_MS = 1300
+
+/** The big word as the held stance fills the gauge on `step`, saying what it starts; null on a step that waits for none. */
+export function heldStanceWord(step: DerbyStep, language: AppLanguage) {
+  const words = languageCopy[language].baseball.flow.held
+  if (step === 'setup') return words.practice
+  if (step === 'practiceDone') return words.play
+  return step === 'result' ? words.again : null
 }
 
 /**

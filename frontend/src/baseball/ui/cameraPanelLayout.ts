@@ -32,8 +32,11 @@ export const MIN_PANEL_WIDTH = 180
 /** The panel's gap to the screen's edge (px), which baseball.css reads as `--camera-panel-edge`. */
 export const PANEL_EDGE = 16
 
-/** The tallest the panel's 4:3 picture may be, as a share of the screen's height, so a very wide screen keeps the HUD. */
-export const PANEL_MAX_HEIGHT_SHARE = 0.6
+/**
+ * The tallest the panel's 4:3 picture may be, as a share of the screen's height, so on a very wide screen the panel,
+ * with its chip above the picture and its line under it, still fits under the HUD and clear of the links below.
+ */
+export const PANEL_MAX_HEIGHT_SHARE = 0.45
 
 export const PANEL_ASPECT = 4 / 3
 
