@@ -2,6 +2,7 @@ import { useMemo, useState, type MutableRefObject } from 'react'
 import { NeutralToneMapping, Vector3 } from 'three'
 import type { TownObject } from '../../data/models'
 import type { PlayerProfile } from '../../data/playerProfile'
+import type { AppLanguage } from '../../i18n/language'
 import { Atmosphere } from '../../scene/environment/Atmosphere'
 import { dayPeriods, type DayPeriod } from '../../scene/environment/dayCycle'
 import type { Season } from '../../scene/environment/season'
@@ -30,6 +31,7 @@ const STADIUM_FOG = { near: 130, far: 380 }
  * graphics fail or are lost, `onUnavailable` lets the page say why in the visitor's language.
  */
 export function BaseballStage({
+  language,
   label,
   profile,
   palette,
@@ -44,6 +46,7 @@ export function BaseballStage({
   reducedMotion,
   onUnavailable,
 }: {
+  language: AppLanguage
   label: string
   profile: PlayerProfile
   palette: BallparkPalette
@@ -68,6 +71,7 @@ export function BaseballStage({
 
   return (
     <GraphicsCanvas
+      language={language}
       shadows="percentage"
       camera={{ fov: 48, near: 0.3, far: 700 }}
       gl={{ antialias: true, alpha: false, powerPreference: 'high-performance', toneMapping: NeutralToneMapping }}

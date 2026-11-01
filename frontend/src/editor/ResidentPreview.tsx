@@ -12,7 +12,7 @@ export function ResidentPreview({ resident, language }: { resident: TownResident
     <aside className="editor-panel editor-preview" aria-label={copy.editor.residentPreview(resident.name)}>
       <strong>{resident.name}</strong>
       <div className="editor-preview-canvas">
-        <CharacterPreviewCanvas profile={resident.profile} degrees={degrees} />
+        <CharacterPreviewCanvas language={language} profile={resident.profile} degrees={degrees} />
       </div>
       <label className="editor-field">
         <span>{copy.creator.turnPreview}</span>

@@ -257,7 +257,17 @@ export function PetWalkFields({
 }
 
 /** How everyone in the town walks and skids, shown in the town settings. */
-export function TownMovementFields({ town, copy, edit }: { town: TownSnapshot; copy: Copy; edit: Edit }) {
+export function TownMovementFields({
+  town,
+  language,
+  copy,
+  edit,
+}: {
+  town: TownSnapshot
+  language: AppLanguage
+  copy: Copy
+  edit: Edit
+}) {
   const choose = (change: Partial<TownMovement>) =>
     edit((current) => ({ ...current, movement: { ...current.movement, ...change } }))
   return (
@@ -276,6 +286,7 @@ export function TownMovementFields({ town, copy, edit }: { town: TownSnapshot; c
         onChange={(skid) => choose({ skid: skid as SkidStyle })}
       />
       <MovementPreview
+        language={language}
         movement={town.movement}
         profile={town.residents[0]?.profile ?? DEFAULT_PLAYER_PROFILE}
         labels={copy.movementSteps}
@@ -1245,7 +1256,7 @@ export function Inspector({
         {settingsShown && <h3>{copy.townSettings}</h3>}
         {settingsShown && <TownNameFields town={town} language={language} copy={copy} edit={edit} />}
         {settingsShown && petWalkFields}
-        {settingsShown && <TownMovementFields town={town} copy={copy} edit={edit} />}
+        {settingsShown && <TownMovementFields town={town} language={language} copy={copy} edit={edit} />}
         {settingsShown && <BallparkSettingsFields town={town} language={language} dirty={dirty} edit={edit} />}
       </div>
     </aside>

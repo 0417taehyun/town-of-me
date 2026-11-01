@@ -361,6 +361,7 @@ export function DerbyScreen({
   return (
     <main className="derby-screen" style={layoutStyle}>
       <BaseballStage
+        language={language}
         label={copy.baseball.stageLabel}
         profile={batter}
         palette={palette}

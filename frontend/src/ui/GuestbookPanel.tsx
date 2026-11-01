@@ -92,6 +92,7 @@ export function GuestbookPanel({
               <i className="guestbook-pin" aria-hidden="true" />
               <div className="guestbook-avatar" aria-label={copy.characterLabel(entry.name)}>
                 <GraphicsCanvas
+                  language={language}
                   preview
                   frameloop="demand"
                   dpr={[1, 1.15]}

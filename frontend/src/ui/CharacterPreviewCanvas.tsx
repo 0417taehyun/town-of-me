@@ -1,6 +1,7 @@
 import { useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import type { PlayerProfile } from '../data/playerProfile'
+import type { AppLanguage } from '../i18n/language'
 import { GraphicsCanvas } from '../scene/GraphicsCanvas'
 import type { CharacterAnimation } from '../scene/characters/Characters'
 import { ProceduralCharacter } from '../scene/characters/ProceduralCharacter'
@@ -35,10 +36,19 @@ export function BlinkFrames({ seed = 0 }: { seed?: number }) {
 }
 
 /** A lit, front-facing view of one character, turned by `degrees`; it redraws when its props change and to blink. */
-export function CharacterPreviewCanvas({ profile, degrees }: { profile: PlayerProfile; degrees: number }) {
+export function CharacterPreviewCanvas({
+  language,
+  profile,
+  degrees,
+}: {
+  language: AppLanguage
+  profile: PlayerProfile
+  degrees: number
+}) {
   const idle = useRef<CharacterAnimation>('idle')
   return (
     <GraphicsCanvas
+      language={language}
       preview
       frameloop="demand"
       dpr={[1, 1.25]}

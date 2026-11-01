@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { GuestbookEntry } from '../data/guestbook'
 import { DEFAULT_PLAYER_PROFILE } from '../data/playerProfile'
 import { languageCopy } from '../i18n/language'
@@ -20,6 +20,10 @@ const creatorMarkup = (profile = DEFAULT_PLAYER_PROFILE) =>
   )
 
 describe('non-WebGL UI', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('asks for a self-description only when the visitor chooses to describe themselves', () => {
     expect(creatorMarkup()).not.toContain('name="gender-description"')
     const selfDescribed = { ...DEFAULT_PLAYER_PROFILE, genderIdentity: 'self-described' as const }
@@ -27,9 +31,17 @@ describe('non-WebGL UI', () => {
   })
 
   it('replaces unsupported town graphics with an announced fallback instead of a blank canvas', () => {
-    const markup = renderToStaticMarkup(<GraphicsCanvas />)
+    const markup = renderToStaticMarkup(<GraphicsCanvas language="en" />)
     expect(markup).toContain('role="alert"')
     expect(markup).not.toContain('<canvas')
+  })
+
+  it('keeps the fallback out of a working canvas, where screen readers would still meet it', () => {
+    const context = { getExtension: () => null }
+    vi.stubGlobal('document', { createElement: () => ({ getContext: () => context }) })
+    const markup = renderToStaticMarkup(<GraphicsCanvas language="en" />)
+    expect(markup).toContain('<canvas')
+    expect(markup).not.toContain('role="alert"')
   })
 })
 

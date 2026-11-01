@@ -93,7 +93,7 @@ export function CharacterCreator({
         <div className="creator-layout">
           <section className="creator-preview" aria-label={copy.preview}>
             <div className="avatar-canvas">
-              <CharacterPreviewCanvas profile={draft} degrees={rotation} />
+              <CharacterPreviewCanvas language={language} profile={draft} degrees={rotation} />
             </div>
             <label className="preview-turn">
               {copy.turnPreview}

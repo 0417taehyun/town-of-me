@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, type RefObject } from 'react'
 import { Group } from 'three'
 import type { TownMovement } from '../data/models'
 import type { PlayerProfile } from '../data/playerProfile'
+import type { AppLanguage } from '../i18n/language'
 import { GraphicsCanvas } from '../scene/GraphicsCanvas'
 import { ProceduralCharacter } from '../scene/characters/ProceduralCharacter'
 import type { CharacterAnimation } from '../scene/characters/Characters'
@@ -67,11 +68,13 @@ export function MovementPreviewScene({
 }
 
 export function MovementPreview({
+  language,
   movement,
   profile,
   labels,
   label,
 }: {
+  language: AppLanguage
   movement: TownMovement
   profile: PlayerProfile
   labels: StepLabels
@@ -81,7 +84,7 @@ export function MovementPreview({
   return (
     <figure className="editor-movement-preview" aria-label={label}>
       <div className="editor-movement-canvas">
-        <GraphicsCanvas preview dpr={[1, 1.25]} camera={{ position: [0, 2.2, 6.2], fov: 34 }}>
+        <GraphicsCanvas language={language} preview dpr={[1, 1.25]} camera={{ position: [0, 2.2, 6.2], fov: 34 }}>
           <MovementPreviewScene movement={movement} profile={profile} labels={labels} captionRef={caption} />
         </GraphicsCanvas>
       </div>

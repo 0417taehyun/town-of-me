@@ -1,43 +1,44 @@
 import { PerformanceMonitor } from '@react-three/drei'
 import { Canvas, type CanvasProps } from '@react-three/fiber'
 import { Component, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { CHROME_GRAPHICS_SETTINGS, copyGraphicsSettingsAddress, supportsWebGL } from './webglSupport'
+import { type AppLanguage, languageCopy } from '../i18n/language'
+import { CHROME_GRAPHICS_SETTINGS, copyStatus, copyText, supportsWebGL } from './webglSupport'
 
 /** The sharpest pixel ratio a scene renders at; devices that cannot hold the frame rate drop to 1. */
 const SHARP_PIXEL_RATIO = 1.35
 
-export function GraphicsFallback({ preview = false }: { preview?: boolean }) {
-  const [settingsStatus, setSettingsStatus] = useState('')
+export function GraphicsFallback({ language, preview = false }: { language: AppLanguage; preview?: boolean }) {
+  const copy = languageCopy[language].graphics
+  const [copied, setCopied] = useState<boolean | null>(null)
+  const status = copyStatus(copied, { untried: copy.pasteHint, copied: copy.copied, byHand: copy.copyByHand })
   return (
     <div className={`webgl-fallback ${preview ? 'preview-fallback' : ''}`} role="alert">
-      <strong>{preview ? '3D preview unavailable' : 'The 3D town could not open.'}</strong>
-      <p>In Chrome settings, turn on “Use graphics acceleration when available”, then relaunch Chrome.</p>
+      <strong>{preview ? copy.preview : copy.town}</strong>
+      <p>{copy.description}</p>
       <button
         className="primary-button compact"
         type="button"
-        onClick={() => void copyGraphicsSettingsAddress(navigator.clipboard).then(setSettingsStatus)}
+        onClick={() => void copyText(CHROME_GRAPHICS_SETTINGS, navigator.clipboard).then(setCopied)}
       >
-        Copy Chrome settings address
+        {copy.copy}
       </button>
       <input
         className="graphics-settings-address"
-        aria-label="Chrome graphics settings address"
+        aria-label={copy.addressLabel}
         value={CHROME_GRAPHICS_SETTINGS}
         readOnly
         onFocus={(event) => event.currentTarget.select()}
       />
-      <small role="status">
-        {settingsStatus || 'Paste this address into Chrome. Websites cannot open browser settings directly.'}
-      </small>
+      <small role="status">{status}</small>
       <button className="text-button" type="button" onClick={() => window.location.reload()}>
-        Reload page
+        {copy.reload}
       </button>
     </div>
   )
 }
 
 class GraphicsBoundary extends Component<
-  { children: ReactNode; preview: boolean; onFailed: () => void },
+  { children: ReactNode; language: AppLanguage; preview: boolean; onFailed: () => void },
   { failed: boolean }
 > {
   state = { failed: false }
@@ -48,24 +49,26 @@ class GraphicsBoundary extends Component<
     this.props.onFailed()
   }
   render() {
-    if (this.state.failed) return <GraphicsFallback preview={this.props.preview} />
+    if (this.state.failed) return <GraphicsFallback language={this.props.language} preview={this.props.preview} />
     return this.props.children
   }
 }
 
 /**
- * A 3D canvas that shows the graphics fallback when WebGL 2 is missing, lost, or fails while drawing, and then calls
- * `onUnavailable`. Without a fixed `dpr`, it renders up to SHARP_PIXEL_RATIO and drops to 1 while the device cannot
- * hold the frame rate.
+ * A 3D canvas that shows the graphics fallback in `language` when WebGL 2 is missing, lost, or fails while drawing,
+ * and then calls `onUnavailable`. The fallback replaces the canvas rather than sitting inside it as canvas fallback
+ * content, which Chrome hands to screen readers even while WebGL works. Without a fixed `dpr`, it renders up to
+ * SHARP_PIXEL_RATIO and drops to 1 while the device cannot hold the frame rate.
  */
 export function GraphicsCanvas({
+  language,
   preview = false,
   onCreated,
   onUnavailable,
   dpr,
   children,
   ...props
-}: CanvasProps & { preview?: boolean; onUnavailable?: () => void }) {
+}: CanvasProps & { language: AppLanguage; preview?: boolean; onUnavailable?: () => void }) {
   const [supported, setSupported] = useState(() =>
     supportsWebGL(() => document.createElement('canvas').getContext('webgl2')),
   )
@@ -80,13 +83,12 @@ export function GraphicsCanvas({
     if (supported) return
     onUnavailable?.()
   }, [onUnavailable, supported])
-  if (!supported) return <GraphicsFallback preview={preview} />
+  if (!supported) return <GraphicsFallback language={language} preview={preview} />
   return (
-    <GraphicsBoundary preview={preview} onFailed={() => setSupported(false)}>
+    <GraphicsBoundary language={language} preview={preview} onFailed={() => setSupported(false)}>
       <Canvas
         {...props}
         dpr={dpr ?? [1, sharpest]}
-        fallback={<GraphicsFallback preview={preview} />}
         onCreated={(state) => {
           canvas.current = state.gl.domElement
           canvas.current.addEventListener('webglcontextlost', contextLost)

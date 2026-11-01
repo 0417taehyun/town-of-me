@@ -190,6 +190,7 @@ export function TownScene({
   return (
     <KeyboardControls map={controlsEnabled ? keyboardMap : []}>
       <GraphicsCanvas
+        language={language}
         shadows="percentage"
         camera={{ fov: settings.fov, near: 0.1, far: 300 }}
         gl={{ antialias: true, alpha: false, powerPreference: 'high-performance', toneMapping: NeutralToneMapping }}
