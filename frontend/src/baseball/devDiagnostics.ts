@@ -13,6 +13,8 @@ import {
   stillSpread,
 } from './flow/stanceHold'
 import type { PitchResult } from './game/derbyScore'
+import { timingErrorMs } from './game/judging'
+import type { PitchPlan } from './game/pitch'
 import type { RealTimeSwing, StageEvent } from './stage/stageRun'
 import { median } from './statistics'
 import { isPlainKey } from './ui/cameraPanelLayout'
@@ -122,8 +124,10 @@ export type FrameNote = {
  * not met when it ended). `gripLost` says the swing was reported with the grip lost mid-sweep, so the tracker's dropout
  * rules judged it, and `crossingPredicted` that its crossing was predicted rather than seen. When it left the load and
  * crossed the midline (capture clock); when the frame that reported it was taken and handled; when the page saw it
- * end; and when the stage judged the swing, and how. `measured` is null for a swing never seen mid-sweep (made between
- * two frames, or the dev stand-in's); its `closing` is the grip's speed toward the midline on the last frame it was on.
+ * end; and when the stage judged the swing, and how, with its raw timing error (ms) against the contact point, before
+ * the visitor's usual timing came off: the camera's lag. `measured` is null for a swing never seen mid-sweep (made
+ * between two frames, or the dev stand-in's); its `closing` is the grip's speed toward the midline on the last frame it
+ * was on.
  */
 export type SweepNote = {
   swing: boolean
@@ -143,7 +147,7 @@ export type SweepNote = {
     moving: number
     closing: number
   } | null
-  stage: ({ at: number } & Pick<PitchResult, 'outcome' | 'timing' | 'errorMs'>) | null
+  stage: ({ at: number; rawErrorMs: number | null } & Pick<PitchResult, 'outcome' | 'timing' | 'errorMs'>) | null
 }
 
 /** One run of the object detector: how long (ms) it took and what it found. */
@@ -154,7 +158,8 @@ export type FollowedSweep = { sweep: Sweep; crossedBefore: number | null }
 
 /**
  * The notes of the last minute, the detector run the next note takes, the sweep the tracker is on, the lock and the
- * latest detector run's best candidate (and when it ran), and the camera picture's size.
+ * latest detector run's best candidate (and when it ran), the camera picture's size, and the pitch the stage last
+ * released, which its next result judges.
  */
 export type Diagnostics = {
   frames: FrameNote[]
@@ -164,6 +169,7 @@ export type Diagnostics = {
   lock: LockNote | null
   candidate: { at: number; best: CandidateNote | null } | null
   video: { width: number; height: number } | null
+  released: PitchPlan | null
 }
 
 export function createDiagnostics(): Diagnostics {
@@ -175,6 +181,7 @@ export function createDiagnostics(): Diagnostics {
     lock: null,
     candidate: null,
     video: null,
+    released: null,
   }
 }
 
@@ -274,13 +281,15 @@ export function diagnoseFrame(
   dropOlder(diagnostics.sweeps, now - DIAGNOSTICS_WINDOWS.logMs)
 }
 
-/** Notes when the stage judged the latest swing handed to it, and how. */
+/** Notes when the stage judged the latest swing handed to it, and how, against the pitch it last released. */
 export function diagnoseStageEvent(event: StageEvent, diagnostics: Diagnostics = DIAGNOSTICS, now = performance.now()) {
+  if (event.type === 'release') diagnostics.released = event.pitch
   if (event.type !== 'result' || !event.swing) return
   const reported = [...diagnostics.sweeps].reverse().find((sweep) => sweep.reported !== null)
   if (!reported || reported.stage) return
   const { outcome, timing, errorMs } = event.result
-  reported.stage = { at: now, outcome, timing, errorMs }
+  const rawErrorMs = diagnostics.released && timingErrorMs(diagnostics.released, event.swing.contactMs, 0)
+  reported.stage = { at: now, outcome, timing, errorMs, rawErrorMs }
 }
 
 /** Drops the notes handled before `since`, oldest first. */
@@ -550,7 +559,8 @@ export function reportedText({ reported }: SweepNote, zero: number) {
 export function stageText({ reported, stage }: SweepNote, zero: number) {
   if (!reported) return '–'
   if (!stage) return 'not judged by the stage (between pitches, before the release, or after the pitch had passed)'
-  const timing = stage.timing === null ? '' : ` ${stage.timing} ${signedMs(stage.errorMs)}`
+  const timing =
+    stage.timing === null ? '' : ` ${stage.timing} ${signedMs(stage.errorMs)} (raw ${signedMs(stage.rawErrorMs)})`
   return `${signedMs(stage.at - zero)} now · ${stage.outcome}${timing}`
 }
 
@@ -604,7 +614,8 @@ export function diagnosticsLog(diagnostics: Diagnostics, savedAt: Date) {
       'hold read them, and the sweeps toward the batting side. Numbers and state names only, no picture. Times are ' +
       'performance.now() ms (capturedAt: when the camera took the frame; handledAt: when the page handled it). ' +
       'Lengths are shoulder widths (SW): grip depth behind the body midline toward the batting side, grip drop below ' +
-      'the shoulders.',
+      "the shoulders. A sweep's stage.errorMs is its timing error as judged, after the visitor's usual timing came " +
+      'off; stage.rawErrorMs is against the contact point itself.',
     savedAt: savedAt.toISOString(),
     video: diagnostics.video,
     rules: {

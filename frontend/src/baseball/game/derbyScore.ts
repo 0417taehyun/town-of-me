@@ -1,5 +1,5 @@
-import { calibrate, type Calibration, type PracticeSample } from './calibration'
-import { DIFFICULTY_RULES } from './difficulty'
+import { calibrate, type Calibration, type PracticeSample, practiceTimingOffset } from './calibration'
+import { DIFFICULTY_RULES, PRACTICE_PITCH_FLIGHT_SECONDS } from './difficulty'
 import type { BattingSide } from './field'
 import { judgeTiming, swingPower, timingErrorMs, type TimingId } from './judging'
 import { type JudgedSwing, type Landing, landingFor, MISSED } from './landing'
@@ -48,25 +48,48 @@ export type DerbyResult = {
   longestHomeRunDecimetres: number
 }
 
-/**
- * The whole run judged again from its plan and raw log, starting with the calibration. Every pitch flies at
- * `pitchFlightSeconds`, the run's own pace unless it is the practice (runPlan.ts createPracticePlan).
- */
-export function replayDerby(
-  plan: RunPlan,
-  log: DerbyInputLog,
-  pitchFlightSeconds = runPitchFlightSeconds(plan),
-): DerbyResult {
+/** The whole run judged again from its plan and raw log, starting with the calibration, at the run's own pace. */
+export function replayDerby(plan: RunPlan, log: DerbyInputLog): DerbyResult {
   const calibration = calibrate(log.practice)
+  const pitches = plan.schedule.map((_, pitchIndex) => scorePitch(plan, calibration, log, pitchIndex))
+  return summarizeDerby(plan, pitches)
+}
+
+/**
+ * The practice (runPlan.ts createPracticePlan) judged again from its plan and log, as it played: each pitch at the
+ * practice pace, against the visitor's usual timing up to it (practiceCalibration).
+ */
+export function replayPractice(plan: RunPlan, log: DerbyInputLog): DerbyResult {
   const pitches = plan.schedule.map((_, pitchIndex) =>
-    scorePitch(plan, calibration, log, pitchIndex, pitchFlightSeconds),
+    scorePitch(plan, practiceCalibration(plan, log, pitchIndex), log, pitchIndex, PRACTICE_PITCH_FLIGHT_SECONDS),
   )
   return summarizeDerby(plan, pitches)
 }
 
 /**
- * Pitch `pitchIndex`, flying at `pitchFlightSeconds`, judged from the log's swing at it; `calibration` is
- * `calibrate(log.practice)`, made once.
+ * What practice pitch `pitchIndex` is judged with: the visitor's usual timing in the practice's swings up to this one,
+ * this one's included (calibration.ts practiceTimingOffset), and the speed peak of the practice before it, which has
+ * none. The field and the word practice shows both come from that one judgement, and a steady webcam delay is no miss.
+ */
+export function practiceCalibration(plan: RunPlan, log: DerbyInputLog, pitchIndex: number): Calibration {
+  const samples = log.swings
+    .slice(0, pitchIndex + 1)
+    .flatMap((swing, swingIndex) => (swing ? [practiceSample(plan, swingIndex, swing)] : []))
+  return { ...calibrate(log.practice), offsetMs: practiceTimingOffset(samples) }
+}
+
+/**
+ * What a practice swing at pitch `pitchIndex` leaves for the calibration of the runs after it: its raw timing error
+ * against the contact point, before any offset, and its top speed.
+ */
+export function practiceSample(plan: RunPlan, pitchIndex: number, swing: SwingEvent): PracticeSample {
+  const pitch = planRunPitch(plan, pitchIndex, PRACTICE_PITCH_FLIGHT_SECONDS)
+  return { errorMs: timingErrorMs(pitch, swing.contactMs, 0), speed: swing.speed }
+}
+
+/**
+ * Pitch `pitchIndex`, flying at `pitchFlightSeconds`, judged from the log's swing at it; `calibration` is a run's
+ * `calibrate(log.practice)`, made once, or practice's for this pitch (practiceCalibration).
  */
 export function scorePitch(
   plan: RunPlan,

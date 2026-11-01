@@ -31,15 +31,37 @@ export function calibrate(practice: readonly PracticeSample[]): Calibration {
   return { offsetMs: timingOffset(valid), peakSpeed: peakSpeed(valid) }
 }
 
-export function isValidPracticeSwing(sample: Pick<PracticeSample, 'errorMs'>) {
+export function isValidPracticeSwing(sample: PracticeSample) {
   return Math.abs(sample.errorMs) <= CALIBRATION_RULES.validErrorMs
 }
 
 /** The median error of the valid swings, so one fluke does not move it. */
 export function timingOffset(valid: readonly PracticeSample[]) {
   if (valid.length < CALIBRATION_RULES.minimumValidSwings) return 0
+  return withinOffsetRange(median(valid.map((sample) => sample.errorMs)))
+}
+
+export function withinOffsetRange(offsetMs: number) {
   const { minimum, maximum } = CALIBRATION_RULES.offsetRange
-  return Math.min(maximum, Math.max(minimum, median(valid.map((sample) => sample.errorMs))))
+  return Math.min(maximum, Math.max(minimum, offsetMs))
+}
+
+/** Whether `practice` has the valid swings a run's calibration needs to take the visitor's usual timing off. */
+export function findsUsualTiming(practice: readonly PracticeSample[]) {
+  return practice.filter(isValidPracticeSwing).length >= CALIBRATION_RULES.minimumValidSwings
+}
+
+/**
+ * The visitor's usual timing up to a practice swing (ms), which practice judges it against: `practice` holds the
+ * swings so far, the judged one last. Once there are enough valid swings it is the offset a run's calibration would
+ * take off (timingOffset). Before that there is no usual timing yet, so it is the latest valid swing's own error,
+ * within the range a run's offset keeps: the first two valid swings are on time unless further off than a run could
+ * take off; 0 before any.
+ */
+export function practiceTimingOffset(practice: readonly PracticeSample[]) {
+  const valid = practice.filter(isValidPracticeSwing)
+  if (findsUsualTiming(valid)) return timingOffset(valid)
+  return withinOffsetRange(valid.at(-1)?.errorMs ?? 0)
 }
 
 export function peakSpeed(valid: readonly PracticeSample[]) {

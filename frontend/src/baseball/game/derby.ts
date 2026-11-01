@@ -4,7 +4,9 @@ import {
   type DerbyInputLog,
   type DerbyResult,
   type PitchResult,
+  practiceCalibration,
   replayDerby,
+  replayPractice,
   scorePitch,
   type SwingEvent,
 } from './derbyScore'
@@ -42,10 +44,12 @@ export const LATE_SWING_MARGIN_MS = 320
  * `log` holds a swing (or null) for each pitch finished so far and `results` their results. `phaseStartedMs` is when
  * the phase began; in the pitch phase that is the release. Its pitches fly at `pitchFlightSeconds`, a fastball's flight
  * (s), and it takes a swing up to `lateLimitMs` past the contact reference (contactReferenceMs): a run's own pace and
- * the latest swing that touches the ball, or the practice's (createDerby).
+ * the latest swing that touches the ball, or the practice's (createDerby). `calibration` judges its pitches: a run's
+ * comes from the practice in its log, and the `practice`'s is the one its last pitch was judged with.
  */
 export type Derby = {
   plan: RunPlan
+  practice: boolean
   pitchFlightSeconds: number
   lateLimitMs: number
   calibration: Calibration
@@ -78,14 +82,15 @@ export type DerbySwing = {
 
 /**
  * A run starting at `nowMs`, judged with the calibration from the practice already in `log`. The `practice` before a
- * run flies at the practice pace, and takes a swing as late as the calibration still counts one, past the contact
- * window, so a slow camera's late swings still teach it; a run flies at its difficulty's pace and takes a swing
- * only while it can still touch the ball.
+ * run flies at the practice pace, judges each pitch against the visitor's usual timing so far (practiceCalibration),
+ * and takes a swing as late as the calibration still counts one, past the contact window, so a slow camera's late
+ * swings still teach it; a run flies at its difficulty's pace and takes a swing only while it can still touch the ball.
  */
 export function createDerby(plan: RunPlan, log: Omit<DerbyInputLog, 'swings'>, nowMs: number, practice = false): Derby {
   const contactWindowMs = DIFFICULTY_RULES[plan.rules.difficulty].timingWindows.contact
   return {
     plan,
+    practice,
     pitchFlightSeconds: practice ? PRACTICE_PITCH_FLIGHT_SECONDS : runPitchFlightSeconds(plan),
     lateLimitMs: practice ? Math.max(contactWindowMs, CALIBRATION_RULES.validErrorMs) : contactWindowMs,
     calibration: calibrate(log.practice),
@@ -173,15 +178,21 @@ export function swingDeadlineForPitch(derby: Derby, pitch: PitchPlan) {
   return contactReferenceMs(derby, pitch) + derby.lateLimitMs + LATE_SWING_MARGIN_MS
 }
 
-/** How long after its release (ms) a swing can still touch `pitch`, under this run's rules and calibration. */
+/**
+ * How long after its release (ms) a swing may still touch `pitch`: the derby's late limit past its contact reference.
+ * In practice that is any swing it takes, since each is judged against a usual timing that includes it.
+ */
 export function latestContactMs(derby: Derby, pitch: PitchPlan) {
-  const contactWindowMs = DIFFICULTY_RULES[derby.plan.rules.difficulty].timingWindows.contact
-  return contactReferenceMs(derby, pitch) + contactWindowMs
+  return contactReferenceMs(derby, pitch) + derby.lateLimitMs
 }
 
-/** The contact reference after `pitch`'s release (ms), moved later by a calibration that finds the swings late. */
+/**
+ * The contact reference after `pitch`'s release (ms): in a run, moved later by a calibration that finds the swings
+ * late. Practice keeps the contact point itself, so the swings it takes, and with them the runs' calibration, do not
+ * hang on its own judging.
+ */
 export function contactReferenceMs(derby: Derby, pitch: PitchPlan) {
-  return contactSeconds(pitch) * 1000 + Math.max(0, derby.calibration.offsetMs)
+  return contactSeconds(pitch) * 1000 + (derby.practice ? 0 : Math.max(0, derby.calibration.offsetMs))
 }
 
 export function startWindup(derby: Derby, atMs: number): DerbyUpdate {
@@ -199,12 +210,17 @@ export function releasePitch(derby: Derby, atMs: number): DerbyUpdate {
   }
 }
 
-/** Ends the current pitch with `swing`, or with none when it went by, scored the way a replay scores it. */
+/**
+ * Ends the current pitch with `swing`, or with none when it went by, scored the way a replay scores it, with the
+ * calibration the stage then draws it with.
+ */
 export function finishPitch(derby: Derby, swing: SwingEvent | null, atMs: number): DerbyUpdate {
   const log = { ...derby.log, swings: [...derby.log.swings, swing] }
-  const result = scorePitch(derby.plan, derby.calibration, log, derby.pitchIndex, derby.pitchFlightSeconds)
+  const calibration = derby.practice ? practiceCalibration(derby.plan, log, derby.pitchIndex) : derby.calibration
+  const result = scorePitch(derby.plan, calibration, log, derby.pitchIndex, derby.pitchFlightSeconds)
+  const results = [...derby.results, result]
   return {
-    derby: { ...derby, log, results: [...derby.results, result], phase: 'result', phaseStartedMs: atMs },
+    derby: { ...derby, calibration, log, results, phase: 'result', phaseStartedMs: atMs },
     events: [{ type: 'result', pitchIndex: derby.pitchIndex, result, swing }],
   }
 }
@@ -215,8 +231,9 @@ export function nextPitch(derby: Derby, atMs: number): DerbyUpdate {
   if (pitchIndex < derby.plan.schedule.length) {
     return { derby: { ...derby, pitchIndex, phase: 'ready', phaseStartedMs: atMs }, events: [] }
   }
+  const replay = derby.practice ? replayPractice : replayDerby
   return {
     derby: { ...derby, phase: 'finished', phaseStartedMs: atMs },
-    events: [{ type: 'finished', result: replayDerby(derby.plan, derby.log, derby.pitchFlightSeconds) }],
+    events: [{ type: 'finished', result: replay(derby.plan, derby.log) }],
   }
 }

@@ -26,7 +26,7 @@ import {
   flowAfterEvent,
   pausedForAway,
   practiceFeedback,
-  practiceSample,
+  practiceResultSample,
   setupFlow,
   shownPracticeFeedback,
   shownRun,
@@ -190,15 +190,13 @@ describe('the derby flow', () => {
     // This visitor's swings register about 210 ms past the contact point; the third comes near the point itself.
     const events = playOnStage(practice.run!, [200, null, 220, 20, 210])
     let hud = NEW_RUN_HUD
-    let flow = practice
     const shown = events.map((event) => {
       hud = hudAfterEvent(hud, event)
-      flow = flowAfterEvent(flow, event, 9000)
-      return [event.type, shownPracticeFeedback(judgedResult(hud), 'normal', flow.practice)]
+      return [event.type, shownPracticeFeedback(judgedResult(hud), 'normal')]
     })
     const words = shown.filter(([type]) => type === 'windup' || type === 'result')
-    // The first two valid swings are good with no usual timing yet. The third, far earlier than the usual timing it
-    // makes with them, is a bit early, and the fourth, at their usual lag, is good.
+    // The first two are good on their own timing, as there is no usual timing yet. The third, far earlier than the usual
+    // timing it makes with them, is a bit early, and the fourth, at their usual lag, is good.
     expect(words).toEqual([
       ['windup', null],
       ['result', 'good'],
@@ -213,18 +211,51 @@ describe('the derby flow', () => {
     ])
   })
 
+  it('hears good and is hit on every practice swing of a visitor whose swings all register 150 ms late', () => {
+    const results = playOnStage(createPracticeRun(ballpark, october, 'left'), [150, 150, 150, 150, 150]).flatMap(
+      (event) => (event.type === 'result' ? [event.result] : []),
+    )
+    // Against the contact point itself, each would be late, at the very edge of normal's contact window.
+    expect(results.map((result) => shownPracticeFeedback(result, 'normal'))).toEqual(results.map(() => 'good'))
+    expect(results.map((result) => result.outcome)).toEqual(results.map(() => expect.stringMatching(/^(hit|homeRun)$/)))
+  })
+
+  it('hears good and is hit on the first two valid practice swings, however far apart they are', () => {
+    const results = playOnStage(createPracticeRun(ballpark, october, 'left'), [220, -60]).flatMap((event) =>
+      event.type === 'result' ? [event.result] : [],
+    )
+    // Against the midpoint of the two, the second would be 140 ms early.
+    const told = results.slice(0, 2).map((result) => [shownPracticeFeedback(result, 'normal'), result.timing])
+    expect(told).toEqual([
+      ['good', 'perfect'],
+      ['good', 'perfect'],
+    ])
+  })
+
+  it("hears a bit early for a swing far earlier than the visitor's usual timing, and the field agrees", () => {
+    const results = playOnStage(createPracticeRun(ballpark, october, 'left'), [150, 150, 150, 20, 150]).flatMap(
+      (event) => (event.type === 'result' ? [event.result] : []),
+    )
+    // The fourth swing would be a dead-on hit against the contact point, but it is 130 ms ahead of this visitor's usual.
+    const told = results.map((result) => [shownPracticeFeedback(result, 'normal'), result.timing, result.outcome])
+    expect(told[3]).toEqual(['early', 'early', 'foul'])
+    expect(told.map(([word]) => word)).toEqual(['good', 'good', 'good', 'early', 'good'])
+  })
+
   it('says which way a swing too far off to count missed the contact point, and counts only valid swings', () => {
     const offsetsMs = [-450, 200, 210]
-    const results = playOnStage(createPracticeRun(ballpark, october, 'left'), offsetsMs).flatMap((event) =>
-      event.type === 'result' ? [event] : [],
-    )
-    const samples = results.flatMap((event) => practiceSample(event) ?? [])
+    const setup = createPracticeRun(ballpark, october, 'left')
+    const results = playOnStage(setup, offsetsMs).flatMap((event) => (event.type === 'result' ? [event] : []))
+    const samples = results.flatMap((event) => practiceResultSample(setup.plan, event) ?? [])
     expect(samples.map((sample) => sample.errorMs)).toEqual(offsetsMs.map((offsetMs) => expect.closeTo(offsetMs, 6)))
-    const words = results.map(({ result }, index) =>
-      shownPracticeFeedback(result, 'normal', samples.slice(0, index + 1)),
-    )
-    // The third swing is only the second valid one, so there is no usual timing yet and its lag is good.
-    expect(words).toEqual(['early', 'good', 'good', null, null])
+    // The third swing is only the second valid one, so it is good on its own timing.
+    expect(results.map(({ result }) => shownPracticeFeedback(result, 'normal'))).toEqual([
+      'early',
+      'good',
+      'good',
+      null,
+      null,
+    ])
   })
 
   it('takes a late practice swing the camera reports late, at the hardest difficulty, so it still calibrates', () => {
@@ -232,14 +263,23 @@ describe('the derby flow', () => {
     // 300 ms past the contact point, far outside hard's contact window, and seen the derby's whole margin later.
     const events = playOnStage(practice, [300, 300, 300, 300, 300], LATE_SWING_MARGIN_MS - 10)
     const results = events.flatMap((event) => (event.type === 'result' ? [event] : []))
-    const samples = results.flatMap((event) => practiceSample(event) ?? [])
+    const samples = results.flatMap((event) => practiceResultSample(practice.plan, event) ?? [])
     expect(samples.map((sample) => sample.errorMs)).toEqual(results.map(() => expect.closeTo(300, 6)))
     // A steady lag the calibration can take off (up to 300 ms) is the visitor's usual timing, which practice does not
     // call late, even at the hardest difficulty.
-    const words = results.map(({ result }, index) => shownPracticeFeedback(result, 'hard', samples.slice(0, index + 1)))
-    expect(words).toEqual(results.map(() => 'good'))
+    expect(results.map(({ result }) => shownPracticeFeedback(result, 'hard'))).toEqual(results.map(() => 'good'))
     const run = createDerbyRun(hardBallpark, october, 7, { side: 'right', practice: samples })
     expect(createDerby(run.plan, run.log, 0).calibration.offsetMs).toBeCloseTo(300, 0)
+  })
+
+  it('takes the same late practice swings whatever practice made of the earlier ones, so it calibrates runs the same', () => {
+    // The second swing is seen later than the derby's margin past the latest swing practice takes.
+    const taken = [0, 300].map((firstMs) =>
+      playOnStage(createPracticeRun(ballpark, october, 'left'), [firstMs, 390], LATE_SWING_MARGIN_MS + 60).flatMap(
+        (event) => (event.type === 'result' && event.swing ? [event.pitchIndex] : []),
+      ),
+    )
+    expect(taken).toEqual([[0], [0]])
   })
 
   it('pauses practice and a camera run once the visitor is out of view 1.5 s, and goes on once they are back', () => {

@@ -1,11 +1,11 @@
 import { effectiveBallparkRules, rankingMonth } from '../../data/ballparkRules'
 import type { BallparkSettings, BaseballDifficulty } from '../../data/models'
 import type { CameraStatus } from '../cameraTracking'
-import { CALIBRATION_RULES, calibrate, isValidPracticeSwing, type PracticeSample } from '../game/calibration'
+import type { PracticeSample } from '../game/calibration'
 import { DIFFICULTY_RULES, type TimingWindows } from '../game/difficulty'
-import type { DerbyInputLog, DerbyResult, PitchResult } from '../game/derbyScore'
+import { type DerbyInputLog, type DerbyResult, type PitchResult, practiceSample } from '../game/derbyScore'
 import type { BattingSide } from '../game/field'
-import { createPracticePlan, createRunPlan } from '../game/runPlan'
+import { createPracticePlan, createRunPlan, type RunPlan } from '../game/runPlan'
 import type { StageEvent, StageRunSetup } from '../stage/stageRun'
 import type { StanceWait } from './stanceHold'
 
@@ -13,9 +13,9 @@ import type { StanceWait } from './stanceHold'
 // first click is needed: it turns the camera on and asks for everything else a click must (BaseballApp.tsx). From there
 // the visitor goes on by holding the batting stance (stanceHold.ts) or by the step's button, which Enter and Space
 // press once it has focus, as any button. No key starts a step by itself or swings: only the camera sees swings.
-// Practice pitches the game core's practice schedule at the practice pace, says how each swing was timed in words only,
-// against the visitor's own usual timing, and calibrates every run after it until the camera turns off. Practice and
-// a run pause between pitches while the visitor is out of the camera's view.
+// Practice pitches the game core's practice schedule at the practice pace, judges each swing against the visitor's own
+// usual timing and says how it was timed in words only, and calibrates every run after it until the camera turns off.
+// Practice and a run pause between pitches while the visitor is out of the camera's view.
 
 export type DerbyStep = 'rules' | 'setup' | 'practice' | 'practiceDone' | 'play' | 'result'
 
@@ -87,16 +87,21 @@ export function startedFlow(flow: DerbyFlow, at: number, plays: DerbyPlays): Der
  */
 export function flowAfterEvent(flow: DerbyFlow, event: StageEvent, at: number): DerbyFlow {
   if (event.type === 'finished') return finishedFlow(flow, event.result, at)
-  const sample = flow.step === 'practice' && event.type === 'result' ? practiceSample(event) : null
+  const practicePlan = flow.step === 'practice' ? flow.run?.plan : null
+  const sample = practicePlan && event.type === 'result' ? practiceResultSample(practicePlan, event) : null
   return sample ? { ...flow, practice: [...flow.practice, sample] } : flow
 }
 
 /**
- * What a practice pitch's result leaves for the calibration, or null for a pitch let go by: the swing's timing error as
- * practice judged it, which is with no calibration and so against the contact point itself, and its top speed.
+ * What a result of the practice `plan` leaves for the calibration, or null for a pitch let go by: the swing's raw
+ * timing error against the contact point (practice judges it against the visitor's usual timing, which the runs after
+ * take off by themselves) and its top speed.
  */
-export function practiceSample({ result, swing }: Extract<StageEvent, { type: 'result' }>): PracticeSample | null {
-  return swing && result.errorMs !== null ? { errorMs: result.errorMs, speed: swing.speed } : null
+export function practiceResultSample(
+  plan: RunPlan,
+  { pitchIndex, swing }: Extract<StageEvent, { type: 'result' }>,
+): PracticeSample | null {
+  return swing && practiceSample(plan, pitchIndex, swing)
 }
 
 export function finishedFlow(flow: DerbyFlow, result: DerbyResult, at: number): DerbyFlow {
@@ -118,24 +123,17 @@ export function practiceFeedback(errorMs: number, windows: TimingWindows): Pract
 
 /**
  * The word practice shows for the `judged` pitch's result (from when it is judged until the next windup, derbyCues.ts
- * judgedResult), told against the visitor's own usual timing, as a run's judge tells it. Practice measures the error
- * against the contact point itself; the word takes off it the offset the run's calibration finds in `practice`, the
- * swings so far with this one included (flowAfterEvent keeps it as it is judged): the median of the valid ones, from
- * the third on. Against the contact point alone a webcam's steady delay would call nearly every swing late, and a
- * visitor who swung earlier for it would then be judged early in the run. Before the third valid swing there is no
- * usual timing yet, so a valid swing is good, and one too far off to count says which way it missed. Null while no
- * result shows, and for a pitch let go by, which has its own line.
+ * judgedResult): its error as the field played it, against the visitor's own usual timing (game/derbyScore.ts
+ * practiceCalibration), so the word and the field always agree. Against the contact point alone a webcam's steady
+ * delay would call nearly every swing late, and a visitor who swung earlier for it would then be judged early in the
+ * run. Null while no result shows, and for a pitch let go by, which has its own line.
  */
 export function shownPracticeFeedback(
   judged: PitchResult | null,
   difficulty: BaseballDifficulty,
-  practice: readonly PracticeSample[],
 ): PracticeFeedback | null {
   const errorMs = judged?.errorMs ?? null
-  if (errorMs === null) return null
-  const learning = practice.filter(isValidPracticeSwing).length < CALIBRATION_RULES.minimumValidSwings
-  if (learning && isValidPracticeSwing({ errorMs })) return 'good'
-  return practiceFeedback(errorMs - calibrate(practice).offsetMs, DIFFICULTY_RULES[difficulty].timingWindows)
+  return errorMs === null ? null : practiceFeedback(errorMs, DIFFICULTY_RULES[difficulty].timingWindows)
 }
 
 /**
@@ -168,8 +166,9 @@ export function createDerbyRun(
 }
 
 /**
- * The practice before a run at `now`, batting on `side`: the practice pitches at the practice pace, judged by
- * the timing windows of the rules a run would play then, with no calibration, since it measures one.
+ * The practice before a run at `now`, batting on `side`: the practice pitches at the practice pace, judged by the
+ * timing windows of the rules a run would play then, against the visitor's usual timing so far rather than a
+ * calibration, since it measures one.
  */
 export function createPracticeRun(
   ballpark: BallparkSettings,

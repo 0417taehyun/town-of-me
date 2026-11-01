@@ -125,7 +125,11 @@ with the same functions, so the numbers shown live are the replayed ones; it log
 ball's height at the contact point (`contactHeight` in `pitch.ts`), since only it knows which pitch the swing met.
 Practice plays as a derby too (`createPracticePlan` in `runPlan.ts`, `createDerby`'s `practice`): the fixed practice
 pitches at the practice pace, which the scoring functions take as an argument that a run never passes, taking swings as
-late as the calibration still counts one, so a server needs none of it.
+late as the calibration still counts one past the contact point, so a server needs none of it. It judges each pitch
+against the visitor's usual timing in its swings so far, this one's included (`practiceCalibration`), and keeps that
+calibration for the stage to draw the pitch with; `replayPractice` judges it again the same way. Its swing deadline
+never moves with that usual timing, so which swings it takes, and with them the runs' calibration from their raw errors,
+never hang on its own judging.
 
 ### `baseball/stage/` and `baseball/stadium/`
 
@@ -247,14 +251,22 @@ fills nor drains the ring, and a longer one drains it as fast as holding fills i
 fills `ui/StanceGauge.tsx` straight on its element; the line under the ring says what the hold waits for (the upper
 body in view, the lock, hands together, raised by the back shoulder, a fresh stance, held still), so React renders only
 when a step or the line changes, and while a step waits the camera panel's chip says the same in place of the swing
-tracker's directions to swing (`ui/derbyCues.ts seenCameraState`). Practice pitches the game core's practice schedule at the practice pace as a derby of its own, with no
-calibration, so its swings' errors are against the contact point, and it takes swings as late as the calibration still
-counts one, so a slow camera's late swings still teach it. It tells each swing only a bit early, good, or a bit late
-against the visitor's own usual timing, as a run's judge does (`shownPracticeFeedback`): from the third valid swing on,
-its error less the calibration's offset from the swings so far, this one included (the median of the valid ones),
-within the difficulty's GOOD window or not; the first two valid swings are good, as there is no usual timing yet.
-Against the contact point alone a webcam's steady delay would call nearly every swing late. Its swings calibrate every
-run until the camera turns off. Practice and a run stand still once the visitor has been out of the camera's view
+tracker's directions to swing (`ui/derbyCues.ts seenCameraState`). Practice pitches the game core's practice schedule at
+the practice pace as a derby of its own, and it takes swings as late as the calibration still counts one past the
+contact point, so a slow camera's late swings still teach it; each pitch waits at the back of the reach until then, as
+any of them may be on time. It judges each swing against the visitor's own usual timing (`game/calibration.ts
+practiceTimingOffset`, `game/derbyScore.ts practiceCalibration`): from the third valid swing on, the offset a run's
+calibration takes off, the median error of the valid swings so far against the contact point, this one included.
+Before that there is no usual timing yet, so a valid swing is judged against its own error and is on time: the first
+two say good, however far apart (against their midpoint, a second swing far from the first would be early or late).
+The usual timing keeps to the range a run's offset keeps (−150 to +300 ms), so a first swing further off than any run
+takes off is told early or late, as a run would tell it. The pitch on the field and the word under it come from that one
+judgement, so they always agree: it tells each swing only a bit early, good, or a bit late (`shownPracticeFeedback`),
+its judged error within the difficulty's GOOD window or not. Against the contact point alone, as the drafts' design
+first had it (8.3 (c)), a webcam's steady delay would call nearly every swing late. Its swings calibrate every run until
+the camera turns off, with their raw errors; a run takes the usual timing off only from three valid swings
+(`findsUsualTiming`), so a practice that ends with fewer says so on its last card rather than that the timing is set.
+Practice and a run stand still once the visitor has been out of the camera's view
 1.5 s, but only between pitches (before the first windup, or once a result's ball is down and another pitch is to
 come), so a ball on its way plays out and no swing made meanwhile meets a pitch; the next pitch comes once they are
 back. A camera that turns off, as after two minutes without movement, takes the page back to the rules card. In a dev
@@ -262,8 +274,9 @@ build, `devSeam.ts` lets an automated check stand in for a visitor the fake came
 which the camera's frames hand over like tracked ones. In a dev build, D also shows `devDiagnostics.ts`'s panel
 (`ui/DiagnosticsPanel.tsx`) for tuning on a real webcam: the camera's and the vision tasks' timing, the tracker and the
 lock, each stance condition against its limit, and the last sweep from leaving the load to the stage's reaction against
-the swing rules; L saves the last minute of these numbers as a JSON file on this device, no picture. A production
-build leaves both out. `ui/cameraPanelLayout.ts`
+the swing rules, with the judged swing's raw error against the contact point beside its judged one, since practice's and
+a run's judging take the camera's lag out; L saves the last minute of these numbers as a JSON file on this device, no
+picture. A production build leaves both out. `ui/cameraPanelLayout.ts`
 places the camera panel: the mirrored camera is the stage while it sets up, a column under the scoreboard on the side
 opposite the batter from practice on (medium, 29% of the width, by default; V or the camera button cycles medium, large,
 hidden, remembered in `localStorage`), a corner chip while the camera chases a home run, and hidden on the result screen

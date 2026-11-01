@@ -50,18 +50,22 @@ export function PracticeView({
 
 /**
  * The step after practice: practice is done, and holding the batting stance fills `gauge` and plays ball, as the
- * button does, which has focus so Enter or Space presses it; `stanceNeed` says what the hold waits for. `cameraState`
- * is the camera panel chip's words, heard only.
+ * button does, which has focus so Enter or Space presses it; `stanceNeed` says what the hold waits for. Unless
+ * practice `timed` the visitor's swings (game/calibration.ts findsUsualTiming), it says the runs take no usual timing
+ * off, though practice showed its first swings on their own timing. `cameraState` is the camera panel chip's words,
+ * heard only.
  */
 export function PracticeDoneView({
   gauge,
   stanceNeed,
+  timed,
   language,
   cameraState,
   onPlay,
 }: {
   gauge: Ref<HTMLDivElement>
   stanceNeed: string | null
+  timed: boolean
   language: AppLanguage
   cameraState: string | null
   onPlay: () => void
@@ -70,7 +74,7 @@ export function PracticeDoneView({
   return (
     <section className="baseball-card derby-practice-done" aria-labelledby="derby-practice-done-title">
       <h1 id="derby-practice-done-title">{copy.practice.doneTitle}</h1>
-      <p className="baseball-note">{copy.practice.doneNote}</p>
+      <p className="baseball-note">{timed ? copy.practice.doneNote : copy.practice.doneNoteUntimed}</p>
       <StanceGauge ref={gauge} label={copy.flow.stance} hint={copy.flow.toPlay} need={stanceNeed} />
       <div className="derby-actions">
         <button className="primary-button" type="button" autoFocus onClick={onPlay}>

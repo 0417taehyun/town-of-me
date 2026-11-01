@@ -7,7 +7,7 @@ import { DIFFICULTY_RULES } from '../game/difficulty'
 import { BATTER_REACH, CONTACT_DEPTH } from '../game/field'
 import { gameTime } from '../game/gameClock'
 import { contactHeight, contactSeconds, type PitchPlan, pitchPosition, secondsAtDepth } from '../game/pitch'
-import { createRunPlan, planRunPitch } from '../game/runPlan'
+import { createPracticePlan, createRunPlan, planRunPitch } from '../game/runPlan'
 import { SWING_RULES } from '../vision/swingTracker'
 import { CONTACT_DELAY_MS } from './actors/swingMotion'
 import type { ShotKind } from './cameraShots'
@@ -41,6 +41,14 @@ type Watch = (playback: Playback, frameEvents: StageEvent[]) => void
 
 function runSetup(difficulty: BaseballDifficulty, pitchCount: number, seed: number): StageRunSetup {
   return { plan: createRunPlan({ pitchCount, difficulty }, seed), log: { side: 'right', practice: [] } }
+}
+
+function practiceSetup(): StageRunSetup {
+  return {
+    plan: createPracticePlan({ pitchCount: 5, difficulty: 'normal' }),
+    log: { side: 'right', practice: [] },
+    practice: true,
+  }
 }
 
 /** A camera swing with the bat level with the ball at `contactAtRealMs`, as fast as an uncalibrated run's peak. */
@@ -259,6 +267,41 @@ describe('stage run', () => {
       expect(-start.z).toBeCloseTo(meetDepths[index], 6)
       expect(nearestDepth).toBeGreaterThanOrEqual(meetDepths[index] - 1e-9)
     })
+  })
+
+  it("draws each practice swing at the visitor's usual lag as a dead-on hit, the bat meeting the ball at the contact point", () => {
+    const starts: Vec3[] = []
+    const { run } = play(
+      practiceSetup(),
+      () => 150,
+      (playback, frameEvents) => {
+        if (frameEvents.some((event) => event.type === 'contact')) starts.push({ ...playback.run.batted!.start })
+      },
+    )
+    expect(run.derby.results.map((result) => result.timing)).toEqual(run.derby.results.map(() => 'perfect'))
+    expect(starts.map((start) => -start.z)).toEqual(run.derby.results.map(() => expect.closeTo(CONTACT_DEPTH, 6)))
+  })
+
+  it('keeps the first practice pitch at the back of the reach for a late swing reported late, which is on time', () => {
+    const run = createStageRun(practiceSetup(), 0)
+    const release = advanceStageRun(run, DERBY_PHASE_MS.ready + DERBY_PHASE_MS.windup, false).at(-1)
+    if (release?.type !== 'release') throw new Error('expected the release')
+    // No hit-stop or slow motion has changed the clock yet, so game time is real time. The camera has the bat at the
+    // contact point 250 ms after the ball, the visitor's own timing as the first swing sets it, and reports it 300 ms on.
+    const contactAtRealMs = release.releasedMs + contactSeconds(release.pitch) * 1000 + 250
+    const handedInAtMs = contactAtRealMs + 300
+    const frames = Array.from(
+      { length: Math.ceil((handedInAtMs - release.releasedMs) / FRAME_MS) },
+      (_, frame) => release.releasedMs + frame * FRAME_MS,
+    )
+    const drawnDepths = frames.map((realMs) => {
+      advanceStageRun(run, realMs, false)
+      return -stageBallView(run, realMs, null).position.z
+    })
+    swingStageRun(run, levelSwing(release.pitch, contactAtRealMs), handedInAtMs)
+    const meeting = untilContact(run, handedInAtMs)
+    expect([run.derby.results[0].timing, meeting.met]).toEqual(['perfect', true])
+    expect(Math.min(...drawnDepths, ...meeting.drawnDepths)).toBeGreaterThanOrEqual(BATTER_REACH.back - 1e-9)
   })
 
   it('sends a ball in play from where the bat met it, early, on time, or late, even when the swing is handled late', () => {

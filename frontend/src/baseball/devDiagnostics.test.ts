@@ -9,6 +9,9 @@ import {
   type FrameNote,
   forgetDiagnosedCamera,
 } from './devDiagnostics'
+import { PRACTICE_PITCH_FLIGHT_SECONDS } from './game/difficulty'
+import { contactSeconds } from './game/pitch'
+import { createPracticePlan, planRunPitch } from './game/runPlan'
 import type { RealTimeSwing, StageEvent } from './stage/stageRun'
 import type { HeldObjectLabel } from './vision/heldObject'
 import { createSwingTracker, type Side, type Sweep, type SwingTracker, type TrackerView } from './vision/swingTracker'
@@ -161,11 +164,15 @@ describe('the camera diagnostics', () => {
     sweepEnds(diagnostics, tracker, sweepFrom(-1, { startedAt: 900, crossTime: 1010 }), 1000, swingAt(1010))
     sweepEnds(diagnostics, tracker, sweepFrom(-1, { startedAt: 2900, crossTime: 3010 }), 3000, swingAt(3010))
     const result = { outcome: 'hit', distanceDecimetres: 600, spray: 0, launchDegrees: 20 } as const
+    const plan = createPracticePlan({ pitchCount: 5, difficulty: 'normal' })
+    const pitch = planRunPitch(plan, 0, PRACTICE_PITCH_FLIGHT_SECONDS)
+    diagnoseStageEvent({ type: 'release', pitchIndex: 0, pitch, releasedMs: 2500 }, diagnostics, 2500)
+    // The camera has the bat at the contact point 150 ms after the ball, which the visitor's usual timing judges good.
     const judged: StageEvent = {
       type: 'result',
       pitchIndex: 0,
       result: { ...result, pitchType: 'fastball', timing: 'good', errorMs: -12 },
-      swing: { contactMs: 400, startedMs: 290, speed: 8, heightError: 0 },
+      swing: { contactMs: contactSeconds(pitch) * 1000 + 150, startedMs: 290, speed: 8, heightError: 0 },
     }
     diagnoseStageEvent(judged, diagnostics, 3100)
     // The bat coming back toward the far side, and pose wobble that never left the load, are no sweeps to keep.
@@ -178,6 +185,8 @@ describe('the camera diagnostics', () => {
     const times = [atPitch.leftLoadAt, reported.capturedAt, reported.handledAt, atPitch.stage?.at ?? 0]
     expect(times.map((at) => at - crossing)).toEqual([-110, 56, 76, 90])
     expect([between.stage, atPitch.stage?.timing]).toEqual([null, 'good'])
+    // The camera's lag still shows, as the judged error leaves it out.
+    expect(atPitch.stage?.rawErrorMs).toBeCloseTo(150, 6)
   })
 
   it('names the rules a sweep toward the batting side had not met when it ended', () => {

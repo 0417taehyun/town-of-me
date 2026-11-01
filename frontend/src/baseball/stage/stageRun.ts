@@ -38,7 +38,7 @@ import { MITT_DEPTH } from './stageLayout'
 
 /**
  * A run for the stage to play: its plan, how the visitor plays it (batting side, practice), and whether it is the
- * practice before a run, which keeps its own pace and late limit (createDerby).
+ * practice before a run, which keeps its own pace and late limit and its own judging (createDerby).
  */
 export type StageRunSetup = { plan: RunPlan; log: Omit<DerbyInputLog, 'swings'>; practice?: boolean }
 
@@ -236,8 +236,8 @@ export function takeDerbyUpdate(run: StageRun, update: DerbyUpdate, nowMs: numbe
 
 /**
  * A release puts the next pitch on its way, waiting as long as a swing that touches it could still be reported (in
- * practice the derby takes later swings too, which can no longer touch it); a result, taken at game time `nowMs`, sets
- * up its batted ball, if any, and may end the pitch's wait.
+ * practice, any swing the derby takes, as each is judged against a usual timing that includes it); a result, taken at
+ * game time `nowMs`, sets up its batted ball, if any, and may end the pitch's wait.
  */
 export function stageDerbyEvent(run: StageRun, event: DerbyEvent, nowMs: number) {
   if (event.type === 'release') {

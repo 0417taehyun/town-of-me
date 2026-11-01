@@ -52,6 +52,7 @@ import {
 } from './flow/derbyFlow'
 import { keepScreenOn, requestFullscreen } from './flow/screenRequests'
 import type { StanceWatch } from './flow/stanceHold'
+import { findsUsualTiming } from './game/calibration'
 import { BaseballStage } from './stage/BaseballStage'
 import type { RealTimeSwing, RealTimeSwingCue, StageEvent } from './stage/stageRun'
 import { CameraPanel } from './ui/CameraPanel'
@@ -335,9 +336,7 @@ export function DerbyScreen({
   const panelSizeLabel =
     panelSize === 'off' && panelShown ? cameraCopy.hiddenWhileSearching : cameraCopy.panelSizes[panelSize]
   const feedback =
-    step === 'practice' && run
-      ? shownPracticeFeedback(judgedResult(hud), run.plan.rules.difficulty, flow.practice)
-      : null
+    step === 'practice' && run ? shownPracticeFeedback(judgedResult(hud), run.plan.rules.difficulty) : null
 
   useEffect(() => () => sounds.dispose(), [sounds])
   useEffect(() => (cameraOn ? keepScreenOn() : undefined), [cameraOn])
@@ -444,6 +443,7 @@ export function DerbyScreen({
         <PracticeDoneView
           gauge={gauge}
           stanceNeed={stanceNeed}
+          timed={findsUsualTiming(flow.practice)}
           language={language}
           cameraState={cameraState}
           onPlay={start}

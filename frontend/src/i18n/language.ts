@@ -642,6 +642,8 @@ export const languageCopy = {
         },
         doneTitle: 'Practice done',
         doneNote: 'Your swing timing is set for the runs that follow.',
+        doneNoteUntimed:
+          'Too few practice swings counted to set your timing, so the runs that follow use the standard timing.',
       },
       result: {
         eyebrow: 'Final',
@@ -1428,6 +1430,7 @@ export const languageCopy = {
         },
         doneTitle: '연습 끝',
         doneNote: '스윙 타이밍을 맞췄어요. 이어지는 경기에 그대로 써요.',
+        doneNoteUntimed: '연습 스윙이 적어서 타이밍을 맞추지 못했어요. 이어지는 경기는 기본 타이밍으로 판정해요.',
       },
       result: {
         eyebrow: '결과',
