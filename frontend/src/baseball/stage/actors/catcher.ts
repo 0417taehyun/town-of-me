@@ -19,7 +19,7 @@ import { createMitten, MITTEN } from './mittenHands'
 import { CATCHER_PROFILE } from './teamUniforms'
 
 // The other team's catcher, crouched deep behind the plate facing the pitcher, so his head stays under the batting
-// shot's view of the strike zone. His mitt reaches for where each pitch will end up and holds the ball there; his bare
+// shot's view of home plate and the strike zone. His mitt reaches for where each pitch will end up and holds the ball there; his bare
 // hand waits behind his knee. The rig frame is ballplayerRig.ts's, its +z toward the pitcher; his mitt hand is the left
 // (index 1, on the rig's +x).
 

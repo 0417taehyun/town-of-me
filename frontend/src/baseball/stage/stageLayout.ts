@@ -11,12 +11,12 @@ export const PLAYER_SCALE = PLAYER_HEIGHT / TOWN_CHARACTER_HEIGHT
 
 /**
  * The pitcher stands on the rubber facing home; the catcher crouches behind the plate facing the pitcher, far enough
- * back that his head stays under the batting shot's view of the strike zone.
+ * back that his head stays under the batting shot's view of home plate, not over it or the strike zone's box.
  */
 export const PITCHER_SPOT = { x: 0, y: MOUND.height, z: -MOUND_DISTANCE }
-export const CATCHER_SPOT = { x: 0, y: 0, z: 2.2 }
+export const CATCHER_SPOT = { x: 0, y: 0, z: 2.6 }
 /** The catcher's mitt, in meters in front of the plate center (minus: behind it), where a pitch not hit ends up. */
-export const MITT_DEPTH = -1.75
+export const MITT_DEPTH = -2.15
 
 /** A right-handed batter stands on the third-base side of the plate (-x), a left-handed one mirrored. */
 export function batterSpot(side: BattingSide) {

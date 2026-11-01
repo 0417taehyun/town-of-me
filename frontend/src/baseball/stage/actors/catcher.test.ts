@@ -9,10 +9,13 @@ import { mittSeconds } from '../stageRun'
 import { type Catcher, createCatcher, poseCatcher } from './catcher'
 import { watch } from './headLook'
 
-/** How far (m) a point reaches above the batting shot's line of sight to the bottom of the strike zone. */
+/** The near tip of home plate, the lowest point of the plate and the strike zone's box in the batting shot. */
+const PLATE_TIP = { y: 0, z: STRIKE_ZONE.halfWidth }
+
+/** How far (m) a point reaches above the batting shot's line of sight to the near tip of home plate. */
 function overSightLine(point: Vector3) {
   const eye = BATTING_EYE
-  return point.y - (eye.y + ((STRIKE_ZONE.bottom - eye.y) * (eye.z - point.z)) / eye.z)
+  return point.y - (eye.y + ((PLATE_TIP.y - eye.y) * (eye.z - point.z)) / (eye.z - PLATE_TIP.z))
 }
 
 /** How far (m) the highest of a mesh's vertices reaches above that line of sight. */
@@ -24,7 +27,7 @@ function meshOverSightLine({ geometry, matrixWorld }: Mesh) {
   return Math.max(...overs)
 }
 
-/** How far (m) the head reaches above the batting shot's line of sight to the bottom of the strike zone. */
+/** How far (m) the head reaches above the batting shot's line of sight to the near tip of home plate. */
 function headOverZone(catcher: Catcher) {
   catcher.rig.root.updateMatrixWorld(true)
   const parts: Object3D[] = []
@@ -34,7 +37,7 @@ function headOverZone(catcher: Catcher) {
 }
 
 describe('catcher', () => {
-  it('keeps his head under the batting shot’s view of the strike zone, wherever a pitch takes his mitt', () => {
+  it('keeps his head clear under the batting shot’s view of home plate, wherever a pitch takes his mitt', () => {
     const corners = [-1, 1].flatMap((side) =>
       [PITCH_TARGET_BAND.low, PITCH_TARGET_BAND.high].map((y) => ({ x: side * PITCH_TARGET_BAND.side, y })),
     )
@@ -50,6 +53,6 @@ describe('catcher', () => {
       watch(catcher.rig, catcher.look, end, HEAD_RANGES.catcher, 10)
       return headOverZone(catcher)
     })
-    expect(Math.max(...overs)).toBeLessThan(0)
+    expect(Math.max(...overs)).toBeLessThan(-0.08)
   })
 })

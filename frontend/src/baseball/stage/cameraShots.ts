@@ -7,11 +7,12 @@ import { type BattingSide, FENCE_HEIGHT, fenceDistance, STRIKE_ZONE } from '../g
 import { sprayPoint } from '../game/flight'
 import { RELEASE_POINT } from '../game/pitch'
 import { MOUND } from '../stadium/fieldLayout'
-import { batterSpot, CATCHER_SPOT, PITCHER_SPOT, PLAYER_HEIGHT } from './stageLayout'
+import { batterSpot, PITCHER_SPOT, PLAYER_HEIGHT } from './stageLayout'
 
 // The derby's camera. The batting shot looks straight down the pitch line from above the catcher, so the ball comes at
-// the visitor the way it comes at the webcam they face. A batted ball is chased from behind; a run's showcase home runs
-// (its first, and each one longer than every earlier one) also cut to a landing camera at the top of their flight.
+// the visitor the way it comes at the webcam they face. A batted ball is chased from low behind home plate; a run's
+// showcase home runs (its first, and each one longer than every earlier one) also cut to a landing camera at the top of
+// their flight.
 
 export type ShotKind = 'batting' | 'chase' | 'wide'
 
@@ -28,7 +29,10 @@ export const FRAME_MARGIN = 0.02
 /** The landing camera stands beyond where the ball comes down, off to the side of its path toward center field. */
 export const LANDING_CAMERA = { beyond: 24, aside: 16, height: 10, fov: 50 }
 
-/** What the batting shot must show: the pitcher and his windup, the strike zone, the batter, the catcher's cap. */
+/**
+ * What the batting shot must show: the pitcher and his windup, the strike zone, home plate, the batter. The catcher
+ * crouches far enough back (stageLayout.ts CATCHER_SPOT) that only his head shows, under the plate.
+ */
 export function battingFramePoints(side: BattingSide): Vec3[] {
   const batter = batterSpot(side)
   const { bottom, top, halfWidth } = STRIKE_ZONE
@@ -42,7 +46,6 @@ export function battingFramePoints(side: BattingSide): Vec3[] {
     { x: batter.x, y: 0, z: 0 },
     { x: batter.x, y: PLAYER_HEIGHT + 0.1, z: 0 },
     { x: batter.x * 1.9, y: 1.5, z: 0.3 },
-    { x: 0, y: 1.45, z: CATCHER_SPOT.z + 0.1 },
   ]
 }
 
@@ -89,17 +92,35 @@ export function depthAlong(point: Vec3, eye: Vec3, tilt: number) {
 }
 
 /**
- * Behind and above a batted ball, a little late, rising as it climbs. It stays between the foul lines, so a foul
- * pulled or pushed toward a dugout is watched from behind home plate rather than from on top of the dugout.
+ * The chase camera stands `behind` home plate (m), `height` up, drifting `drift` of the ball's way sideways up to
+ * `driftLimit`; it tilts up after a rising ball no further than `highestTilt` (radians), so the field and the hedge
+ * stay in view, unless the ball would climb more than `ballAbove` of the half screen over the middle.
+ */
+export const CHASE_CAMERA = {
+  behind: 8,
+  height: 3.5,
+  drift: 0.1,
+  driftLimit: 3,
+  fov: 56,
+  highestTilt: 0.26,
+  ballAbove: 0.25,
+}
+
+/**
+ * Low behind home plate, looking out at a batted ball with the field under it, a little late. It never leaves home
+ * plate's side of the field, so a hit is not watched over the pitcher's back nor a foul from on top of a dugout.
  */
 export function chaseShot(ball: Vec3): CameraShot {
-  const z = 11 + ball.z * 0.3
-  const fairWidth = Math.max(0, -z)
+  const { behind, height, drift, driftLimit, fov, highestTilt, ballAbove } = CHASE_CAMERA
+  const position = { x: clamp(ball.x * drift, -driftLimit, driftLimit), y: height, z: behind }
+  const across = Math.hypot(ball.x - position.x, ball.z - position.z)
+  const elevation = Math.atan2(ball.y - height, across)
+  const tilt = Math.max(Math.min(elevation, highestTilt), elevation - ballAbove * ((fov * Math.PI) / 360))
   return {
     kind: 'chase',
-    position: { x: clamp(ball.x * 0.3, -fairWidth, fairWidth), y: clamp(4 + ball.y * 0.45, 4, 26), z },
-    look: { ...ball },
-    fov: 52,
+    position,
+    look: { x: ball.x, y: height + Math.tan(tilt) * across, z: ball.z },
+    fov,
     rate: 3,
     lookRate: 7,
   }
