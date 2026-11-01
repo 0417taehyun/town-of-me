@@ -438,16 +438,22 @@ export function poleTopiaryParts(pole: { x: number; z: number }): PlacedPart[] {
   }))
 }
 
-/** A garden shed open to the field (+z), in the ballpark's colors: its parts by the building role that colors them. */
+/**
+ * A garden shed open to the field (+z), in the ballpark's colors: its parts by the building role that colors them. Its
+ * low walls and shallow roof (`pitch`, radians) stay under the sight lines of the chase camera low behind home plate
+ * (cameraShots.ts chaseShot), so a foul coming down beyond a dugout stays in view until it is nearly down.
+ */
 export function shedParts() {
   const length = 9
   const depth = 3.6
-  const wall = 2.7
+  const wall = 2.3
+  const pitch = 0.25
+  const rise = (depth / 2) * Math.tan(pitch)
   const gable = new ShapeGeometry(
     new Shape()
       .moveTo(-depth / 2, 0)
       .lineTo(depth / 2, 0)
-      .lineTo(0, 1.05)
+      .lineTo(0, rise + 0.07)
       .lineTo(-depth / 2, 0),
   )
   const sideWindows = [-1, 1].map((side) => ({ x: side * (length / 2 + 0.12), side }))
@@ -464,18 +470,18 @@ export function shedParts() {
       })),
     ],
     roof: [-1, 1].map((side) => ({
-      geometry: getRoundedBox(length + 1.2, 0.25, depth / 2 / Math.cos(0.5) + 0.7, 0.1),
-      at: [0, wall + 0.62, (side * depth) / 4.1] as Triple,
-      turn: [side * 0.5, 0, 0] as Triple,
+      geometry: getRoundedBox(length + 1.2, 0.25, depth / 2 / Math.cos(pitch) + 0.7, 0.1),
+      at: [0, wall + rise / 2 + 0.13, (side * depth) / 4.1] as Triple,
+      turn: [side * pitch, 0, 0] as Triple,
     })),
     trim: [
       { geometry: getRoundedBox(length - 0.4, 0.34, 0.5, 0.1), at: [0, 0.76, depth / 2 - 0.1] as Triple },
       ...sideWindows.map(({ x }) => ({
         geometry: windowFrame,
-        at: [x, 1.6, 0] as Triple,
+        at: [x, wall - 1.1, 0] as Triple,
         turn: [0, Math.PI / 2, 0] as Triple,
       })),
-      ...[-2.8, 0, 2.8].map((x) => ({ geometry: windowFrame, at: [x, 1.75, -depth / 2 - 0.12] as Triple })),
+      ...[-2.8, 0, 2.8].map((x) => ({ geometry: windowFrame, at: [x, wall - 0.95, -depth / 2 - 0.12] as Triple })),
     ],
     accent: [
       box([0, 0.12, 0], [length, 0.25, depth]),
@@ -490,12 +496,12 @@ export function shedParts() {
     glass: [
       ...sideWindows.map(({ x, side }) => ({
         geometry: windowPane,
-        at: [x + side * 0.005, 1.6, 0] as Triple,
+        at: [x + side * 0.005, wall - 1.1, 0] as Triple,
         turn: [0, (side * Math.PI) / 2, 0] as Triple,
       })),
       ...[-2.8, 0, 2.8].map((x) => ({
         geometry: windowPane,
-        at: [x, 1.75, -depth / 2 - 0.125] as Triple,
+        at: [x, wall - 0.95, -depth / 2 - 0.125] as Triple,
         turn: [0, Math.PI, 0] as Triple,
       })),
     ],
@@ -523,7 +529,7 @@ export function createShedGeometries() {
 export function shedEaves() {
   return DUGOUT_SPOTS.map((spot) => {
     const frame = partMatrix({ at: [spot.x, 0, spot.z], turn: [0, spot.yaw, 0] })
-    return [-4.8, 4.8].map((x) => new Vector3(x, 2.6, 2.25).applyMatrix4(frame))
+    return [-4.8, 4.8].map((x) => new Vector3(x, 2.2, 2.25).applyMatrix4(frame))
   })
 }
 
