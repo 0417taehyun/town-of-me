@@ -1,4 +1,4 @@
-import type { ObjectDetectorResult } from '@mediapipe/tasks-vision'
+import type { PoseLandmarkerResult } from '@mediapipe/tasks-vision'
 import type { CameraTrackingParts } from './cameraTracking'
 import {
   gripDepth,
@@ -11,11 +11,12 @@ import {
   type StanceHold,
   type StanceNeed,
   stanceSettled,
+  type StanceWait,
   stillSpread,
 } from './flow/stanceHold'
 import type { PitchResult } from './game/derbyScore'
 import { timingErrorMs } from './game/judging'
-import type { PitchPlan } from './game/pitch'
+import { contactSeconds, type PitchPlan } from './game/pitch'
 import type { RealTimeSwing, StageEvent } from './stage/stageRun'
 import { median } from './statistics'
 import { isPlainKey } from './ui/cameraPanelLayout'
@@ -28,15 +29,23 @@ import {
   lockCandidates,
   measureDetection,
   OBJECT_DETECTION_INTERVAL_MS,
-  objectDetections,
   toImageBox,
 } from './vision/heldObject'
-import { distance } from './vision/poseLandmarks'
+import {
+  distance,
+  type Keypoint,
+  keypointAt,
+  type Keypoints,
+  POSE_KEYPOINT_INDEX,
+  type Point,
+  poseKeypoints,
+} from './vision/poseLandmarks'
 import type { PoseFrame } from './vision/poseLoop'
 import {
   energyNeeded,
   type GripSource,
   leftLoadZone,
+  type Side,
   type Sweep,
   type SweepFailure,
   sweepFailures,
@@ -45,16 +54,20 @@ import {
   type TrackerReason,
   type TrackerState,
 } from './vision/swingTracker'
-import type { VisionTask } from './vision/tasksVision'
+import { DEV_DETECTOR_SCORE, type VisionTask } from './vision/tasksVision'
 
 // Dev builds only: why the camera game did what it did on a real webcam. Every camera frame leaves a note of how fast
-// the camera and the vision tasks run, where the swing tracker and the held object are, and each condition of the
-// stance hold; each sweep toward the batting side that left the load leaves one of its timing, from leaving the load
-// through the midline crossing to the swing's report and the stage's reaction, against the swing rules, or why it was
-// no swing. D shows them in a panel (ui/DiagnosticsPanel.tsx) and L saves the last minute of notes as a JSON file on
-// this device, for tuning: numbers and state names only, never a picture, and nothing is sent anywhere.
-// cameraTracking.ts and BaseballApp.tsx reach this module only behind `import.meta.env.DEV`, so a production build
-// leaves it out. Times are performance.now() ms; lengths are shoulder widths (SW), as in vision/swingTracker.ts.
+// the camera and the vision tasks run, what they found, where the swing tracker and the held object are, and each
+// condition of the stance hold; each sweep toward the batting side that left the load leaves one of its timing, from
+// leaving the load through the midline crossing to the swing's report and the stage's reaction, against the swing
+// rules, or why it was no swing; each pitch's release and result, and each tap on the camera picture, leave one too. D
+// shows them in a panel (ui/DiagnosticsPanel.tsx) and L saves the last minute of notes as a JSON file on this device,
+// for tuning. A frame's note keeps what the swing tracker and the stance hold read of it (the upper body's joint
+// positions, what the object detector handed the tracker, the motion in the swing's band, the batting side, the step
+// that waited), so a saved session can be replayed through changed rules (devReplay.ts); never a picture, and nothing
+// is sent anywhere: the file stays on this computer unless the visitor hands it over. cameraTracking.ts and
+// BaseballApp.tsx reach this module only behind `import.meta.env.DEV`, so a production build leaves it out. Times are
+// performance.now() ms; lengths are shoulder widths (SW), as in vision/swingTracker.ts.
 
 export const DIAGNOSTICS_WINDOWS = {
   /** The camera's rates and medians are over this long (ms). */
@@ -102,14 +115,35 @@ export type StanceNote = {
 }
 
 /**
- * One camera frame: when the camera took it and the page handled it, how long the pose task and (on frames it ran)
- * the object detector took, and what the tracker, the detector, and the stance hold (null while no step waits) made of it.
+ * The landmarks a frame's note keeps: the upper body's that the swing tracker and the camera panel read
+ * (vision/poseLandmarks.ts), and the hips, which place the hands against the body for tuning the stance.
+ */
+export const SAVED_LANDMARK_INDEX = { ...POSE_KEYPOINT_INDEX, leftHip: 23, rightHip: 24 } as const
+
+/** The landmarks kept of a frame, as the pose task found them: shares of the picture's width and height. */
+export type SavedPose = Keypoints & { leftHip: Keypoint | null; rightHip: Keypoint | null }
+
+/**
+ * One camera frame: when the camera took it and the page handled it, and which camera it was (one more each time the
+ * camera turns off); how long the pose task and (on frames it ran) the object detector took; the pose's landmarks
+ * (null with nobody in view) and what the detector handed the tracker (cameraTracking.ts detectObjects: what a run
+ * found, nothing when a run was due with no detector at hand, null on frames none was due); the picture's size
+ * (pixels), the batting side, and the step the stance hold followed (null while it followed none); then what the
+ * tracker, the detector, and the stance hold (null while no step waits) made of it, `energy` and `moving` being the
+ * motion the tracker read in its band.
  */
 export type FrameNote = {
   capturedAt: number
   handledAt: number
+  camera: number
   poseMs: number
   objectsMs: number | null
+  pose: SavedPose | null
+  objects: Detection[] | null
+  width: number
+  height: number
+  side: Side
+  wait: StanceWait | null
   state: TrackerState
   reason: TrackerReason | null
   lock: LockNote | null
@@ -154,21 +188,36 @@ export type SweepNote = {
   stage: ({ at: number; rawErrorMs: number | null } & Pick<PitchResult, 'outcome' | 'timing' | 'errorMs'>) | null
 }
 
-/** One run of the object detector: how long (ms) it took and what it found. */
-export type ObjectRun = { ms: number; result: ObjectDetectorResult | null }
+/**
+ * A pitch the stage released, with when its ball reaches the contact point, or a pitch's result and whether a swing
+ * met it; both on the frames' clock, as the page heard them, within a frame of when they happened.
+ */
+export type GameEventNote =
+  | { type: 'release'; handledAt: number; pitchIndex: number; contactAt: number }
+  | ({ type: 'result'; handledAt: number; pitchIndex: number; swung: boolean } & Pick<
+      PitchResult,
+      'outcome' | 'timing' | 'errorMs'
+    >)
+
+/** A tap on the camera picture that asked the tracker to lock what it pointed at (`point`, image units), when heard. */
+export type TapNote = { type: 'tap'; handledAt: number; point: Point }
 
 /** The sweep the tracker is on, and its crossing as of the last frame it was on (null: not crossed yet). */
 export type FollowedSweep = { sweep: Sweep; crossedBefore: number | null }
 
 /**
- * The notes of the last minute, the detector run the next note takes, the sweep the tracker is on, the lock and the
- * latest detector run's best candidate (and when it ran), the camera picture's size, and the pitch the stage last
- * released, which its next result judges.
+ * The notes of the last minute and the events, the camera the next note is of, the pose task's run and how long (ms)
+ * the detector's took that the next note takes, the sweep the tracker is on, the lock and the latest detector run's
+ * best candidate (and when it ran), the camera picture's size, and the pitch the stage last released, which its next
+ * result judges.
  */
 export type Diagnostics = {
   frames: FrameNote[]
   sweeps: SweepNote[]
-  pendingObjects: ObjectRun | null
+  events: (GameEventNote | TapNote)[]
+  camera: number
+  pendingPose: PoseLandmarkerResult | null
+  pendingObjectsMs: number | null
   followed: FollowedSweep | null
   lock: LockNote | null
   candidate: { at: number; best: CandidateNote | null } | null
@@ -180,7 +229,10 @@ export function createDiagnostics(): Diagnostics {
   return {
     frames: [],
     sweeps: [],
-    pendingObjects: null,
+    events: [],
+    camera: 0,
+    pendingPose: null,
+    pendingObjectsMs: null,
     followed: null,
     lock: null,
     candidate: null,
@@ -192,8 +244,8 @@ export function createDiagnostics(): Diagnostics {
 export const DIAGNOSTICS: Diagnostics = createDiagnostics()
 
 /**
- * `parts` with the object detector timed, each run left for the note of the frame it ran on; the pose loop already
- * times the pose task (vision/poseLoop.ts), and the frame brings that.
+ * `parts` with each run of the pose task, and how long each of the object detector's took, left for the note of the
+ * frame it ran on; the pose loop already times the pose task (vision/poseLoop.ts), and the frame brings that.
  */
 export function diagnosedCameraParts(
   parts: CameraTrackingParts,
@@ -201,20 +253,27 @@ export function diagnosedCameraParts(
 ): CameraTrackingParts {
   return {
     ...parts,
+    createTracker: async () =>
+      timedTask(await parts.createTracker(), (_ms, result) => {
+        diagnostics.pendingPose = result
+      }),
     createObjectDetector: async () =>
-      timedTask(await parts.createObjectDetector(), (ms, result) => {
-        diagnostics.pendingObjects = { ms, result }
+      timedTask(await parts.createObjectDetector(), (ms) => {
+        diagnostics.pendingObjectsMs = ms
       }),
   }
 }
 
 /**
  * Forgets what the diagnostics kept of a camera that turned off: the sweep they followed, image points and all, and a
- * detector run no frame took. The notes stay, so L still saves them.
+ * pose or detector run no frame took; the next camera's notes are another camera's. The notes stay, so L still saves
+ * them.
  */
 export function forgetDiagnosedCamera(diagnostics: Diagnostics = DIAGNOSTICS) {
   diagnostics.followed = null
-  diagnostics.pendingObjects = null
+  diagnostics.pendingPose = null
+  diagnostics.pendingObjectsMs = null
+  diagnostics.camera += 1
 }
 
 /** `task`, telling `onRun` how long (ms) each run took and what it found. */
@@ -234,14 +293,15 @@ export function timedTask<Result>(
 }
 
 /**
- * One camera frame as the page handled it: how long (ms) the pose task took on it, the swing it handed over, if any,
- * and the stance hold after it.
+ * One camera frame as the page handled it: how long (ms) the pose task took on it, what the object detector handed the
+ * tracker (null when no run was due), the swing it handed over, if any, and the stance hold after it.
  */
 export type DiagnosedFrame = {
   frame: PoseFrame
   poseMs: number
   video: Pick<HTMLVideoElement, 'videoWidth' | 'videoHeight'>
   tracker: SwingTracker
+  detections: Detection[] | null
   swing: RealTimeSwing | null
   stance: StanceFrame
   hold: StanceHold | null
@@ -249,14 +309,16 @@ export type DiagnosedFrame = {
 
 /** Notes a frame the page handled at `now`, and the sweep it ended or the swing it reported, if any. */
 export function diagnoseFrame(
-  { frame, poseMs, video, tracker, swing, stance, hold }: DiagnosedFrame,
+  { frame, poseMs, video, tracker, detections, swing, stance, hold }: DiagnosedFrame,
   diagnostics: Diagnostics = DIAGNOSTICS,
   now = performance.now(),
 ) {
-  const objects = diagnostics.pendingObjects
-  diagnostics.pendingObjects = null
-  diagnostics.video = { width: video.videoWidth, height: video.videoHeight }
-  const detections = objects?.result ? objectDetections(objects.result, video.videoWidth, video.videoHeight) : null
+  const objectsMs = diagnostics.pendingObjectsMs
+  const pose = savedPose(diagnostics.pendingPose)
+  diagnostics.pendingObjectsMs = null
+  diagnostics.pendingPose = null
+  const { videoWidth: width, videoHeight: height } = video
+  diagnostics.video = { width, height }
   const candidate = detections && tracker.view ? bestCandidate(detections, tracker.view, tracker.aspect) : null
   if (detections) diagnostics.candidate = { at: now, best: candidate }
   const matched = detections && tracker.lock ? lockedDetection(tracker.lock, detections, tracker.aspect) : null
@@ -264,8 +326,15 @@ export function diagnoseFrame(
   diagnostics.frames.push({
     capturedAt: frame.capturedAt,
     handledAt: now,
+    camera: diagnostics.camera,
     poseMs,
-    objectsMs: objects?.ms ?? null,
+    objectsMs,
+    pose,
+    objects: detections,
+    width,
+    height,
+    side: tracker.side,
+    wait: hold && { key: hold.key, afterSwings: hold.afterSwings },
     state: tracker.state,
     reason: tracker.reason,
     lock: diagnostics.lock,
@@ -283,10 +352,33 @@ export function diagnoseFrame(
   if (sweep) diagnostics.sweeps.push(sweep)
   dropOlder(diagnostics.frames, now - DIAGNOSTICS_WINDOWS.logMs)
   dropOlder(diagnostics.sweeps, now - DIAGNOSTICS_WINDOWS.logMs)
+  dropOlder(diagnostics.events, now - DIAGNOSTICS_WINDOWS.logMs)
 }
 
-/** Notes when the stage judged the latest swing handed to it, and how, against the pitch it last released. */
+/** The landmarks a note keeps of the pose task's first pose in `result`; null with nobody in view. */
+export function savedPose(result: PoseLandmarkerResult | null): SavedPose | null {
+  const landmarks = result?.landmarks.at(0)
+  if (!landmarks) return null
+  const { leftHip, rightHip } = SAVED_LANDMARK_INDEX
+  return {
+    ...poseKeypoints(landmarks),
+    leftHip: keypointAt(landmarks, leftHip),
+    rightHip: keypointAt(landmarks, rightHip),
+  }
+}
+
+/** Notes a tap on the camera picture at `point` (image units), which the tracker locks by hand if it can. */
+export function diagnoseTap(point: Point, diagnostics: Diagnostics = DIAGNOSTICS, now = performance.now()) {
+  diagnostics.events.push({ type: 'tap', handledAt: now, point })
+}
+
+/**
+ * Notes each pitch's release and result, and when the stage judged the latest swing handed to it, and how, against the
+ * pitch it last released.
+ */
 export function diagnoseStageEvent(event: StageEvent, diagnostics: Diagnostics = DIAGNOSTICS, now = performance.now()) {
+  const note = gameEventNote(event, now)
+  if (note) diagnostics.events.push(note)
   if (event.type === 'release') diagnostics.released = event.pitch
   if (event.type !== 'result' || !event.swing) return
   const reported = [...diagnostics.sweeps].reverse().find((sweep) => sweep.reported !== null)
@@ -294,6 +386,18 @@ export function diagnoseStageEvent(event: StageEvent, diagnostics: Diagnostics =
   const { outcome, timing, errorMs } = event.result
   const rawErrorMs = diagnostics.released && timingErrorMs(diagnostics.released, event.swing.contactMs, 0)
   reported.stage = { at: now, outcome, timing, errorMs, rawErrorMs }
+}
+
+/** The note of a pitch's release or result heard at `handledAt`; null for the stage's other events. */
+export function gameEventNote(event: StageEvent, handledAt: number): GameEventNote | null {
+  if (event.type === 'release') {
+    const contactAt = handledAt + contactSeconds(event.pitch) * 1000
+    return { type: 'release', handledAt, pitchIndex: event.pitchIndex, contactAt }
+  }
+  if (event.type !== 'result') return null
+  const { outcome, timing, errorMs } = event.result
+  const swung = event.swing !== null
+  return { type: 'result', handledAt, pitchIndex: event.pitchIndex, swung, outcome, timing, errorMs }
 }
 
 /** Drops the notes handled before `since`, oldest first. */
@@ -464,8 +568,13 @@ export function diagnosticsText(diagnostics: Diagnostics, now: number) {
   const latest = diagnostics.frames.at(-1)
   const live = latest ? frameLines(diagnostics, latest, now) : ['camera  no frames yet']
   const keys = `D hides · L saves the last minute (${diagnostics.frames.length} frames, ${diagnostics.sweeps.length} sweeps)`
-  return [...live, ...sweepLines(diagnostics.sweeps.at(-1) ?? null, now), keys].join('\n')
+  return [SAVED_FILE_NOTE, ...live, ...sweepLines(diagnostics.sweeps.at(-1) ?? null, now), keys].join('\n')
 }
+
+/** What the panel says first, where a long panel never cuts it off, of the file L saves. */
+export const SAVED_FILE_NOTE =
+  "L's file: upper-body joint positions and the detector's boxes, no images; it stays on this computer, shared only " +
+  'if you hand it over'
 
 /**
  * The latest frame's lines, with the camera rated over the frames up to it, so a camera that stopped (as on a computer
@@ -615,13 +724,25 @@ export function passMark(passes: boolean) {
   return passes ? '✓' : '✗'
 }
 
-/** What L saves: the rules the notes are judged by, the picture's size, and the last minute of notes. */
+/**
+ * What L saves: the rules the notes are judged by, the picture's size, and the last minute of notes, of the pitches'
+ * events, and of the taps on the camera picture.
+ */
 export function diagnosticsLog(diagnostics: Diagnostics, savedAt: Date) {
   return {
     about:
       'Town of Me /baseball dev diagnostics: the last minute of camera frames as the swing tracker and the stance ' +
-      'hold read them, and the sweeps toward the batting side. Numbers and state names only, no picture. Times are ' +
-      'performance.now() ms (capturedAt: when the camera took the frame; handledAt: when the page handled it). ' +
+      'hold read them, the sweeps toward the batting side, the pitches released and their results, and the taps on ' +
+      'the camera picture (point in image units, x scaled by the aspect). Each frame keeps the upper-body joint ' +
+      'positions the pose task found (pose: nose, shoulders, elbows, wrists, hips; x and y as shares of the picture, ' +
+      'score the visibility), what the object detector handed the tracker (objects: label, score, box as shares of ' +
+      'the picture; [] when a run was due with no detector at hand, null when none was due; only held-object labels ' +
+      'scored at least rules.detectorScore), the picture size in pixels, the camera (one more each time it turned ' +
+      "off), the batting side (side: -1 loads on the picture's left, a right-handed batter), and the step the stance " +
+      'hold followed (wait), so frontend/src/baseball/devReplay.ts can replay it through changed rules. No image or ' +
+      'video frame; this file stays on the computer that saved it, shared only if its visitor hands it over. Times ' +
+      'are performance.now() ms (capturedAt: when the camera took the frame; handledAt: when the page handled it or ' +
+      "heard the event; a release's contactAt: when its ball reaches the contact point). " +
       'Lengths are shoulder widths (SW): grip depth behind the body midline toward the batting side, grip drop below ' +
       "the shoulders. A sweep's stage.errorMs is its timing error as judged, after the visitor's usual timing came " +
       'off; stage.rawErrorMs is against the contact point itself.',
@@ -632,9 +753,11 @@ export function diagnosticsLog(diagnostics: Diagnostics, savedAt: Date) {
       stance: STANCE_HOLD_RULES,
       heldObject: HELD_OBJECT_RULES,
       objectDetectionIntervalMs: OBJECT_DETECTION_INTERVAL_MS,
+      detectorScore: DEV_DETECTOR_SCORE,
     },
     frames: diagnostics.frames,
     sweeps: diagnostics.sweeps,
+    events: diagnostics.events,
   }
 }
 
@@ -643,9 +766,14 @@ export function roundedNumber(_key: string, value: unknown) {
   return typeof value === 'number' ? Math.round(value * 1000) / 1000 : value
 }
 
+/** The saved file's text. */
+export function diagnosticsLogText(diagnostics: Diagnostics, savedAt: Date) {
+  return JSON.stringify(diagnosticsLog(diagnostics, savedAt), roundedNumber)
+}
+
 /** Saves the log as a JSON file through the browser's download, from a Blob on this device. */
 export function saveDiagnosticsLog(diagnostics: Diagnostics = DIAGNOSTICS, savedAt = new Date()) {
-  const text = JSON.stringify(diagnosticsLog(diagnostics, savedAt), roundedNumber)
+  const text = diagnosticsLogText(diagnostics, savedAt)
   const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
   const link = document.createElement('a')
   link.href = url

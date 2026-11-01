@@ -154,8 +154,15 @@ export function createPoseTracker() {
 }
 
 /**
+ * How sure a detection a dev build's object detector reports must be: below the held object's bar, so the diagnostics'
+ * saved log also holds what a lower `candidateScore` would take, for a replay to try (devReplay.ts). Play is the same,
+ * since the likeliest detections come first and only those sure enough count (heldObject.ts lockCandidates).
+ */
+export const DEV_DETECTOR_SCORE = 0.2
+
+/**
  * Builds EfficientDet-Lite0 in video mode, finding only the objects a visitor might hold, sure enough to be one
- * (heldObject.ts), the few likeliest of each frame.
+ * (heldObject.ts; a dev build's go lower), the few likeliest of each frame.
  */
 export async function buildObjectDetector(
   delegate: VisionDelegate,
@@ -166,7 +173,7 @@ export async function buildObjectDetector(
     baseOptions: { modelAssetPath: OBJECT_MODEL_PATH, delegate },
     canvas,
     runningMode: 'VIDEO',
-    scoreThreshold: HELD_OBJECT_RULES.candidateScore,
+    scoreThreshold: import.meta.env.DEV ? DEV_DETECTOR_SCORE : HELD_OBJECT_RULES.candidateScore,
     maxResults: 6,
     categoryAllowlist: [...HELD_OBJECT_LABELS],
   })

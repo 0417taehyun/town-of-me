@@ -1,6 +1,6 @@
 import type { ObjectDetectorResult, PoseLandmarkerResult } from '@mediapipe/tasks-vision'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { diagnosedCameraParts, diagnoseFrame, forgetDiagnosedCamera } from './devDiagnostics'
+import { diagnosedCameraParts, diagnoseFrame, diagnoseTap, forgetDiagnosedCamera } from './devDiagnostics'
 import { devSwingCue, devSwingSeen, devVisitorFrame } from './devSeam'
 import { type CameraGameProblem, cameraProblem } from './deviceGate'
 import {
@@ -210,9 +210,12 @@ export function clearSwingReading(reading: SwingReading) {
   forgetCamera(reading.tracker)
 }
 
+/** What a frame's swing reading made: the swing it completed, if any, and what the detector handed the tracker. */
+export type SwingFrameReading = { swing: RealTimeSwing | null; detections: Detection[] | null }
+
 /**
  * One camera frame's swing reading: the object detector when it is due and may run, the motion in the swing's band,
- * then the tracker. Returns the swing the frame completed, if any.
+ * then the tracker.
  */
 export function readSwingFrame(
   reading: SwingReading,
@@ -220,12 +223,12 @@ export function readSwingFrame(
   video: HTMLVideoElement,
   objects: ObjectDetector | null,
   objectsPaused: boolean,
-): RealTimeSwing | null {
+): SwingFrameReading {
   const detections = objectsPaused ? null : detectObjects(reading, frame.capturedAt, video, objects)
   const energy = reading.energy.measure(video, reading.tracker.band)
   const body = frame.body
   const swing = updateSwingTracker(reading.tracker, { time: frame.capturedAt, body, detections, energy })
-  return swing && cameraSwing(swing)
+  return { swing: swing && cameraSwing(swing), detections }
 }
 
 /**
@@ -285,11 +288,13 @@ const DEV_SWING = import.meta.env.DEV ? devSwingSeen : null
 const DEV_SWING_CUE = import.meta.env.DEV ? devSwingCue : null
 
 /**
- * A dev build times the object detector and notes each frame for its diagnostics panel (devDiagnostics.ts), which
- * forgets the sweep it followed when the camera turns off; production runs the browser's parts as they are.
+ * A dev build times the object detector and notes each frame and each tap on the camera picture for its diagnostics
+ * panel (devDiagnostics.ts), which forgets the sweep it followed when the camera turns off; production runs the
+ * browser's parts as they are.
  */
 const CAMERA_PARTS = import.meta.env.DEV ? diagnosedCameraParts(BROWSER_CAMERA_PARTS) : BROWSER_CAMERA_PARTS
 const DEV_DIAGNOSE = import.meta.env.DEV ? diagnoseFrame : null
+const DEV_DIAGNOSE_TAP = import.meta.env.DEV ? diagnoseTap : null
 const DEV_FORGET_DIAGNOSED = import.meta.env.DEV ? forgetDiagnosedCamera : null
 
 /** What the stance hold and the presence read of a frame: the dev stand-in's, if one stands in, else the camera's. */
@@ -356,10 +361,10 @@ export function useCameraTracking({
     }
     const onFrame = (frame: PoseFrame, objects: ObjectDetector | null, poseMs: number) => {
       current.tracker.settingUp = page.current.settingUp
-      const tracked = readSwingFrame(current, frame, feed, objects, !timed || page.current.objectsPaused)
+      const read = readSwingFrame(current, frame, feed, objects, !timed || page.current.objectsPaused)
       const cue = current.tracker.cue ?? DEV_SWING_CUE?.(frame.capturedAt)
       if (cue) page.current.onSwingCue(cameraSwingCue(cue))
-      const swing = tracked ?? DEV_SWING?.(frame.capturedAt)
+      const swing = read.swing ?? DEV_SWING?.(frame.capturedAt)
       if (swing) page.current.onSwing(swing)
       const mark = objectMark(current.tracker, frame.capturedAt)
       drawCameraView(picture, feed, frame.keypoints, mark, page.current.objectNames)
@@ -370,6 +375,7 @@ export function useCameraTracking({
         poseMs,
         video: feed,
         tracker: current.tracker,
+        detections: read.detections,
         swing: swing ?? null,
         stance: visitor.stance,
         hold,
@@ -412,7 +418,9 @@ export function useCameraTracking({
     setRequest(null)
   }, [])
   const lockAt = useCallback((point: Point) => {
-    if (reading.current) lockByHand(reading.current.tracker, point)
+    if (!reading.current) return
+    DEV_DIAGNOSE_TAP?.(point)
+    lockByHand(reading.current.tracker, point)
   }, [])
   return { video, canvas, status, seen, present, caption, stanceNeed, turnOn, turnOff, lockAt }
 }

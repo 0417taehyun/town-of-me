@@ -5,6 +5,7 @@ import {
   createDiagnostics,
   diagnoseFrame,
   diagnoseStageEvent,
+  diagnoseTap,
   type Diagnostics,
   type FrameNote,
   forgetDiagnosedCamera,
@@ -40,7 +41,8 @@ function noteFrame(
 ) {
   const stance = { time: capturedAt, pose: 'show' as const, grip: null, shoulderWidth: null }
   const frame = { keypoints: null, body: null, capturedAt }
-  diagnoseFrame({ frame, poseMs: 12, video, tracker, swing, stance, hold: null }, diagnostics, capturedAt + HANDLING_MS)
+  const handled = { frame, poseMs: 12, video, tracker, detections: null, swing, stance, hold: null }
+  diagnoseFrame(handled, diagnostics, capturedAt + HANDLING_MS)
 }
 
 /** The swing a frame reports for a sweep that crossed the midline at `crossTime`, 110 ms after leaving the load. */
@@ -112,8 +114,15 @@ function timedNote(handledAt: number, poseMs: number, objectsMs: number | null):
   return {
     capturedAt: handledAt - HANDLING_MS,
     handledAt,
+    camera: 0,
     poseMs,
     objectsMs,
+    pose: null,
+    objects: null,
+    width: 640,
+    height: 480,
+    side: -1,
+    wait: null,
     state: 'locked',
     reason: null,
     lock: null,
@@ -141,11 +150,12 @@ describe('the camera diagnostics', () => {
     expect(summary.latencyMs).toBe(HANDLING_MS)
   })
 
-  it('keeps only the last minute of frames and sweeps to save', () => {
+  it('keeps only the last minute of frames, sweeps, and events to save', () => {
     const diagnostics = createDiagnostics()
     const tracker = createSwingTracker('right')
     sweepEnds(diagnostics, tracker, sweepFrom(-1), 0)
-    expect(diagnostics.sweeps).toHaveLength(1)
+    diagnoseTap({ x: 0.7, y: 0.5 }, diagnostics, 90)
+    expect([diagnostics.sweeps, diagnostics.events].map((notes) => notes.length)).toEqual([1, 1])
     Array.from({ length: 70 * 30 }, (_, index) => 100 + index * (1000 / 30)).forEach((capturedAt) =>
       noteFrame(diagnostics, tracker, capturedAt),
     )
@@ -153,7 +163,7 @@ describe('the camera diagnostics', () => {
     const lastHandled = handled[handled.length - 1]
     expect(lastHandled - handled[0]).toBeLessThanOrEqual(60000)
     expect(handled.length).toBeGreaterThan(59 * 30)
-    expect(diagnostics.sweeps).toEqual([])
+    expect([diagnostics.sweeps, diagnostics.events]).toEqual([[], []])
   })
 
   it('times each swing from its crossing to the stage judging it, and keeps no sweep of the bat coming back', () => {
@@ -187,6 +197,10 @@ describe('the camera diagnostics', () => {
     expect([between.stage, atPitch.stage?.timing]).toEqual([null, 'good'])
     // The camera's lag still shows, as the judged error leaves it out.
     expect(atPitch.stage?.rawErrorMs).toBeCloseTo(150, 6)
+    // The pitch's events line the frames up with it: its ball at the contact point, and the swing that met it.
+    const [release, judgedEvent] = diagnostics.events
+    expect(release.type === 'release' && release.contactAt).toBeCloseTo(2500 + contactSeconds(pitch) * 1000, 6)
+    expect(judgedEvent).toMatchObject({ type: 'result', handledAt: 3100, swung: true, timing: 'good' })
   })
 
   it('names the rules a sweep toward the batting side had not met when it ended', () => {

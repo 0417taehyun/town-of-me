@@ -93,6 +93,9 @@ npm run build
 | Resize or hide derby camera | `V` or the on-screen `Camera view` button        |
 | Toggle derby diagnostics    | `D` (dev build); `L` saves 60 s as JSON          |
 
+The derby's diagnostics file (`L`) holds the last minute's upper-body joint positions and what the object detector
+found, never an image; it stays on this computer and is shared only if you hand it over.
+
 The camera button tunes the follow camera live, and `?` reopens help. Turning off `Ambient motion` in help freezes
 clouds, birds, and water; the system's reduced-motion setting slows them instead.
 

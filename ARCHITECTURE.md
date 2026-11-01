@@ -231,7 +231,7 @@ least 0.7 s so it never flickers, or at once what just happened (a lock, a lost 
 one). The design doc asks for two- or three-word captions; the search caption is longer on purpose, so it also tells a
 visitor with nothing to hold that the hands will do, and the panel's chip wraps within the picture for it and for what a
 step waits for, which the chip shows in its place. Once the camera is off, the motion sampler's last picture and the
-tracked body are wiped along with the panel's.
+tracked body are wiped along with the panel's (a dev build's diagnostics keep their notes, below).
 
 ### The `/baseball` page
 
@@ -295,8 +295,20 @@ camera's frames hand over like tracked ones. In a dev build, D also shows `devDi
 (`ui/DiagnosticsPanel.tsx`) for tuning on a real webcam: the camera's and the vision tasks' timing, the tracker and the
 lock, each stance condition against its limit, and the last sweep from leaving the load to the stage's reaction against
 the swing rules, with the judged swing's raw error against the contact point beside its judged one, since practice's and
-a run's judging take the camera's lag out; L saves the last minute of these numbers as a JSON file on this device, no
-picture. A production build leaves both out. `ui/cameraPanelLayout.ts`
+a run's judging take the camera's lag out; L saves the last minute as a JSON file on this device: these numbers and, for
+each camera frame, what the swing tracker and the stance hold read of it (the upper body's joint positions and the hips,
+what the object detector handed the tracker, the motion in the swing's band, the picture's size, the batting side, and
+the step that waited), with each pitch's release and result and each tap on the camera picture on the frames' clock;
+never a picture. The file stays on this computer unless the visitor hands it over; until the tab closes, a dev build
+also keeps that minute in memory after the camera turns off, so L can still save it. `devReplay.ts` feeds such a file
+back through the swing tracker and the stance hold as their rules are now, taps included, so a real session tunes
+`SWING_RULES`, `STANCE_HOLD_RULES`, and `HELD_OBJECT_RULES` (the motion stays as the page measured it, in the band it
+used then). A dev build's detector reports detections down to 0.2 rather than `candidateScore`, which play still
+filters by, so a replay can lower that bar to 0.2 but can add no label; the file's three decimals can tip a frame near
+a rule's limit the other way, and a file that starts mid-session replays from a fresh tracker and stance hold, so its
+first seconds differ from the notes. The drafts' design leaves out both the diagnostics export and its log replay; dev
+builds keep them, since the rules need a real webcam's tuning. A production build leaves the panel and the saver out;
+nothing in the app imports the replay. `ui/cameraPanelLayout.ts`
 places the camera panel: the mirrored camera is the stage while it sets up, a column under the scoreboard on the side
 opposite the batter from practice on (medium, 29% of the width, by default; V or the camera button cycles medium, large,
 hidden, remembered in `localStorage`), a corner chip while the camera chases a home run, and beside the result screen
