@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect } from 'react'
 import { usePageLanguage } from '../hooks/usePageLanguage'
 import { type AppLanguage, languageCopy } from '../i18n/language'
 import { LanguageSelect } from '../ui/LanguageSelect'
-import { EXIT_PATHS, isNextRulesPreview } from './baseballRoute'
+import { baseballPreview, EXIT_PATHS } from './baseballRoute'
 import { useBallparkGate } from './useBallparkGate'
 
 const BaseballApp = lazy(() => import('./BaseballApp').then((module) => ({ default: module.BaseballApp })))
@@ -12,7 +12,7 @@ const BaseballApp = lazy(() => import('./BaseballApp').then((module) => ({ defau
  * preview opens it, and anyone else gets a card in the town's style without the derby's chunk or the camera.
  */
 export function BaseballGate({ townId }: { townId: string }) {
-  const { gate, retry } = useBallparkGate(townId, isNextRulesPreview(window.location.search))
+  const { gate, retry } = useBallparkGate(townId, baseballPreview(window.location.search) !== null)
   const [language, setLanguage] = usePageLanguage()
   const copy = languageCopy[language]
 

@@ -135,10 +135,11 @@ the role again on every save.
   handles as a resident route; `Use the default walk` goes back to the loop that follows the fountain.
 - **Ballpark** (town settings): `Show the ballpark` lets visitors open `/baseball`; it starts off and, like the walls,
   roof, trim, and accent colors (or `Use theme color`), applies once saved. While it is off, visitors read that the
-  ballpark is coming soon, and `Preview the ballpark` opens the preview described below for you. The
-  pitch count (3–10) and difficulty change only from midnight KST on the first of next month, so the admin schedules
-  next month's rules or cancels the change, and this month's games never change. Once saved, `Try next month's rules`
-  plays them in the same tab at `/baseball?rules=next`, a preview that is never ranked.
+  ballpark is coming soon, and `Preview the ballpark` plays it for you with this month's rules at
+  `/baseball?rules=current`. The pitch count (3–10) and difficulty change only from midnight KST on the first of next
+  month, so the admin schedules next month's rules or cancels the change, and this month's games never change. Once
+  saved, `Try next month's rules` plays them at `/baseball?rules=next`. Both previews open in the same tab and are never
+  ranked.
 - **Guestbook review:** approve or delete notes, waiting ones first.
 - **Admins:** add an email (it gets the editor at its next sign-in) or remove one (its sessions end at once). Your own
   email and the last one cannot be removed.

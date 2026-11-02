@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useState, type MutableRefObject, type ReactNode } from 'react'
 import { MathUtils, type Vector3 } from 'three'
-import { NEXT_RULES_PREVIEW_PATH } from '../baseball/baseballRoute'
+import { CURRENT_RULES_PREVIEW_PATH, NEXT_RULES_PREVIEW_PATH } from '../baseball/baseballRoute'
 import {
   effectiveBallparkRules,
   plannedBallparkRules,
@@ -344,7 +344,7 @@ export function BallparkSettingsFields({
       <p className="editor-note">{copy.visibleNote}</p>
       {!ballpark.visible && !dirty && (
         <div className="editor-actions">
-          <a className="text-button" href={NEXT_RULES_PREVIEW_PATH}>
+          <a className="text-button" href={CURRENT_RULES_PREVIEW_PATH}>
             {copy.preview}
           </a>
         </div>

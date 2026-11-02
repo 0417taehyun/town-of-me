@@ -172,7 +172,7 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   left: auto;
   justify-content: flex-end;
 }
-/* An admin's try of next month's rules, kept in sight on every screen of the run. */
+/* An admin's try (BaseballApp.tsx DerbyScreen), kept in sight on every screen of the run. */
 .derby-preview-badge {
   display: inline-flex;
   align-items: center;
@@ -505,6 +505,10 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   top: calc(100% - 2vh - var(--camera-chip-width) * 0.75);
   width: var(--camera-chip-width);
   padding: 3px;
+}
+/* A preview's badge can stretch the links' row into the chip's corner, so there the chip rises over the row. */
+.derby-screen[data-preview] .camera-panel[data-placement='chip'] {
+  top: calc(100% - 3vh - 38px - var(--camera-chip-width) * 0.75);
 }
 .camera-panel[data-placement='chip'] :is(.camera-state, .camera-headline) {
   display: none;

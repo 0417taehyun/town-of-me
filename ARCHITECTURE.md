@@ -298,9 +298,10 @@ tablet, then WebGL 2) and shows why one cannot play in the visitor's language (a
 later, or when the camera finds this computer too slow to track), then the character, then the derby. Each
 run reads the KST month it starts in and gets a `crypto` seed (`flow/derbyFlow.ts`), so a page left open into a new
 month plays the rules scheduled for it, as loaded with the page, from its next run. The editor's link to `?rules=next`
-(`isNextRulesPreview` in `baseballRoute.ts`) plays the rules scheduled for next month instead, or this month's when
-none are (`plannedBallparkRules`), badged `Preview · not ranked`; once ranked runs exist, such a preview must never get
-a run ticket. The editor opens the preview in the same tab, so the preview's back links and Escape return to `/admin`
+(`baseballPreview` in `baseballRoute.ts`) plays the rules scheduled for next month instead, or this month's when none
+are (`plannedBallparkRules`), and its link to `?rules=current`, shown while the ballpark is hidden, plays this month's;
+both are badged `Preview · not ranked`, and once ranked runs exist, a preview must never get a run ticket. The editor
+opens the preview in the same tab, so the preview's back links and Escape return to `/admin`
 (`baseballExit`). The HUD (`ui/`) keeps only what the stage's events tell it (`derbyCues.ts`): a release carries
 nothing it shows, so the pitch type reaches the screen only in a result, and the result banner waits until the ball is
 down so it never covers the play; the scoreboard's home runs and their summed distance count a home run as its banner

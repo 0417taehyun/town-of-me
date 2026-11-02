@@ -26,7 +26,7 @@ import { useReducedMotion } from '../hooks/useReducedMotion'
 import { type AppLanguage, languageCopy, monthName } from '../i18n/language'
 import { resolveBallparkPalette } from '../scene/venues/ballpark/ballparkThemes'
 import { LanguageSelect } from '../ui/LanguageSelect'
-import { type BaseballExit, baseballExit, EXIT_PATHS, isNextRulesPreview } from './baseballRoute'
+import { type BaseballExit, baseballExit, type BaseballPreview, baseballPreview, EXIT_PATHS } from './baseballRoute'
 import { needsCharacter, withVenueProfile } from './baseballSession'
 import { cameraStateId, isCameraOn, useCameraTracking } from './cameraTracking'
 import { diagnoseStageEvent } from './devDiagnostics'
@@ -108,8 +108,8 @@ export function BaseballApp({ town: loadedTown }: { town: TownSnapshot }) {
   const [block, setBlock] = useState(browserDeviceBlock)
   const blockGraphics = useCallback(() => setBlock('graphics'), [])
   const copy = languageCopy[language]
-  const preview = isNextRulesPreview(window.location.search)
-  const exit = baseballExit(preview)
+  const preview = baseballPreview(window.location.search)
+  const exit = baseballExit(preview !== null)
 
   useEffect(() => {
     document.title = languageCopy[language].baseball.documentTitle
@@ -231,8 +231,8 @@ const DerbyDiagnostics = import.meta.env.DEV ? DiagnosticsPanel : null
  * be played without it. The camera locks what the visitor holds by itself (or lets them swing with their hands), and
  * its object detector rests from each windup until the pitch's ball is down (derbyCues.ts pitchInPlay). A computer that
  * tracks too slowly is blocked for the visit. Every run reads the KST month when it starts, never when
- * the page loaded. A `preview`, the admin's try of next month's rules, plays those scheduled (or this month's when none
- * are) and says so on every screen; it is never ranked. V (or the camera view button) resizes or hides the camera
+ * the page loaded. A `preview` is the admin's try: of next month's rules, which plays those scheduled (or this month's
+ * when none are), or of the hidden ballpark, which plays this month's; it says so on every screen and is never ranked. V (or the camera view button) resizes or hides the camera
  * panel beside the play, the result screen can turn the camera off, and Escape leaves from any of these screens: for
  * the town, or from a preview back to the editor.
  */
@@ -245,7 +245,7 @@ export function DerbyScreen({
   onGraphicsUnavailable,
 }: {
   ballpark: BallparkSettings
-  preview: boolean
+  preview: BaseballPreview | null
   profile: PlayerProfile | undefined
   language: AppLanguage
   onLanguageChange: (language: AppLanguage) => void
@@ -281,8 +281,8 @@ export function DerbyScreen({
     },
     [cameraSwinging],
   )
-  const rulesFor = preview ? plannedBallparkRules : effectiveBallparkRules
-  const exit = baseballExit(preview)
+  const rulesFor = preview === 'next' ? plannedBallparkRules : effectiveBallparkRules
+  const exit = baseballExit(preview !== null)
 
   const begin = (next: DerbyFlow) => {
     swings.current = []
@@ -434,7 +434,7 @@ export function DerbyScreen({
     '--camera-panel-edge': `${PANEL_EDGE}px`,
   } as CSSProperties
   return (
-    <main className="derby-screen" data-panel-side={panel.side} style={layoutStyle}>
+    <main className="derby-screen" data-panel-side={panel.side} data-preview={preview ?? undefined} style={layoutStyle}>
       <BaseballStage
         language={language}
         label={copy.baseball.stageLabel}
@@ -540,13 +540,14 @@ export function DerbyScreen({
             )}
             <li>{cameraCopy.swingTip}</li>
           </ul>
-          {preview && (
+          {preview === 'next' && (
             <p className="baseball-note derby-preview-note">
               {upcoming
                 ? venueCopy.previewPlays(monthName(upcoming.fromMonth, month, language))
                 : venueCopy.previewCurrent}
             </p>
           )}
+          {preview === 'current' && <p className="baseball-note derby-preview-note">{venueCopy.previewThisMonth}</p>}
           {status.kind === 'off' && status.stoppedBy && (
             <p className="baseball-note derby-camera-stopped" role="status">
               {cameraCopy.stopped[status.stoppedBy]}

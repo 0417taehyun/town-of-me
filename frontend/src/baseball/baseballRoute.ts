@@ -14,9 +14,16 @@ export function isBaseballPath(pathname: string) {
 /** The derby under the rules scheduled for next month, for the admin to try; such a run is never ranked. */
 export const NEXT_RULES_PREVIEW_PATH = `${BASEBALL_PATH}?rules=next`
 
-/** Whether the page's query asks for the rules scheduled for next month instead of this month's. */
-export function isNextRulesPreview(search: string) {
-  return new URLSearchParams(search).get('rules') === 'next'
+/** The derby under this month's rules, for the admin to try while the ballpark is hidden; never ranked either. */
+export const CURRENT_RULES_PREVIEW_PATH = `${BASEBALL_PATH}?rules=current`
+
+/** An admin's preview, by whose rules it plays: next month's or this month's. */
+export type BaseballPreview = 'next' | 'current'
+
+/** The preview the page's query asks for (`rules=next` or `rules=current`), or null for a visitor's game. */
+export function baseballPreview(search: string): BaseballPreview | null {
+  const rules = new URLSearchParams(search).get('rules')
+  return rules === 'next' || rules === 'current' ? rules : null
 }
 
 /** Where the page's back links and Escape lead, by `baseballExit`. */

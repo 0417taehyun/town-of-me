@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '../data/adminSession'
-import { ballparkOpens, isBaseballPath, isNextRulesPreview, NEXT_RULES_PREVIEW_PATH } from './baseballRoute'
+import {
+  ballparkOpens,
+  baseballPreview,
+  CURRENT_RULES_PREVIEW_PATH,
+  isBaseballPath,
+  NEXT_RULES_PREVIEW_PATH,
+} from './baseballRoute'
 
 const signedIn = (role: SessionUser['role']) => vi.fn(async () => ({ id: 'user', displayName: 'Robin', role }))
 
@@ -10,16 +16,16 @@ describe('baseball route', () => {
     expect(['/', '/admin', '/baseballs', '/baseball/play'].map(isBaseballPath)).toEqual([false, false, false, false])
   })
 
-  it("previews next month's rules only when the query asks for them, as the editor's link does", () => {
-    const editorLink = new URL(NEXT_RULES_PREVIEW_PATH, 'https://town.example')
-    expect(isBaseballPath(editorLink.pathname) && isNextRulesPreview(editorLink.search)).toBe(true)
-    expect(isNextRulesPreview('?lang=ko&rules=next')).toBe(true)
-    expect(['', '?rules=current', '?rules=nextmonth', '?rule=next'].map(isNextRulesPreview)).toEqual([
-      false,
-      false,
-      false,
-      false,
+  it("previews next month's rules or this month's only when the query asks, as the editor's links do", () => {
+    const links = [NEXT_RULES_PREVIEW_PATH, CURRENT_RULES_PREVIEW_PATH].map(
+      (path) => new URL(path, 'https://town.example'),
+    )
+    expect(links.map((link) => isBaseballPath(link.pathname) && baseballPreview(link.search))).toEqual([
+      'next',
+      'current',
     ])
+    expect(baseballPreview('?lang=ko&rules=next')).toBe('next')
+    expect(['', '?rules=nextmonth', '?rule=next'].map(baseballPreview)).toEqual([null, null, null])
   })
 
   it('opens a hidden ballpark only for a signed-in admin on the preview, asking who is signed in only then', async () => {
