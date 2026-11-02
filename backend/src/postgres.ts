@@ -14,11 +14,14 @@ import type {
   FinishedRun,
   GameRun,
   LeaderboardEntry,
+  LinkedInStatus,
   NameStatus,
   ReviewStatus,
+  RunProfile,
   RunStatus,
   SettleEntry,
 } from './leaderboard.js'
+import type { EntryReport, ReportResolution, ReportTarget, VisitorRunCounts } from './leaderboardReview.js'
 import type { GuestbookEntryChanges, Store } from './store.js'
 import {
   type BallparkRules,
@@ -80,6 +83,8 @@ type GameRunRow = {
   score: number | null
   tiebreak: number | null
   flags: string[]
+  profile: RunProfile | null
+  reviewed_at: Date | null
 }
 
 type LeaderboardEntryRow = {
@@ -95,11 +100,28 @@ type LeaderboardEntryRow = {
   author_name: string | null
   name_status: NameStatus | null
   author_appearance: CharacterAppearance
+  appearance_public: boolean
   listed: boolean
   review_status: ReviewStatus
+  linkedin_profile_url: string | null
+  linkedin_status: LinkedInStatus | null
+  linkedin_code: string | null
+  takedown: boolean
   created_at: Date
   updated_at: Date
 }
+
+type EntryReportRow = {
+  id: string
+  entry_id: string
+  target: ReportTarget
+  reason: EntryReport['reason']
+  created_at: Date
+  resolved_at: Date | null
+  resolution: ReportResolution | null
+}
+
+type VisitorRunCountsRow = { visitor_hash: string; runs: number; abandoned: number; flagged: number }
 
 type TransactionRow = { state: string; nonce: string; expires_at: Date }
 
@@ -447,7 +469,8 @@ export class PostgresStore implements Store {
       // The row lock this takes makes a second result for the same run wait, then find it no longer issued.
       const { rows } = await client.query<GameRunRow>(
         `UPDATE minigame_runs
-         SET status = $3, submitted_at = $4, input_log = $5, result = $6, score = $7, tiebreak = $8, flags = $9
+         SET status = $3, submitted_at = $4, input_log = $5, result = $6, score = $7, tiebreak = $8, flags = $9,
+           profile = $10
          WHERE id = $1 AND visitor_hash = $2 AND status = 'issued' AND expires_at > $4 RETURNING *`,
         [
           id,
@@ -459,6 +482,7 @@ export class PostgresStore implements Store {
           finished.score,
           finished.tiebreak,
           finished.flags,
+          jsonOrNull(finished.profile),
         ],
       )
       const row = rows[0]
@@ -499,8 +523,9 @@ export class PostgresStore implements Store {
 
   async updateEntry(id: string, expectedUpdatedAt: string, changes: EntryChanges): Promise<LeaderboardEntry | null> {
     const { rows } = await this.pool.query<LeaderboardEntryRow>(
-      `UPDATE minigame_entries SET author_name = $3, name_status = $4, author_appearance = $5, listed = $6,
-         review_status = $7, updated_at = $8
+      `UPDATE minigame_entries SET author_name = $3, name_status = $4, author_appearance = $5, appearance_public = $6,
+         listed = $7, review_status = $8, linkedin_profile_url = $9, linkedin_status = $10, linkedin_code = $11,
+         takedown = $12, updated_at = $13
        WHERE id = $1 AND updated_at = $2::timestamptz RETURNING *`,
       [
         id,
@@ -508,12 +533,142 @@ export class PostgresStore implements Store {
         changes.authorName,
         changes.nameStatus,
         JSON.stringify(changes.appearance),
+        changes.appearancePublic,
         changes.listed,
         changes.reviewStatus,
+        changes.linkedIn?.profileUrl ?? null,
+        changes.linkedIn?.status ?? null,
+        changes.linkedIn?.code ?? null,
+        changes.takedown,
         changes.updatedAt,
       ],
     )
     return mapFirstRow(rows, toLeaderboardEntry)
+  }
+
+  async getEntry(id: string): Promise<LeaderboardEntry | null> {
+    const { rows } = await this.pool.query<LeaderboardEntryRow>('SELECT * FROM minigame_entries WHERE id = $1', [id])
+    return mapFirstRow(rows, toLeaderboardEntry)
+  }
+
+  async listEntries(board: BoardKey): Promise<LeaderboardEntry[]> {
+    const { rows } = await this.pool.query<LeaderboardEntryRow>(
+      `SELECT * FROM minigame_entries WHERE game = $1 AND season = $2
+       ORDER BY score DESC, tiebreak DESC, achieved_at, id`,
+      [board.game, board.season],
+    )
+    return rows.map(toLeaderboardEntry)
+  }
+
+  async listRunsForReview(board: BoardKey): Promise<GameRun[]> {
+    const { rows } = await this.pool.query<GameRunRow>(
+      `SELECT * FROM minigame_runs
+       WHERE game = $1 AND season = $2 AND status = 'flagged' AND reviewed_at IS NULL ORDER BY submitted_at, id`,
+      [board.game, board.season],
+    )
+    return rows.map(toGameRun)
+  }
+
+  async countRunsByVisitor(board: BoardKey): Promise<VisitorRunCounts[]> {
+    const { rows } = await this.pool.query<VisitorRunCountsRow>(
+      `SELECT visitor_hash, count(*)::integer AS runs,
+         count(*) FILTER (WHERE status = 'abandoned')::integer AS abandoned,
+         count(*) FILTER (WHERE status = 'flagged')::integer AS flagged
+       FROM minigame_runs WHERE game = $1 AND season = $2 GROUP BY visitor_hash`,
+      [board.game, board.season],
+    )
+    return rows.map((row) => ({
+      visitorHash: row.visitor_hash,
+      runs: row.runs,
+      abandoned: row.abandoned,
+      flagged: row.flagged,
+    }))
+  }
+
+  async hasSubmittedRun(game: string, visitorHash: string): Promise<boolean> {
+    const { rows } = await this.pool.query(
+      'SELECT 1 FROM minigame_runs WHERE game = $1 AND visitor_hash = $2 AND submitted_at IS NOT NULL LIMIT 1',
+      [game, visitorHash],
+    )
+    return rows.length > 0
+  }
+
+  async acceptRun(
+    id: string,
+    reviewedAt: string,
+    settle: SettleEntry,
+  ): Promise<{ run: GameRun; settlement: EntrySettlement } | null> {
+    // A throwing `settle` rolls the acceptance back with the record.
+    return inTransaction(this.pool, async (client) => {
+      const { rows } = await client.query<GameRunRow>(
+        `UPDATE minigame_runs SET status = 'scored', reviewed_at = $2
+         WHERE id = $1 AND status = 'flagged' AND reviewed_at IS NULL RETURNING *`,
+        [id, reviewedAt],
+      )
+      const row = rows[0]
+      if (!row) return null
+      const run = toGameRun(row)
+      return { run, settlement: await settleEntryWithin(client, run, settle) }
+    })
+  }
+
+  async rejectRun(id: string, reviewedAt: string): Promise<GameRun | null> {
+    const { rows } = await this.pool.query<GameRunRow>(
+      `UPDATE minigame_runs SET reviewed_at = $2
+       WHERE id = $1 AND status = 'flagged' AND reviewed_at IS NULL RETURNING *`,
+      [id, reviewedAt],
+    )
+    return mapFirstRow(rows, toGameRun)
+  }
+
+  async addReport(report: EntryReport): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO minigame_reports (id, entry_id, target, reason, created_at, resolved_at, resolution)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [report.id, report.entryId, report.target, report.reason, report.createdAt, report.resolvedAt, report.resolution],
+    )
+  }
+
+  async listReports(board: BoardKey): Promise<EntryReport[]> {
+    const { rows } = await this.pool.query<EntryReportRow>(
+      `SELECT r.* FROM minigame_reports r JOIN minigame_entries e ON e.id = r.entry_id
+       WHERE e.game = $1 AND e.season = $2 ORDER BY r.created_at, r.id`,
+      [board.game, board.season],
+    )
+    return rows.map(toEntryReport)
+  }
+
+  async resolveReports(
+    entryId: string,
+    target: ReportTarget,
+    resolution: ReportResolution,
+    resolvedAt: string,
+  ): Promise<void> {
+    await this.pool.query(
+      `UPDATE minigame_reports SET resolution = $3, resolved_at = $4
+       WHERE entry_id = $1 AND target = $2 AND resolved_at IS NULL`,
+      [entryId, target, resolution, resolvedAt],
+    )
+  }
+
+  async isLinkBlocked(profileHash: string): Promise<boolean> {
+    const { rows } = await this.pool.query('SELECT 1 FROM minigame_link_blocks WHERE profile_hash = $1', [profileHash])
+    return rows.length > 0
+  }
+
+  async blockLink(profileHash: string, createdAt: string): Promise<void> {
+    await this.pool.query(
+      'INSERT INTO minigame_link_blocks (profile_hash, created_at) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [profileHash, createdAt],
+    )
+  }
+
+  async eraseVisitorGameData(game: string, visitorHash: string): Promise<void> {
+    await inTransaction(this.pool, async (client) => {
+      // Records first, which takes their reports with them, so no record points at a run being deleted.
+      await client.query('DELETE FROM minigame_entries WHERE game = $1 AND visitor_hash = $2', [game, visitorHash])
+      await client.query('DELETE FROM minigame_runs WHERE game = $1 AND visitor_hash = $2', [game, visitorHash])
+    })
   }
 }
 
@@ -548,13 +703,16 @@ export async function writeEntry(client: PoolClient, entry: LeaderboardEntry): P
   await client.query(
     `INSERT INTO minigame_entries
      (id, game, season, visitor_hash, best_run_id, score, tiebreak, result, achieved_at, author_name, name_status,
-      author_appearance, listed, review_status, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      author_appearance, listed, review_status, created_at, updated_at, appearance_public, linkedin_profile_url,
+      linkedin_status, linkedin_code, takedown)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
      ON CONFLICT (id) DO UPDATE SET
        best_run_id = EXCLUDED.best_run_id, score = EXCLUDED.score, tiebreak = EXCLUDED.tiebreak,
        result = EXCLUDED.result, achieved_at = EXCLUDED.achieved_at, author_name = EXCLUDED.author_name,
        name_status = EXCLUDED.name_status, author_appearance = EXCLUDED.author_appearance, listed = EXCLUDED.listed,
-       review_status = EXCLUDED.review_status, updated_at = EXCLUDED.updated_at`,
+       review_status = EXCLUDED.review_status, updated_at = EXCLUDED.updated_at,
+       appearance_public = EXCLUDED.appearance_public, linkedin_profile_url = EXCLUDED.linkedin_profile_url,
+       linkedin_status = EXCLUDED.linkedin_status, linkedin_code = EXCLUDED.linkedin_code, takedown = EXCLUDED.takedown`,
     [
       entry.id,
       entry.game,
@@ -572,6 +730,11 @@ export async function writeEntry(client: PoolClient, entry: LeaderboardEntry): P
       entry.reviewStatus,
       entry.createdAt,
       entry.updatedAt,
+      entry.appearancePublic,
+      entry.linkedIn?.profileUrl ?? null,
+      entry.linkedIn?.status ?? null,
+      entry.linkedIn?.code ?? null,
+      entry.takedown,
     ],
   )
 }
@@ -598,6 +761,8 @@ export function toGameRun(row: GameRunRow): GameRun {
     score: row.score,
     tiebreak: row.tiebreak,
     flags: row.flags,
+    profile: row.profile,
+    reviewedAt: row.reviewed_at?.toISOString() ?? null,
   }
 }
 
@@ -615,10 +780,31 @@ export function toLeaderboardEntry(row: LeaderboardEntryRow): LeaderboardEntry {
     authorName: row.author_name,
     nameStatus: row.name_status,
     appearance: row.author_appearance,
+    appearancePublic: row.appearance_public,
     listed: row.listed,
     reviewStatus: row.review_status,
+    linkedIn: toEntryLinkedIn(row),
+    takedown: row.takedown,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
+  }
+}
+
+/** The three columns are all set or all null (a table check). */
+export function toEntryLinkedIn(row: LeaderboardEntryRow): LeaderboardEntry['linkedIn'] {
+  if (row.linkedin_profile_url === null || row.linkedin_status === null || row.linkedin_code === null) return null
+  return { profileUrl: row.linkedin_profile_url, status: row.linkedin_status, code: row.linkedin_code }
+}
+
+export function toEntryReport(row: EntryReportRow): EntryReport {
+  return {
+    id: row.id,
+    entryId: row.entry_id,
+    target: row.target,
+    reason: row.reason,
+    createdAt: row.created_at.toISOString(),
+    resolvedAt: row.resolved_at?.toISOString() ?? null,
+    resolution: row.resolution,
   }
 }
 

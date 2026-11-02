@@ -28,7 +28,7 @@ Nothing personal is in the repository. A fork changes its owner, pet, residents,
 | Venue settings: whether visitors see the ballpark, its colors, pitch count, and difficulty, and next month's rules             | database (`towns.venues`)                                  | admins at `/admin`              |
 | Admin emails                                                                                                                   | database (`admin_emails`), filled from `ADMIN_EMAILS` once | admins at `/admin`              |
 | Guestbook notes                                                                                                                | database (`guestbook_entries`)                             | visitors write, admins approve  |
-| Ranked derby runs and each visitor's best record per KST month                                                                 | database (`minigame_runs`, `minigame_entries`)             | visitors play, server scores    |
+| Ranked derby runs, each visitor's best record per KST month, its optional LinkedIn link, reports, and blocked links            | database (`minigame_*`)                                    | visitors play, admins review    |
 | A visitor's character, camera settings, guide progress, language                                                               | the browser tab (`sessionStorage`)                         | the visitor                     |
 | Object kinds, variants, walks, skids, copy, procedural geometry                                                                | frontend code                                              | contributors                    |
 | The sample town a fresh database starts from                                                                                   | `backend/seed/town.json` (fictional), or `TOWN_SEED_PATH`  | contributors, or a private file |
@@ -208,6 +208,8 @@ server.mjs (Node runtime: .env, store, seeding, HTTP)
 | `derbyJudge/`                  | Copy of the frontend's `baseball/game/` judge: scores a run again from its log.    |
 | `homeRunDerby.ts`              | The ranked derby: its result's shape, the server's score, and the review checks.   |
 | `leaderboard.ts`               | Runs, monthly records, the public order, and how a scored run changes a record.    |
+| `leaderboardIdentity.ts`       | What a record shows of its player: the board's name check and LinkedIn link check. |
+| `leaderboardReview.ts`         | The admin's review queue and actions on records and held runs, and reports.        |
 
 Tests run with `npm test` through `test/run.ts`. `test/storeContract.ts` runs the same behaviors against both stores
 (PostgreSQL when `TEST_DATABASE_URL` is set); the flow tests drive the HTTP handler.
@@ -221,7 +223,8 @@ Tests run with `npm test` through `test/run.ts`. `test/storeContract.ts` runs th
 - **Guestbook:** anyone writes one note a day per browser cookie; notes stay pending until an admin approves them.
 - **Ranked run:** the derby asks for a run (rules for the KST month, a seed) → plays it → sends the raw swing numbers
   → the server scores them again and keeps the visitor's best record for the month the run was issued in. A listed
-  record joins the public board, whose first three are the statues (`/podium`).
+  record joins the public board, whose first three are the statues (`/podium`); they stand unchecked, and an admin
+  reviews them, held runs, links, and reports afterwards.
 - **Resident dialogue:** an admin drafts it from a reference with OpenRouter and reviews it before saving; visits never
   call an LLM.
 

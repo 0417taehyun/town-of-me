@@ -2,9 +2,11 @@ import { randomInt } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 import { parseCharacterAppearance, type CharacterAppearance } from './character.js'
 import type { DerbyInputLog } from './derbyJudge/derbyScore.js'
+import { DomainError } from './domain.js'
 import type { DerbyRunRecord, PublicDerbyResult } from './homeRunDerby.js'
+import { parseLinkedInRequest, profileHint, type LinkedInLink } from './leaderboardIdentity.js'
 import type { BallparkRules } from './town.js'
-import { nextRankingMonth, rankingDay, rankingMonthStart } from './town.js'
+import { nextRankingMonth, rankingDay, rankingMonthInput, rankingMonthStart } from './town.js'
 import { inputRecord, invalidInput, optionalInput, singleLineText } from './validation.js'
 
 // The monthly boards, apart from any one game: a board is a game and a KST month (its season), and each visitor has at
@@ -44,10 +46,17 @@ export interface GameRun {
   tiebreak: number | null
   /** Why a run is held for review, or why it was rejected. */
   flags: string[]
+  /** A held run's profile, so accepting it settles the record as if it had scored at once; `null` for any other run. */
+  profile: RunProfile | null
+  /** When the admin accepted or dismissed a held run; `null` while it waits. */
+  reviewedAt: string | null
 }
 
 /** How a run ends: `scored`, `flagged`, or `rejected`, with what the server worked out. */
-export type FinishedRun = Pick<GameRun, 'status' | 'inputLog' | 'result' | 'score' | 'tiebreak' | 'flags'> & {
+export type FinishedRun = Pick<
+  GameRun,
+  'status' | 'inputLog' | 'result' | 'score' | 'tiebreak' | 'flags' | 'profile'
+> & {
   submittedAt: string
 }
 
@@ -60,6 +69,17 @@ export interface BoardKey {
 export type NameStatus = 'pending' | 'approved' | 'rejected'
 /** `pending` does not hide a record; only `disqualified` takes it off the board. */
 export type ReviewStatus = 'pending' | 'approved' | 'disqualified'
+/** `pending` until the admin sees the code on the profile; `reported` once someone said the profile is theirs. */
+export type LinkedInStatus = 'pending' | 'approved' | 'reported'
+
+/** A record's optional LinkedIn link, which only its statue shows, and only once approved. */
+export interface EntryLinkedIn {
+  /** `https://www.linkedin.com/in/<id>`, the id percent-encoded. */
+  profileUrl: string
+  status: LinkedInStatus
+  /** What the visitor puts on the profile for the admin to see (`ownershipCode`). */
+  code: string
+}
 
 /** A visitor's best accepted run on one board, and how it is shown. */
 export interface LeaderboardEntry {
@@ -81,9 +101,15 @@ export interface LeaderboardEntry {
   nameStatus: NameStatus | null
   /** Kept while unlisted too, for the visitor's own view. */
   appearance: CharacterAppearance
+  /** `false` shows the default batter instead: the admin hid the appearance, a report did, or a takedown. */
+  appearancePublic: boolean
   /** Whether the visitor put the record on the public board. */
   listed: boolean
   reviewStatus: ReviewStatus
+  /** Only on a listed record, in any season, while its visitor keeps it on. */
+  linkedIn: EntryLinkedIn | null
+  /** Anonymised on a takedown request: on this board it never shows a name, link, or appearance again. */
+  takedown: boolean
   createdAt: string
   /** Moves forward on every change, so a write names the version it read. */
   updatedAt: string
@@ -92,12 +118,38 @@ export interface LeaderboardEntry {
 /** What a conditional entry update replaces. */
 export type EntryChanges = Pick<
   LeaderboardEntry,
-  'authorName' | 'nameStatus' | 'appearance' | 'listed' | 'reviewStatus' | 'updatedAt'
+  | 'authorName'
+  | 'nameStatus'
+  | 'appearance'
+  | 'appearancePublic'
+  | 'listed'
+  | 'reviewStatus'
+  | 'linkedIn'
+  | 'takedown'
+  | 'updatedAt'
 >
 
-/** What the visitor asks of their own record: whether it is listed, and the character and name it shows. */
-export type OwnEntryUpdate =
-  { listed: false; profile: RunProfile | null } | { listed: boolean | null; profile: RunProfile }
+/**
+ * What the visitor asks of this month's record: whether it is listed, the character and name it shows, and its link
+ * (`undefined` leaves it, `null` turns it off).
+ */
+export interface OwnEntryUpdate {
+  listed: boolean | null
+  profile: RunProfile | null
+  linkedIn: LinkedInLink | null | undefined
+}
+
+/** What the visitor may still do to a past season's record: anonymise it, or turn its link off. */
+export interface PastEntryUpdate {
+  anonymize: boolean
+  linkedInOff: boolean
+}
+
+/** The new name's status, decided before the change (`leaderboardNameStatus`), and a code in case a link is new. */
+export interface OwnEntryDecisions {
+  nameStatus: NameStatus
+  linkedInCode: string
+}
 
 /** Who a run's result says played it: an appearance, and a name when the tab had one. */
 export interface RunProfile {
@@ -115,6 +167,10 @@ export interface BoardCandidate {
   result: PublicDerbyResult
   achievedAt: string
   profile: RunProfile
+  /** What the profile's name gets if the record is new and listed (`leaderboardNameStatus`). */
+  nameStatus: Extract<NameStatus, 'pending' | 'rejected'>
+  /** A run the admin accepted enters `approved`, since they have seen it; any other enters `pending`. */
+  reviewStatus: Extract<ReviewStatus, 'pending' | 'approved'>
 }
 
 /** What a scored run does to its visitor's record. */
@@ -147,8 +203,11 @@ export function randomRunSeed(): number {
   return randomInt(0, 2 ** 32)
 }
 
+/** Where a record, or a run that would be one, falls in the public order. */
+export type BoardPlace = Pick<LeaderboardEntry, 'id' | 'score' | 'tiebreak' | 'achievedAt'>
+
 /** `left` before `right` in the public order: home runs, distance, the earlier record, then the id. */
-export function boardOrder(left: LeaderboardEntry, right: LeaderboardEntry): number {
+export function boardOrder(left: BoardPlace, right: BoardPlace): number {
   return (
     right.score - left.score ||
     right.tiebreak - left.tiebreak ||
@@ -171,6 +230,29 @@ export function isPublicEntry(entry: LeaderboardEntry): boolean {
 /** A record's version after a change at `now`: always later than `previous`, even within the same millisecond. */
 export function nextVersion(previous: string, now: string): string {
   return new Date(Math.max(Date.parse(now), Date.parse(previous) + 1)).toISOString()
+}
+
+/** `changes` over the record as it stands, at a new version. */
+export function entryChanges(entry: LeaderboardEntry, changes: Partial<EntryChanges>, now: string): EntryChanges {
+  return {
+    authorName: entry.authorName,
+    nameStatus: entry.nameStatus,
+    appearance: entry.appearance,
+    appearancePublic: entry.appearancePublic,
+    listed: entry.listed,
+    reviewStatus: entry.reviewStatus,
+    linkedIn: entry.linkedIn,
+    takedown: entry.takedown,
+    ...changes,
+    updatedAt: nextVersion(entry.updatedAt, now),
+  }
+}
+
+/** The season a request names, this one by default: malformed is `400`, and a season still to come has no board. */
+export function boardSeason(requested: unknown, currentSeason: string): string {
+  const season = requested === null ? currentSeason : rankingMonthInput(requested, 'season')
+  if (season > currentSeason) throw new DomainError('NOT_FOUND', 'That season has not started')
+  return season
 }
 
 /** The name is normalized like the board compares it; the appearance is the frontend `PlayerProfile` shape. */
@@ -202,14 +284,15 @@ export function settleBoardEntry(
 
 /**
  * A visitor's first record on a board stays listed like their latest record of the game, unless it looks like
- * someone else played: then nobody's earlier consent publishes it.
+ * someone else played: then nobody's earlier consent publishes it. Nor does a record taken down, and a link is never
+ * carried over.
  */
 export function firstEntry(
   candidate: BoardCandidate,
   latest: LeaderboardEntry | null,
   board: BoardKey & { visitorHash: string },
 ): EntrySettlement {
-  const wasListed = latest?.listed === true
+  const wasListed = latest?.listed === true && !latest.takedown
   const sameVisitor = latest !== null && looksLike(latest, candidate.profile)
   const listed = wasListed && sameVisitor
   const name = listed ? candidate.profile.name : null
@@ -225,10 +308,13 @@ export function firstEntry(
       result: candidate.result,
       achievedAt: candidate.achievedAt,
       authorName: name,
-      nameStatus: name === null ? null : 'pending',
+      nameStatus: name === null ? null : candidate.nameStatus,
       appearance: candidate.profile.appearance,
+      appearancePublic: true,
       listed,
-      reviewStatus: 'pending',
+      reviewStatus: candidate.reviewStatus,
+      linkedIn: null,
+      takedown: false,
       createdAt: candidate.achievedAt,
       updatedAt: candidate.achievedAt,
     },
@@ -239,8 +325,8 @@ export function firstEntry(
 
 /**
  * A better run replaces the record and returns it to review, though a disqualification stays; an equal one keeps the
- * earlier record. A run that looks like someone else's takes a listed record off the board with its name, so a shared
- * browser never publishes the next player's score under the last one's consent.
+ * earlier record. A run that looks like someone else's takes a listed record off the board with its name and link, so
+ * a shared browser never publishes the next player's score under the last one's consent.
  */
 export function revisedEntry(candidate: BoardCandidate, current: LeaderboardEntry): EntrySettlement {
   const improved =
@@ -255,7 +341,7 @@ export function revisedEntry(candidate: BoardCandidate, current: LeaderboardEntr
         result: candidate.result,
         achievedAt: candidate.achievedAt,
         appearance: candidate.profile.appearance,
-        reviewStatus: current.reviewStatus === 'disqualified' ? current.reviewStatus : ('pending' as const),
+        reviewStatus: current.reviewStatus === 'disqualified' ? current.reviewStatus : candidate.reviewStatus,
       }
     : {}
   return {
@@ -265,6 +351,7 @@ export function revisedEntry(candidate: BoardCandidate, current: LeaderboardEntr
       listed,
       authorName: listed ? current.authorName : null,
       nameStatus: listed ? current.nameStatus : null,
+      linkedIn: listed ? current.linkedIn : null,
       updatedAt: nextVersion(current.updatedAt, candidate.achievedAt),
     },
     changed: true,
@@ -272,39 +359,97 @@ export function revisedEntry(candidate: BoardCandidate, current: LeaderboardEntr
   }
 }
 
-/** Listing needs the profile, since the name is stored from then on; unlisting needs nothing else. */
+/**
+ * Listing needs the profile, since the name is stored from then on; unlisting needs nothing else, and a link alone is
+ * enough to turn it on or off.
+ */
 export function parseOwnEntryUpdate(input: Record<string, unknown>): OwnEntryUpdate {
   const listed = input.listed ?? null
   if (listed !== null && typeof listed !== 'boolean') throw invalidInput('listed must be a boolean')
   const profile = optionalInput(input.profile, parseRunProfile)
-  if (profile) return { listed, profile }
-  if (listed === false) return { listed, profile }
-  throw invalidInput('profile is required unless listed is false')
+  const linkedIn = input.linkedIn === undefined ? undefined : optionalInput(input.linkedIn, parseLinkedInRequest)
+  if (listed === true && !profile) throw invalidInput('profile is required to list the record')
+  if (listed === null && !profile && linkedIn === undefined) throw invalidInput('Send listed, profile, or linkedIn')
+  return { listed, profile, linkedIn }
+}
+
+/** A past season's board is final: its record only takes `{ anonymize: true }` and `{ linkedIn: null }`. */
+export function parsePastEntryUpdate(input: Record<string, unknown>): PastEntryUpdate {
+  const anonymize = input.anonymize ?? false
+  if (anonymize !== true && anonymize !== false) throw invalidInput('anonymize must be true')
+  if (input.linkedIn !== undefined && input.linkedIn !== null) {
+    throw invalidInput("A past season's link can only be turned off")
+  }
+  if (input.listed !== undefined || input.profile !== undefined) {
+    throw invalidInput("A past season's record only takes anonymize or linkedIn: null")
+  }
+  const update = { anonymize, linkedInOff: input.linkedIn === null }
+  if (!update.anonymize && !update.linkedInOff) throw invalidInput('Send anonymize: true or linkedIn: null')
+  return update
 }
 
 /**
- * The visitor's change to their own record: a listed record shows the profile's name, an unlisted one keeps none. A
- * new name waits for approval again while the record's own name keeps its status, and a new appearance returns the
- * record to review, since a statue shows it at once.
+ * The visitor's change to this month's record: a listed record shows the profile's name, an unlisted one keeps none
+ * and no link. A new name gets its checked status while the record's own name keeps its status, a new appearance
+ * returns the record to review, since a statue shows it at once, and a taken-down record stays nameless.
  */
-export function ownEntryChanges(entry: LeaderboardEntry, update: OwnEntryUpdate, now: string): EntryChanges {
+export function ownEntryChanges(
+  entry: LeaderboardEntry,
+  update: OwnEntryUpdate,
+  now: string,
+  decisions: OwnEntryDecisions,
+): EntryChanges {
   const listed = update.listed ?? entry.listed
   const appearance = update.profile?.appearance ?? entry.appearance
-  const authorName = listed ? (update.profile?.name ?? null) : null
+  const named = listed && !entry.takedown
+  const authorName = named ? (update.profile ? update.profile.name : entry.authorName) : null
   const appearanceChanged = !isDeepStrictEqual(appearance, entry.appearance)
-  return {
-    listed,
-    authorName,
-    nameStatus: nameStatusFor(entry, authorName),
-    appearance,
-    reviewStatus: appearanceChanged && entry.reviewStatus !== 'disqualified' ? 'pending' : entry.reviewStatus,
-    updatedAt: nextVersion(entry.updatedAt, now),
-  }
+  return entryChanges(
+    entry,
+    {
+      listed,
+      authorName,
+      nameStatus: nameStatusFor(entry, authorName, decisions.nameStatus),
+      appearance,
+      linkedIn: ownLinkedIn(entry, update.linkedIn, listed, decisions.linkedInCode),
+      reviewStatus: appearanceChanged && entry.reviewStatus !== 'disqualified' ? 'pending' : entry.reviewStatus,
+    },
+    now,
+  )
 }
 
-export function nameStatusFor(entry: LeaderboardEntry, name: string | null): NameStatus | null {
+/** The record's own name keeps its status; any other gets `newNameStatus`, the checked status of the new one. */
+export function nameStatusFor(
+  entry: LeaderboardEntry,
+  name: string | null,
+  newNameStatus: NameStatus,
+): NameStatus | null {
   if (name === null) return null
-  return name === entry.authorName ? entry.nameStatus : 'pending'
+  return name === entry.authorName ? entry.nameStatus : newNameStatus
+}
+
+/**
+ * The link stays unless the visitor turns it off or unlists the record. A new address waits for the admin with a new
+ * code; sending a reported address again gets a new code but stays hidden until the admin sees that code.
+ */
+export function ownLinkedIn(
+  entry: LeaderboardEntry,
+  requested: LinkedInLink | null | undefined,
+  listed: boolean,
+  freshCode: string,
+): EntryLinkedIn | null {
+  if (!listed || requested === null) return null
+  if (requested === undefined) return entry.linkedIn
+  const current = entry.linkedIn
+  const sameAddress = current !== null && current.profileUrl === requested.profileUrl
+  if (sameAddress && current.status !== 'reported') return current
+  return { profileUrl: requested.profileUrl, status: sameAddress ? 'reported' : 'pending', code: freshCode }
+}
+
+/** Anonymising a past record drops its name and link; the score keeps its place. */
+export function pastEntryChanges(entry: LeaderboardEntry, update: PastEntryUpdate, now: string): EntryChanges {
+  const anonymized = update.anonymize ? { authorName: null, nameStatus: null } : {}
+  return entryChanges(entry, { ...anonymized, linkedIn: null }, now)
 }
 
 /** A run held for review leaves the record as it was; a disqualified record is off this board whatever the run did. */
@@ -329,25 +474,36 @@ export function publicNameState(entry: LeaderboardEntry): PublicNameState {
 
 /**
  * A record as anyone sees it: no visitor hash, review state, or exact time. An anonymous batter keeps their score but
- * shows the default silhouette, since a character can be recognized without a name.
+ * shows the default silhouette, since a character can be recognized without a name, and so does a hidden appearance.
  */
 export function rankedEntry(entry: LeaderboardEntry, rank: number) {
   const nameState = publicNameState(entry)
+  const silhouette = nameState === 'anonymous' || !entry.appearancePublic
   return {
     id: entry.id,
     rank,
     name: nameState === 'approved' ? entry.authorName : null,
     nameState,
-    profile: nameState === 'anonymous' ? { kind: 'default' as const } : entry.appearance,
+    profile: silhouette ? { kind: 'default' as const } : entry.appearance,
     homeRuns: entry.score,
     totalDistanceDm: entry.tiebreak,
     achievedOn: rankingDay(entry.achievedAt),
   }
 }
 
-/** The visitor's own record: the real name and its status, and its place, or the place it would have if listed. */
+/** A statue, this month's or a past season's: a public record with its LinkedIn link once the admin approved it. */
+export function podiumEntry(entry: LeaderboardEntry, rank: number) {
+  const linkedIn = entry.linkedIn?.status === 'approved' ? { linkedInProfileUrl: entry.linkedIn.profileUrl } : {}
+  return { ...rankedEntry(entry, rank), ...linkedIn }
+}
+
+/**
+ * The visitor's own record: the real name and its status, its place or the place it would have if listed, and its link
+ * by a hint only, since the next person on a shared device sees this too.
+ */
 export function ownEntry(entry: LeaderboardEntry, rank: number) {
   const disqualified = entry.reviewStatus === 'disqualified'
+  const linkedIn = entry.linkedIn
   return {
     id: entry.id,
     season: entry.season,
@@ -356,6 +512,13 @@ export function ownEntry(entry: LeaderboardEntry, rank: number) {
     nameStatus: entry.nameStatus,
     disqualified,
     profile: entry.appearance,
+    appearancePublic: entry.appearancePublic,
+    takedown: entry.takedown,
+    linkedIn: linkedIn && {
+      profileHint: profileHint(linkedIn.profileUrl),
+      status: linkedIn.status,
+      code: linkedIn.code,
+    },
     homeRuns: entry.score,
     totalDistanceDm: entry.tiebreak,
     achievedAt: entry.achievedAt,

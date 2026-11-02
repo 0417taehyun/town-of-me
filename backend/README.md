@@ -92,7 +92,8 @@ Create a handler with `createApi({ service, authStore, linkedInOidc, allowedOrig
 - `GET /v1/guestbook` returns `{ entries, own }`: the newest 100 approved entries, and this browser's latest entry with its `status` and whether it is still `revisable`
 - `POST /v1/guestbook` and `PUT /v1/guestbook/:id` take `{ message, locale, profile }` from anyone and return `{ entry }`; see the guestbook rules below
 - `GET /v1/admin/guestbook` lists the newest 200 entries of every status with `updatedAt`; `POST /v1/admin/guestbook/:id/approval` with `{ updatedAt }` publishes the entry only if it was not revised since that version (`409` otherwise); `DELETE /v1/admin/guestbook/:id` removes it
-- `POST /v1/games/:game/runs` and `POST /v1/games/:game/runs/:id/result` start and record a ranked run, `GET /v1/games/:game/leaderboard` and `GET /v1/games/:game/podium` read the monthly board and its statues, and `PUT /v1/games/:game/entries/own` lists or unlists the visitor's record; see [Ranked runs](#ranked-runs)
+- `POST /v1/games/:game/runs` and `POST /v1/games/:game/runs/:id/result` start and record a ranked run, `GET /v1/games/:game/leaderboard` and `GET /v1/games/:game/podium` read the monthly board and its statues, `PUT` and `DELETE /v1/games/:game/entries/own` change or delete the visitor's records, and `POST /v1/games/:game/entries/:id/report` reports one; see [Ranked runs](#ranked-runs)
+- `GET /v1/admin/games/:game/review` and the `/v1/admin/games/:game/entries/:id/…` and `/v1/admin/games/:game/runs/…` actions review the boards for an admin session; see [Board review](#board-review)
 - `GET /v1/towns/:id` returns `{ town }` with `revision`, or `404` when no such town exists
 - `PUT /v1/admin/towns/:id` with `{ baseRevision, name, owner, pet, spawn, movement, venues, objects, residents }` replaces the town for an admin session (`401` signed out, `403` otherwise) and returns the saved `{ town }`; `baseRevision` is `0` for the first save
 - `POST /v1/admin/resident-dialogues` with `{ name, role, relationship, reference, owner }` (`owner` is the owner's `{ ko, en }` name) returns a drafted `{ dialogue }` for an admin session without storing it; the admin saves it with the town
@@ -145,11 +146,39 @@ the same results).
   same player (the same appearance, and the same name when it had one); a listed record whose next run looks like
   someone else's goes off the board and loses its name, so a shared browser never publishes one player's score under
   another's consent.
-- `PUT /v1/games/home-run-derby/entries/own` with `{ listed?, profile? }` changes this month's record of the visitor
-  cookie (`404` without one): `listed: true` needs `profile`, whose name is stored from then on, and `listed: false`
-  drops the name. A new name waits for approval again, and a new appearance returns the record to review. It returns
-  `{ entry }`, the visitor's own view (`listed`, `name`, `nameStatus`, `disqualified`, `profile`, `homeRuns`,
-  `totalDistanceDm`, `achievedAt`, and `rank`, the place it holds or would hold).
+- `PUT /v1/games/home-run-derby/entries/own` with `{ listed?, profile?, linkedIn? }` (at least one) changes this
+  month's record of the visitor cookie (`404` without one): `listed: true` needs `profile`, whose name is stored from
+  then on, and `listed: false` drops the name and the link. A name the record does not have yet is checked (below) and
+  then waits for approval, and a new appearance returns the record to review. It returns `{ entry }`, the visitor's own
+  view (`listed`, `name`, `nameStatus`, `disqualified`, `profile`, `appearancePublic`, `takedown`, `linkedIn`,
+  `homeRuns`, `totalDistanceDm`, `achievedAt`, and `rank`, the place it holds or would hold).
+  - `?season=YYYY-MM` names a past season, whose record only takes `{ anonymize: true }` (no name or link from then
+    on; the score keeps its place) or `{ linkedIn: null }`; anything else is `400`.
+  - A name is NFKC, one line of 1–24 characters (`400` otherwise). It is `rejected`, and the record shows as an
+    anonymous batter while keeping its place, when it has a format or zero-width character or a Hangul filler, stacks
+    combining marks, has no letter, digit, or symbol, looks like a web address, domain, handle, or phone number, or its
+    comparison form (lowercase, no spacing, punctuation, or symbols, lookalike Cyrillic and Greek letters made Latin)
+    contains the town's owner, resident, or house owner names or a reserved word (`admin`, `official`, `관리자`, …), or
+    equals another visitor's approved name on the board. Anything else is `pending`.
+  - `linkedIn: { profileUrl, ownProfile: true }` links a listed record that was not taken down (`409` otherwise) to a
+    LinkedIn profile: an https `linkedin.com/in/<id>` link whose id, decoded once, is 3–100 letters, digits, or
+    hyphens and reads like no contact, stored as `https://www.linkedin.com/in/<id>` percent-encoded. A link the town
+    shows or a takedown blocked is `400`. A new address gets an ownership code, `TOM-` and four Crockford base32
+    characters, for the visitor to put on the profile; the link shows only on statue rows (`podium` here and on past
+    seasons' boards, and `/podium`) once the admin has seen the code there, and stays while the visitor keeps it on.
+    `linkedIn: null` deletes the address, its status, and its code. The own view shows only a hint of the address
+    (`linkedin.com/in/sp•••`), its `status` (`pending`, `approved`, or `reported`), and the `code`; a link is never
+    carried to a new month, and a run that looks like someone else's deletes it with the listing.
+- `DELETE /v1/games/home-run-derby/entries/own` deletes every run and record of the visitor cookie in every season at
+  once and returns `204` (also without a cookie); a statue makes way for the next record. Nothing else is ever deleted
+  on a schedule.
+- `POST /v1/games/home-run-derby/entries/:id/report` with `{ target, reason? }` (`target` is `name`, `character`, or
+  `link`; `reason` is `other`, or `mine` for a link whose profile is the reporter's) returns `204` whatever it does (a
+  malformed body is `400`), so it reveals nothing. It counts only
+  from a visitor cookie that has sent a result, about someone else's record, at most five an hour (counted in the
+  process's memory only); a report keeps no reporter. A report on an approved name puts it back under review and one on
+  the character shows the default batter, unless the admin kept that name or character after an earlier report; a
+  `mine` report hides the link (`reported`) with a new code, which only the admin's check of that code restores.
 - `GET /v1/games/home-run-derby/leaderboard?season=YYYY-MM` (this month by default; a malformed season is `400`, a
   season still to come `404`) returns `{ season: { id, startsAt, endsAt, final }, podium, ranks, own }`. The public
   order is listed, not disqualified records by home runs, then their distance, then the earlier record; `podium` is
@@ -161,6 +190,41 @@ the same results).
   reads and sets no cookie and is `Cache-Control: public, max-age=60` (nginx leaves its `no-store` off this path), so
   a disqualification shows within a minute. Reads stay open while the ballpark is hidden; the frontend decides what a
   hidden venue shows.
+
+## Board review
+
+Every route here needs an admin session (`401` signed out, `403` otherwise, and `403` for a write without an allowed
+`Origin`), and an unknown game is `404`. An action on a record sends the `updatedAt` it read, an ISO time as the queue
+shows it: a record changed since is `409` and stays as it is. Each answers `{ entry }`, the record as the queue shows it.
+
+- `GET /v1/admin/games/home-run-derby/review?season=YYYY-MM` (this season and the last by default) returns `{ items }`,
+  one per visitor and board, most urgent first: `statue` (a statue whose record or name waits), `statue-run` (a held
+  run of this season that would stand), `report` (open reports), `linkedin` (a statue's link waiting for its code),
+  `past-run` (a held run of a past season, until a week after it ended), `run` (other held runs of this season, a
+  visitor with two runs or fewer on the board, `newVisitor`, after the others), and `name` (a waiting name below the
+  statues). An item has the visitor's `entry` (real name, every status, `updatedAt`, the whole link decoded and whether
+  it was percent-encoded), their held `runs` (flags, would-be place, the profile they were sent with, and per pitch the
+  server's timing error, power, swing duration and speed, and height error, which visitors never see), run counts,
+  open `reports` per target, `warnings` (a name containing another record's or the town's, an appearance equal to
+  another record's or a resident's), and the names three places either side.
+- `POST …/entries/:id/approval` with `{ updatedAt, name?: 'approve' | 'reject' }` approves the record (`409` while it is
+  disqualified) and decides its name; it never changes the link.
+- `POST …/entries/:id/disqualification` with `{ updatedAt }` takes the record off the board, and the next record takes
+  its place, statues included; `DELETE` with the same body puts it back, waiting for review.
+- `POST …/entries/:id/linkedin-review` with `{ updatedAt, decision: 'code-verified' | 'reject' }` approves a link whose
+  code the admin saw on the profile, or deletes it.
+- `POST …/entries/:id/report-resolution` with `{ updatedAt, target, resolution: 'kept' | 'removed' }` closes the record's
+  open reports on `target`: a kept name is approved and a removed one rejected, a kept character shows again and a
+  removed one keeps the default batter, and a removed link is deleted while a kept one stays as it is.
+- `POST …/entries/:id/appearance` with `{ updatedAt, public }` shows or hides the appearance (the default batter).
+- `POST …/entries/:id/takedown` with `{ updatedAt, blockLinkedIn? }` answers a takedown request by anonymising the
+  record: no name, no link, the default batter, and on this board neither ever comes back; the score keeps its place.
+  `blockLinkedIn: true` also blocks the profile it linked (by the hash of its id) from every record.
+- `POST …/runs/:id/acceptance` with `{ updatedAt }`, the visitor's record as read (`null` when they had none), scores a
+  held run as if it had scored at once and settles the record, approved; a past season's run only until a week after
+  the season ended. `POST …/runs/:id/rejection` dismisses one; it stays stored. Both answer `{ run }` (acceptance also
+  `entry`), and a run that is not waiting is `409`. `POST …/runs/rejection` with `{ season?, scope: 'no-history' }`
+  dismisses the held runs of visitors with two runs or fewer on that board and returns `{ season, rejected }`.
 
 ## OpenRouter dialogue drafts
 

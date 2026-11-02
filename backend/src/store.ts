@@ -6,6 +6,7 @@ import type { GuestbookEntry, GuestbookStatus } from './guestbook.js'
 import {
   boardOrder,
   isPublicEntry,
+  textOrder,
   type BoardKey,
   type EntryChanges,
   type EntrySettlement,
@@ -14,6 +15,7 @@ import {
   type LeaderboardEntry,
   type SettleEntry,
 } from './leaderboard.js'
+import type { EntryReport, ReportResolution, ReportTarget, VisitorRunCounts } from './leaderboardReview.js'
 import type { TownLayout, TownLayoutInput } from './town.js'
 
 export interface Store extends AuthStore {
@@ -69,6 +71,36 @@ export interface Store extends AuthStore {
   listBoard(board: BoardKey, limit: number): Promise<LeaderboardEntry[]>
   /** Applies `changes` only while the record is still at `expectedUpdatedAt`; `null` if it is missing or changed. */
   updateEntry(id: string, expectedUpdatedAt: string, changes: EntryChanges): Promise<LeaderboardEntry | null>
+  getEntry(id: string): Promise<LeaderboardEntry | null>
+  /** Every record on the board, listed or not, in public order. */
+  listEntries(board: BoardKey): Promise<LeaderboardEntry[]>
+  /** The board's held runs nobody has reviewed yet. */
+  listRunsForReview(board: BoardKey): Promise<GameRun[]>
+  /** Per visitor with a run for the board: how many they started, abandoned, and had held. */
+  countRunsByVisitor(board: BoardKey): Promise<VisitorRunCounts[]>
+  /** Whether the visitor has sent a result for any run of the game. */
+  hasSubmittedRun(game: string, visitorHash: string): Promise<boolean>
+  /**
+   * Accepts a held run nobody has reviewed: it becomes `scored` and `settle` decides the visitor's record, in one step;
+   * if `settle` throws, nothing changes. `null`, with nothing changed, when the run is no longer waiting for review.
+   */
+  acceptRun(
+    id: string,
+    reviewedAt: string,
+    settle: SettleEntry,
+  ): Promise<{ run: GameRun; settlement: EntrySettlement } | null>
+  /** Marks a held run nobody has reviewed as reviewed, still held as evidence; `null` when it is not waiting. */
+  rejectRun(id: string, reviewedAt: string): Promise<GameRun | null>
+  addReport(report: EntryReport): Promise<void>
+  /** Every report on the board's records, open or resolved, oldest first. */
+  listReports(board: BoardKey): Promise<EntryReport[]>
+  /** Resolves the record's open reports on `target`. */
+  resolveReports(entryId: string, target: ReportTarget, resolution: ReportResolution, resolvedAt: string): Promise<void>
+  isLinkBlocked(profileHash: string): Promise<boolean>
+  /** Blocks the profile once; blocking it again changes nothing. */
+  blockLink(profileHash: string, createdAt: string): Promise<void>
+  /** Deletes the visitor's runs and records of the game in every season, with the reports on those records. */
+  eraseVisitorGameData(game: string, visitorHash: string): Promise<void>
 }
 
 export type GuestbookEntryChanges = Partial<
@@ -89,6 +121,8 @@ export class MemoryStore implements Store {
   readonly adminEmails = new Map<string, AdminEmail>()
   readonly gameRuns = new Map<string, GameRun>()
   readonly leaderboardEntries = new Map<string, LeaderboardEntry>()
+  readonly entryReports = new Map<string, EntryReport>()
+  readonly linkBlocks = new Map<string, string>()
 
   async saveTransaction(transaction: AuthTransaction): Promise<void> {
     this.transactions.set(transaction.id, transaction)
@@ -307,10 +341,119 @@ export class MemoryStore implements Store {
     this.leaderboardEntries.set(id, updated)
     return structuredClone(updated)
   }
+
+  async getEntry(id: string): Promise<LeaderboardEntry | null> {
+    const entry = this.leaderboardEntries.get(id)
+    return entry ? structuredClone(entry) : null
+  }
+
+  async listEntries(board: BoardKey): Promise<LeaderboardEntry[]> {
+    const entries = [...this.leaderboardEntries.values()].filter((entry) => isOnBoard(entry, board))
+    return structuredClone(entries.sort(boardOrder))
+  }
+
+  async listRunsForReview(board: BoardKey): Promise<GameRun[]> {
+    const held = [...this.gameRuns.values()].filter(
+      (run) => isOnBoard(run, board) && run.status === 'flagged' && run.reviewedAt === null,
+    )
+    return structuredClone(held)
+  }
+
+  async countRunsByVisitor(board: BoardKey): Promise<VisitorRunCounts[]> {
+    const counts = new Map<string, VisitorRunCounts>()
+    const runs = [...this.gameRuns.values()].filter((run) => isOnBoard(run, board))
+    runs.forEach((run) => counts.set(run.visitorHash, countedRun(counts.get(run.visitorHash), run)))
+    return [...counts.values()]
+  }
+
+  async hasSubmittedRun(game: string, visitorHash: string): Promise<boolean> {
+    return [...this.gameRuns.values()].some(
+      (run) => run.game === game && run.visitorHash === visitorHash && run.submittedAt !== null,
+    )
+  }
+
+  // `settle` runs before anything is written, so a refusal changes nothing, like the PostgreSQL rollback.
+  async acceptRun(
+    id: string,
+    reviewedAt: string,
+    settle: SettleEntry,
+  ): Promise<{ run: GameRun; settlement: EntrySettlement } | null> {
+    const run = this.gameRuns.get(id)
+    if (run?.status !== 'flagged' || run.reviewedAt !== null) return null
+    const settlement = this.settleEntry(run, settle)
+    const accepted: GameRun = { ...run, status: 'scored', reviewedAt }
+    this.gameRuns.set(id, accepted)
+    return { run: structuredClone(accepted), settlement }
+  }
+
+  async rejectRun(id: string, reviewedAt: string): Promise<GameRun | null> {
+    const run = this.gameRuns.get(id)
+    if (run?.status !== 'flagged' || run.reviewedAt !== null) return null
+    const rejected = { ...run, reviewedAt }
+    this.gameRuns.set(id, rejected)
+    return structuredClone(rejected)
+  }
+
+  async addReport(report: EntryReport): Promise<void> {
+    this.entryReports.set(report.id, structuredClone(report))
+  }
+
+  async listReports(board: BoardKey): Promise<EntryReport[]> {
+    const onBoard = new Set(
+      [...this.leaderboardEntries.values()].filter((entry) => isOnBoard(entry, board)).map(({ id }) => id),
+    )
+    const reports = [...this.entryReports.values()].filter((report) => onBoard.has(report.entryId))
+    return structuredClone(reports.sort((left, right) => textOrder(left.createdAt, right.createdAt)))
+  }
+
+  async resolveReports(
+    entryId: string,
+    target: ReportTarget,
+    resolution: ReportResolution,
+    resolvedAt: string,
+  ): Promise<void> {
+    const open = [...this.entryReports.values()].filter(
+      (report) => report.entryId === entryId && report.target === target && report.resolvedAt === null,
+    )
+    open.forEach((report) => this.entryReports.set(report.id, { ...report, resolvedAt, resolution }))
+  }
+
+  async isLinkBlocked(profileHash: string): Promise<boolean> {
+    return this.linkBlocks.has(profileHash)
+  }
+
+  async blockLink(profileHash: string, createdAt: string): Promise<void> {
+    this.linkBlocks.set(profileHash, this.linkBlocks.get(profileHash) ?? createdAt)
+  }
+
+  async eraseVisitorGameData(game: string, visitorHash: string): Promise<void> {
+    const isTheirs = (item: { game: string; visitorHash: string }) =>
+      item.game === game && item.visitorHash === visitorHash
+    const entryIds = new Set([...this.leaderboardEntries.values()].filter(isTheirs).map(({ id }) => id))
+    const reportIds = [...this.entryReports.values()]
+      .filter((report) => entryIds.has(report.entryId))
+      .map(({ id }) => id)
+    const runIds = [...this.gameRuns.values()].filter(isTheirs).map(({ id }) => id)
+    reportIds.forEach((id) => this.entryReports.delete(id))
+    entryIds.forEach((id) => this.leaderboardEntries.delete(id))
+    runIds.forEach((id) => this.gameRuns.delete(id))
+  }
 }
 
-export function isOnBoard(entry: LeaderboardEntry, board: BoardKey): boolean {
-  return entry.game === board.game && entry.season === board.season
+/** `counted` with `run` added. */
+export function countedRun(counted: VisitorRunCounts | undefined, run: GameRun): VisitorRunCounts {
+  const counts = counted ?? { visitorHash: run.visitorHash, runs: 0, abandoned: 0, flagged: 0 }
+  return {
+    visitorHash: counts.visitorHash,
+    runs: counts.runs + 1,
+    abandoned: counts.abandoned + Number(run.status === 'abandoned'),
+    flagged: counts.flagged + Number(run.status === 'flagged'),
+  }
+}
+
+/** Whether a record or run belongs to the board. */
+export function isOnBoard(item: BoardKey, board: BoardKey): boolean {
+  return item.game === board.game && item.season === board.season
 }
 
 export function findBoardEntry(

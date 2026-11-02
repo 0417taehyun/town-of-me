@@ -11,10 +11,11 @@ import {
 import { DomainError, type Actor, type LinkedUser } from './domain.js'
 import { ownGuestbookEntry, publicGuestbookEntry, reviewedGuestbookEntry } from './guestbook.js'
 import { publicDerbyResult } from './homeRunDerby.js'
-import { ownEntry, rankedEntry, seasonView, statueCount, type GameRun } from './leaderboard.js'
+import { ownEntry, podiumEntry, rankedEntry, seasonView, statueCount, type GameRun } from './leaderboard.js'
+import { reviewedEntry, reviewedRun, type EntryReviewAction } from './leaderboardReview.js'
 import { BackendService, type Leaderboard, type RunOutcome } from './service.js'
 import { townIdPattern } from './town.js'
-import { inputRecord, invalidInput } from './validation.js'
+import { decodeComponent, inputRecord, invalidInput } from './validation.js'
 
 const sessionCookie = '__Host-tom_session'
 const oauthCookie = '__Host-tom_oauth'
@@ -115,11 +116,51 @@ const routes: readonly Route[] = [
     return json(leaderboardView(await dependencies.service.getLeaderboard(pathId, visitorHash, season)))
   }),
   route('GET', `/v1/games/(${gameId})/podium`, servePodium),
-  route('PUT', `/v1/games/(${gameId})/entries/own`, async ({ request, pathId, dependencies }) => {
+  route('PUT', `/v1/games/(${gameId})/entries/own`, async ({ request, url, pathId, dependencies }) => {
     const body = await objectBody(request, gameBodyLimitBytes)
-    const { entry, rank } = await dependencies.service.updateOwnEntry(pathId, await readVisitorHash(request), body)
+    const visitorHash = await readVisitorHash(request)
+    const season = url.searchParams.get('season')
+    const { entry, rank } = await dependencies.service.updateOwnEntry(pathId, visitorHash, body, season)
     return json({ entry: ownEntry(entry, rank) })
   }),
+  route('DELETE', `/v1/games/(${gameId})/entries/own`, async ({ request, pathId, dependencies }) => {
+    await dependencies.service.deleteOwnRecords(pathId, await readVisitorHash(request))
+    return new Response(null, { status: 204 })
+  }),
+  route('POST', `/v1/games/(${gameId})/entries/(${uuid})/report`, async ({ request, pathIds, dependencies }) => {
+    const [game = '', entryId = ''] = pathIds
+    const body = await objectBody(request, gameBodyLimitBytes)
+    await dependencies.service.reportEntry(game, await readVisitorHash(request), entryId, body)
+    return new Response(null, { status: 204 })
+  }),
+  route('GET', `/v1/admin/games/(${gameId})/review`, async ({ url, pathId, actor, dependencies }) => {
+    const season = url.searchParams.get('season')
+    return json({ items: await dependencies.service.getReviewQueue(await actor(), pathId, season) })
+  }),
+  entryReviewRoute('POST', 'approval', 'approval'),
+  entryReviewRoute('POST', 'disqualification', 'disqualification'),
+  entryReviewRoute('DELETE', 'disqualification', 'restoration'),
+  entryReviewRoute('POST', 'linkedin-review', 'linkedin-review'),
+  entryReviewRoute('POST', 'report-resolution', 'report-resolution'),
+  entryReviewRoute('POST', 'appearance', 'appearance'),
+  entryReviewRoute('POST', 'takedown', 'takedown'),
+  route(
+    'POST',
+    `/v1/admin/games/(${gameId})/runs/(${uuid})/acceptance`,
+    async ({ request, pathIds, actor, dependencies }) => {
+      const [game = '', runId = ''] = pathIds
+      const body = await objectBody(request)
+      const { run, entry } = await dependencies.service.acceptHeldRun(await actor(), game, runId, body)
+      return json({ run: reviewedRun(run, null), entry: reviewedEntry(entry, null) })
+    },
+  ),
+  route('POST', `/v1/admin/games/(${gameId})/runs/(${uuid})/rejection`, async ({ pathIds, actor, dependencies }) => {
+    const [game = '', runId = ''] = pathIds
+    return json({ run: reviewedRun(await dependencies.service.rejectHeldRun(await actor(), game, runId), null) })
+  }),
+  route('POST', `/v1/admin/games/(${gameId})/runs/rejection`, async ({ request, pathId, actor, dependencies }) =>
+    json(await dependencies.service.rejectRunsWithoutHistory(await actor(), pathId, await objectBody(request))),
+  ),
   route('GET', `/v1/towns/(${townIdPattern})`, async ({ pathId, dependencies }) =>
     json({ town: await dependencies.service.getTown(pathId) }),
   ),
@@ -141,6 +182,23 @@ const routes: readonly Route[] = [
     return new Response(null, { status: 204 })
   }),
 ]
+
+/** An admin's action on a record answers with the record as the review queue shows it. */
+export function entryReviewRoute(method: string, path: string, action: EntryReviewAction): Route {
+  const entryPath = `/v1/admin/games/(${gameId})/entries/(${uuid})/${path}`
+  return route(method, entryPath, async ({ request, pathIds, actor, dependencies }) => {
+    const [game = '', entryId = ''] = pathIds
+    const reviewer = await actor()
+    const { entry, rank } = await dependencies.service.reviewEntry(
+      reviewer,
+      game,
+      entryId,
+      action,
+      await objectBody(request),
+    )
+    return json({ entry: reviewedEntry(entry, rank) })
+  })
+}
 
 export function createApi(dependencies: ApiDependencies): (request: Request) => Promise<Response> {
   const frontendOrigin = new URL(dependencies.frontendUrl).origin
@@ -243,17 +301,16 @@ export function issuedRunView(run: GameRun) {
  */
 export async function servePodium({ pathId, dependencies }: RouteContext): Promise<Response> {
   const { season, entries } = await dependencies.service.getPodium(pathId)
-  const podium = entries.map((entry, index) => rankedEntry(entry, index + 1))
+  const podium = entries.map((entry, index) => podiumEntry(entry, index + 1))
   return json({ season: { id: season }, podium }, 200, { 'Cache-Control': 'public, max-age=60' })
 }
 
-/** The first three places are the statues and the rest the list below them. */
+/** The first three places are the statues, which alone carry an approved link, and the rest the list below them. */
 export function leaderboardView({ season, currentSeason, entries, own }: Leaderboard) {
-  const ranked = entries.map((entry, index) => rankedEntry(entry, index + 1))
   return {
     season: seasonView(season, currentSeason),
-    podium: ranked.slice(0, statueCount),
-    ranks: ranked.slice(statueCount),
+    podium: entries.slice(0, statueCount).map((entry, index) => podiumEntry(entry, index + 1)),
+    ranks: entries.slice(statueCount).map((entry, index) => rankedEntry(entry, statueCount + index + 1)),
     own: own && ownEntry(own.entry, own.rank),
   }
 }
@@ -318,18 +375,6 @@ export function readCookie(request: Request, name: string): string | null {
     .map((part) => part.trim())
     .find((part) => part.startsWith(prefix))
   return pair === undefined ? null : decodeComponent(pair.slice(prefix.length))
-}
-
-/**
- * A malformed cookie or path value counts as missing, so broken percent-encoding cannot turn a request into a
- * server error.
- */
-export function decodeComponent(value: string): string | null {
-  try {
-    return decodeURIComponent(value)
-  } catch {
-    return null
-  }
 }
 
 export function cookie(name: string, value: string, lifetimeMs: number): string {

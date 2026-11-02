@@ -20,12 +20,12 @@ import {
 } from '../src/index.js'
 import { sampleTownLayout } from './townFlow.js'
 
-type Assert = (condition: unknown, message: string) => asserts condition
+export type Assert = (condition: unknown, message: string) => asserts condition
 
 const origin = 'https://town.example'
-const game = 'home-run-derby'
-const minute = 60_000
-const fiveNormal: BallparkRules = { pitchCount: 5, difficulty: 'normal' }
+export const game = 'home-run-derby'
+export const minute = 60_000
+export const fiveNormal: BallparkRules = { pitchCount: 5, difficulty: 'normal' }
 /** Practice whose valid swings put the offset at their median, 108.7 ms, and the peak speed above the floor. */
 const practice = [
   { errorMs: 96.4, speed: 8.1 },
@@ -36,7 +36,7 @@ const practice = [
 ]
 const practiceOffsetMs = 108.7
 /** The frontend sends its whole `PlayerProfile`; a fictional one. */
-const profile = {
+export const profile = {
   name: 'Sprout',
   genderIdentity: 'self-described',
   hair: 'curls',
@@ -65,7 +65,7 @@ function swingAt(plan: RunPlan, index: number, errorMs: number) {
 }
 
 /** A result for the run `rules` and `seed` plan, swinging `errorsMs` off (null lets the pitch go by), claiming truly. */
-function resultBody(rules: BallparkRules, seed: number, errorsMs: Array<number | null>) {
+export function resultBody(rules: BallparkRules, seed: number, errorsMs: Array<number | null>) {
   const plan = createRunPlan(rules, seed)
   const swings = errorsMs.map((errorMs, index) => (errorMs === null ? null : swingAt(plan, index, errorMs)))
   const log: DerbyInputLog = { side: 'right', practice, swings }
@@ -94,7 +94,7 @@ type Board = {
   own: { id: string; listed: boolean; rank: number | null; disqualified: boolean } | null
 }
 
-async function rejection(action: () => Promise<unknown>): Promise<unknown> {
+export async function rejection(action: () => Promise<unknown>): Promise<unknown> {
   return action().then(
     () => null,
     (error: unknown) => error,
@@ -102,7 +102,7 @@ async function rejection(action: () => Promise<unknown>): Promise<unknown> {
 }
 
 /** A store, its service and API, and the admin's ballpark settings stored as given (a save would settle the rules). */
-function leaderboardHarness() {
+export function leaderboardHarness() {
   const store = new MemoryStore()
   const service = new BackendService(store)
   const api = createApi({ service, authStore: store, allowedOrigins: new Set([origin]), frontendUrl: `${origin}/` })

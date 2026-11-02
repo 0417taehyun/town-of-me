@@ -227,6 +227,7 @@ export async function checkStoreContract(store: Store, assert: Assert): Promise<
   await checkGuestbookStore(store, assert)
   await checkRunStore(store, assert)
   await checkEntryStore(store, assert)
+  await checkModerationStore(store, assert)
 }
 
 /** The admin list is seeded once, decides the role at every sign-in, and removing an email ends that role at once. */
@@ -411,6 +412,8 @@ function issuedRun(visitorHash: string, season = '2026-10'): GameRun {
     score: null,
     tiebreak: null,
     flags: [],
+    profile: null,
+    reviewedAt: null,
   }
 }
 
@@ -426,6 +429,7 @@ const scoredRun = {
   score: 2,
   tiebreak: 2114,
   flags: [],
+  profile: null,
 }
 
 function entryFor(run: GameRun, fields: Partial<LeaderboardEntry> = {}): LeaderboardEntry {
@@ -447,8 +451,11 @@ function entryFor(run: GameRun, fields: Partial<LeaderboardEntry> = {}): Leaderb
     authorName: null,
     nameStatus: null,
     appearance: runAppearance,
+    appearancePublic: true,
     listed: false,
     reviewStatus: 'pending',
+    linkedIn: null,
+    takedown: false,
     createdAt: time,
     updatedAt: time,
     ...fields,
@@ -605,8 +612,11 @@ async function checkEntryStore(store: Store, assert: Assert): Promise<void> {
     authorName: null,
     nameStatus: null,
     appearance: { ...runAppearance, hat: 'cap' },
+    appearancePublic: false,
     listed: false,
     reviewStatus: 'disqualified' as const,
+    linkedIn: null,
+    takedown: true,
     updatedAt: new Date(runIssuedAt + 5 * 60_000).toISOString(),
   }
   assert(
@@ -618,7 +628,131 @@ async function checkEntryStore(store: Store, assert: Assert): Promise<void> {
   assert(
     isDeepStrictEqual(updated, { ...leader, ...changes }) &&
       isDeepStrictEqual(await store.getBoardEntryByVisitor(leader, 'rank-leader'), updated),
-    'an update from the current version replaces the name, its status, the appearance, listing, and review',
+    'an update from the current version replaces the name, its status, the appearance and its showing, listing, review, and takedown',
+  )
+}
+
+/** A held run is reviewed once, reports and blocks are kept, and a visitor's deletion takes every season with it. */
+async function checkModerationStore(store: Store, assert: Assert): Promise<void> {
+  const season = '2026-07'
+  const board = { game: runGame, season }
+  const reviewedAt = new Date(runIssuedAt + 3 * 60_000).toISOString()
+  const heldProfile = { name: 'Sprout', appearance: runAppearance }
+  const flagged = { ...scoredRun, status: 'flagged' as const, flags: ['claimed-mismatch'], profile: heldProfile }
+  const held = issuedRun('moderation-held', season)
+  await store.issueRun(held)
+  await store.finishRun(held.id, 'moderation-held', flagged, null)
+  const waiting = await store.listRunsForReview(board)
+  assert(
+    waiting.length === 1 && isDeepStrictEqual(waiting[0]?.profile, heldProfile) && waiting[0]?.reviewedAt === null,
+    'a held run waits for review with the profile it was sent with',
+  )
+  const refused = await rejection(() =>
+    store.acceptRun(held.id, reviewedAt, () => {
+      throw new DomainError('CONFLICT', 'The record changed')
+    }),
+  )
+  assert(
+    refused instanceof DomainError &&
+      (await store.getRun(held.id))?.reviewedAt === null &&
+      (await store.getBoardEntryByVisitor(board, 'moderation-held')) === null,
+    'an acceptance its settlement refuses changes neither the run nor the record',
+  )
+  const linkedIn = {
+    profileUrl: 'https://www.linkedin.com/in/sprout-sample',
+    status: 'pending' as const,
+    code: 'TOM-7KQ2',
+  }
+  const entry = entryFor(held, { listed: true, authorName: 'Sprout', nameStatus: 'pending', linkedIn })
+  const settled = () => ({ entry, changed: true, consentNeeded: false })
+  const accepted = await store.acceptRun(held.id, reviewedAt, settled)
+  assert(
+    accepted?.run.status === 'scored' &&
+      accepted.run.reviewedAt === reviewedAt &&
+      isDeepStrictEqual(await store.getEntry(entry.id), entry),
+    'an accepted run scores and settles its record in one step, link and all',
+  )
+  assert(
+    (await store.acceptRun(held.id, reviewedAt, settled)) === null &&
+      (await store.listRunsForReview(board)).length === 0,
+    'a held run is accepted once and leaves the queue',
+  )
+  const approvedLink = { ...entry, linkedIn: { ...linkedIn, status: 'approved' as const }, updatedAt: reviewedAt }
+  assert(
+    isDeepStrictEqual(await store.updateEntry(entry.id, entry.updatedAt, approvedLink), approvedLink),
+    "an update replaces the record's link",
+  )
+
+  const abandoned = issuedRun('moderation-dismissed', season)
+  const dismissed = issuedRun('moderation-dismissed', season)
+  await store.issueRun(abandoned)
+  await store.issueRun(dismissed)
+  await store.finishRun(dismissed.id, 'moderation-dismissed', flagged, null)
+  assert(
+    (await store.rejectRun(dismissed.id, reviewedAt))?.status === 'flagged' &&
+      (await store.rejectRun(dismissed.id, reviewedAt)) === null &&
+      (await store.listRunsForReview(board)).length === 0,
+    'a dismissed run stays held as evidence and leaves the queue once',
+  )
+  const counts = await store.countRunsByVisitor(board)
+  assert(
+    isDeepStrictEqual(
+      counts.find(({ visitorHash }) => visitorHash === 'moderation-dismissed'),
+      { visitorHash: 'moderation-dismissed', runs: 2, abandoned: 1, flagged: 1 },
+    ) && counts.length === 2,
+    "a board counts each visitor's runs, abandoned runs, and held runs",
+  )
+  await store.issueRun(issuedRun('moderation-unplayed', season))
+  assert(
+    (await store.hasSubmittedRun(runGame, 'moderation-dismissed')) &&
+      !(await store.hasSubmittedRun(runGame, 'moderation-unplayed')),
+    'only a visitor who sent a result has played',
+  )
+
+  const unlisted = await recordEntry(store, 'moderation-unlisted', season, { score: 9 })
+  assert(
+    (await store.listEntries(board)).map(({ id }) => id).join() === [unlisted.id, entry.id].join(),
+    'every record on the board is listed, unlisted ones too, in public order',
+  )
+
+  const report = (target: 'name' | 'link', reason: 'mine' | 'other', minutes: number) => ({
+    id: crypto.randomUUID(),
+    entryId: entry.id,
+    target,
+    reason,
+    createdAt: new Date(runIssuedAt + minutes * 60_000).toISOString(),
+    resolvedAt: null,
+    resolution: null,
+  })
+  const nameReport = report('name', 'other', 4)
+  const linkReport = report('link', 'mine', 5)
+  await store.addReport(nameReport)
+  await store.addReport(linkReport)
+  await store.resolveReports(entry.id, 'name', 'kept', reviewedAt)
+  assert(
+    isDeepStrictEqual(await store.listReports(board), [
+      { ...nameReport, resolvedAt: reviewedAt, resolution: 'kept' },
+      linkReport,
+    ]) && (await store.listReports({ game: runGame, season: '2026-06' })).length === 0,
+    "resolving closes the record's open reports on one target only, and reports are listed by board",
+  )
+
+  await store.blockLink('blocked-profile-hash', reviewedAt)
+  await store.blockLink('blocked-profile-hash', reviewedAt)
+  assert(
+    (await store.isLinkBlocked('blocked-profile-hash')) && !(await store.isLinkBlocked('other-profile-hash')),
+    'a blocked link stays blocked, however often it is blocked',
+  )
+
+  const earlier = await recordEntry(store, 'moderation-held', '2026-06', {})
+  await store.eraseVisitorGameData(runGame, 'moderation-held')
+  assert(
+    (await store.getEntry(entry.id)) === null &&
+      (await store.getEntry(earlier.id)) === null &&
+      (await store.getRun(held.id)) === null &&
+      (await store.listReports(board)).length === 0 &&
+      (await store.getEntry(unlisted.id)) !== null,
+    "a visitor's deletion removes their runs, records, and the reports on them in every season, and no one else's",
   )
 }
 

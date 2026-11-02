@@ -91,3 +91,15 @@ export function boundedText(text: string, field: string, maximumLength: number):
   }
   return text
 }
+
+/**
+ * A malformed cookie, path value, or link id counts as missing, so broken percent-encoding cannot turn a request into
+ * a server error.
+ */
+export function decodeComponent(value: string): string | null {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return null
+  }
+}
