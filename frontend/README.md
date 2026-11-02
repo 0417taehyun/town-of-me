@@ -47,27 +47,6 @@ npm run build
 - **Time and seasons:** lighting, sky, lamps, music, birds, and clouds follow local time; the season follows the
   Northern Hemisphere month. The sun button previews any time and season. Changes play out in order: leaves fall
   before snow settles, and snow melts before leaves return.
-- **Home-run derby:** `/baseball` is a home-run derby in a garden ballpark, batting as your town character, once the
-  admin shows the ballpark; until then it says the ballpark is coming soon, and nothing else of it loads. Each run
-  plays the pitch count (3–10) and difficulty the admin set for the current month in Korean time; a change takes effect
-  from the next month, and a run started after midnight on the first plays the rules scheduled for it. A ball in play
-  is a home run, a hit, or a foul; a pitch you let go is a strike and one you swing through a miss, and there are no
-  outs. The pitcher throws only strikes, and a faint box shows the strike zone while each pitch comes. The result
-  banner names the pitch type only after the pitch. The result shows the home runs, their total
-  distance, and the longest. Its sky, light, lawn, and snow follow local time
-  and season like the town's, without changing the score. Phones, tablets, and browsers without WebGL 2 see why they
-  cannot play, with an address to copy. With the camera you swing what you hold (a bat, a bottle) across your body:
-  the camera boxes what it finds by your hands and locks it by itself while you hold it still, and when nothing has
-  locked about two seconds after your hands show, it lets you play with empty hands held together as if gripping a bat
-  (a real object it finds while you set up still takes over; a tap on the camera picture corrects a wrong lock). Choose
-  to bat right- or left-handed on the setup card. The one click on `Start with the camera` is the only one needed: from
-  there you go on hands-free, once the camera has locked what you swing, by holding your batting stance (hands raised
-  by your back shoulder) still for about three seconds, or with the step's button; the line under the ring says what
-  it still waits for. That takes you to five practice pitches, which tell each swing only `A bit early`, `Good`, or
-  `A bit late` and set your timing for the runs after them, then to the run, and to another after its result.
-  Practice and a run pause between pitches while you are out of the camera's view. The camera picture is processed in the browser only and never leaves the device; the camera
-  turns off when you leave the page or after two minutes without movement, and a camera that is refused, missing, or
-  busy shows why with another try. A computer too slow to follow a swing is told so, like a phone.
 
 ## Controls
 
@@ -87,18 +66,37 @@ npm run build
 | Field of view               | Mouse wheel                                      |
 | Debug view                  | `H`                                              |
 | Respawn and recenter camera | `R`                                              |
-| Swing (home-run derby)      | Swing on camera, with an object or empty hands   |
-| Lock what you swing (derby) | Hold it still; it locks by itself                |
-| Go on hands-free (derby)    | Hold your batting stance 3 s, or the step button |
-| Leave the derby             | `Esc` (twice in full screen) or `Back to town`   |
-| Resize or hide derby camera | `V` or the on-screen `Camera view` button        |
-| Toggle derby diagnostics    | `D` (dev build); `L` saves 60 s as JSON          |
-
-The derby's diagnostics file (`L`) holds the last minute's upper-body joint positions and what the object detector
-found, never an image; it stays on this computer and is shared only if you hand it over.
 
 The camera button tunes the follow camera live, and `?` reopens help. Turning off `Ambient motion` in help freezes
 clouds, birds, and water; the system's reduced-motion setting slows them instead.
+
+## Home-run derby
+
+`/baseball` is a home-run derby in a garden ballpark, batting as your town character, once the admin shows the
+ballpark; until then it says it is coming soon and loads nothing else.
+
+- **Rules:** the pitch count (3–10) and difficulty set for this month in Korean time; a change starts next month.
+- **What counts:** home runs and their total distance. A ball in play is a home run, a hit, or a foul; a pitch let go is
+  a strike and a swing through it a miss; there are no outs. The pitcher throws only strikes, through a faint box that
+  shows the zone, and the pitch type shows only after the pitch.
+- **Devices:** phones, tablets, browsers without WebGL 2, and computers too slow to track a swing are told why, with an
+  address to copy.
+- **Camera:** `Start with the camera` is the only click. The picture never leaves the browser; the camera turns off when
+  you leave or after two minutes without movement, and a refused, missing, or busy one says why with another try.
+- **What you swing:** what you hold (a bat, a bottle), across your body. It locks once you hold it still, and a tap on
+  the picture corrects a wrong lock; with nothing locked two seconds after your hands show, empty hands held together
+  will do.
+- **Hands-free:** pick a batting side, then hold your stance (hands by your back shoulder) still for about three
+  seconds, or press the step's button; the line under the ring says what it still waits for.
+- **Practice:** five pitches tell each swing only `A bit early`, `Good`, or `A bit late`, against your own usual
+  timing, and set the runs' timing.
+- **Away:** practice and a run pause between pitches while you are out of the camera's view.
+
+| Action                    | Input                                          |
+| ------------------------- | ---------------------------------------------- |
+| Leave                     | `Esc` (twice in full screen) or `Back to town` |
+| Resize or hide the camera | `V` or the on-screen `Camera view` button      |
+| Diagnostics (dev build)   | `D`; `L` saves the last minute as JSON         |
 
 ## The admin editor
 

@@ -111,278 +111,74 @@ copies of the variant lists, so adding a variant never changes how existing obje
 - The pixel ratio adapts to the frame rate in every `GraphicsCanvas` given no fixed `dpr` (the town and the derby).
   A canvas whose WebGL 2 is missing, lost, or fails while drawing shows the fallback and calls `onUnavailable`.
 
-### `baseball/game/`
+### `baseball/`
 
-The derby's core is plain TypeScript, without React, Three.js, or the DOM. A swing's landing is decided first,
-without randomness, from its timing, power, and bat height; `flight.ts` only draws a path that ends there. The seeded generator (mulberry32) plans the pitches and nothing else. The scoring files use arithmetic,
-comparisons, and `Math.sqrt` only, and import nothing at runtime from outside `baseball/game/` and
-`baseball/statistics.ts`, so a server can mirror them and score a run the same way. `flight.ts` is display only and
-not one of them. `derbyScore.ts` is that seam: `replayDerby` scores a run from its `RunPlan` (seed and the month's
-rules) and its raw `DerbyInputLog` (the batting side, the practice swings, and each pitch's camera swing or none),
-recalibrating from the practice swings in it; a swing whose tracking lost the bat counts a common height error (0.2 m),
-never a level bat. Every swing is the camera's: no key or button swings. `derby.ts` plays a run on `gameClock.ts` time
-with the same functions, so the numbers shown live are the replayed ones; it logs a swing's bat height against the
-ball's height at the contact point (`contactHeight` in `pitch.ts`), since only it knows which pitch the swing met.
-Practice plays as a derby too (`createPracticePlan` in `runPlan.ts`, `createDerby`'s `practice`): the fixed practice
-pitches at the practice pace, which the scoring functions take as an argument that a run never passes, taking swings as
-late as the calibration still counts one past the contact point, so a server needs none of it. It judges each pitch
-against the visitor's usual timing in its swings so far, this one's included (`practiceCalibration`), and keeps that
-calibration for the stage to draw the pitch with; `replayPractice` judges it again the same way. Its swing deadline
-never moves with that usual timing, so which swings it takes, and with them the runs' calibration from their raw errors,
-never hang on its own judging.
+The derby draws on its own flat canvas (`BaseballStage.tsx` never installs the world curve) and reads the webcam in the
+browser. Why each rule and number is what it is lives in the commit messages.
 
-### `baseball/stage/` and `baseball/stadium/`
+- **Top level:** the visibility gate (`BaseballGate.tsx`, `useBallparkGate.ts`), the path, previews, and exits
+  (`baseballRoute.ts`, in the main chunk), the page (`BaseballApp.tsx`), the camera and vision tasks run for the page
+  (`cameraTracking.ts`), the device check (`deviceGate.ts`), the character check (`baseballSession.ts`), and the
+  median and percentile helpers (`statistics.ts`).
+- **`game/`:** scoring a server can mirror: run plans and seeds, the pitch schedule, judging, landing, calibration, the
+  live derby on `gameClock.ts` time (`derby.ts`), and its replay (`derbyScore.ts`). `flight.ts` only draws a path to
+  the decided landing.
+- **`stage/`:** run playback (`DerbyDirector.tsx`, and `stageRun.ts`, which keeps the derby, clock, ball, and shot in a
+  ref and reports only events to React), the players' driver (`ballplayerCast.ts`), camera shots, the ball, flashes,
+  and the strike-zone box.
+- **`stage/actors/`:** the players in plain Three.js: the town character's body posed by joints (`ballplayerRig.ts`),
+  the batter and its aim solve (`batter.ts`, `bodyVolumes.ts`), keyframed swings, the pitcher, catcher, and fielders.
+- **`stadium/`:** the garden ballpark (field, bowl, landmarks, crowd, field crew, breeze, floodlight, scoreboard), laid
+  out in the `*Layout.ts` files; buildings take the palette's roles, nature the visitor's season, and the sky the time
+  of day.
+- **`vision/`:** MediaPipe (`tasksVision.ts`), the camera stream (`cameraInput.ts`), the pose loop, the held object
+  (`heldObject.ts`), the swing tracker (`swingTracker.ts`), motion energy, and the performance tier.
+- **`flow/`:** the steps after the rules card (`derbyFlow.ts`), the stance hold (`stanceHold.ts`), full screen, and
+  the wake lock.
+- **`ui/`:** DOM overlays: the HUD and what it may show (`DerbyHud.tsx`, `derbyCues.ts`), the camera panel and its
+  layout (`cameraPanelLayout.ts`), the setup, practice, result, and blocked screens, and the diagnostics panel.
+- **`devDiagnostics.ts`, `devSeam.ts`:** dev only. D shows the camera's, tracker's, and stance's numbers; L saves the
+  last minute per camera frame (upper-body joints, detections, stance), never a picture, on this computer only. The
+  seam lets an automated check stand in for a visitor and their swings.
 
-The stage draws a run on its own flat canvas: `BaseballStage.tsx` never installs the world curve. `DerbyDirector.tsx`
-plays the run in one `useFrame`: `stageRun.ts` keeps the derby, its game clock, the ball, and the camera's choice in a
-ref and reports only events to React. The ball is the pitcher's until the derby releases it; a pitch then waits at the
-back of the batter's reach while a swing that touches it could still be reported (a camera swing comes up to the derby's
-late margin after it), so the mitt never catches a ball the bat then hits. A ball in play leaves the bat where the bat
-met it and flies to the landing the judge already decided, fast enough to come down before its result ends. The batter's
-swing is the stage's too (`ShownSwing`): it begins when the camera cues the visitor's swing starting, eases into the
-slot short of the plate until the derby judges it, and a judged swing gets its last stretch to the ball, timed from
-where it is drawn (`lastStretchFor`: a frame or two from near the slot, the whole `CONTACT_DELAY_MS` from the windup).
-The stage changes the clock's pace (a step back for a hit reported late, so the bat swings that stretch into the ball,
-after the clock stands still a few frames, the ball resting at the back of the reach, while the batter aims the swing a
-slice a frame; a hit-stop that holds them together; slow motion at a showcase home run's peak; a pause while the page
-is hidden) but never an outcome, and no cue reaches the derby. `cameraShots.ts` frames the batting shot between the HUD's bands at any
-aspect. The pitcher throws only strikes: every pitch passes through the zone whole (`game/pitchSchedule.test.ts`), and
-`strikeZoneOutline.ts` draws the zone as a faint box from the windup until the pitch is judged. The batting shot looks
-down, so a ball farther off is drawn higher and one flat frame would show strikes nearer the pitcher above it; the box
-runs from where the bat meets the ball, over the plate, to where a pitch let go by waits, so a strike is drawn inside it
-as the visitor swings, as it crosses the plate, and while it waits. Its opening is the zone grown by the drawn ball's
-extra size. The stadium's lawn and hedge take the visitor's season like the town's (`scene/environment`), the sky and
-light the time of day, and its dugouts and foul poles the ballpark palette; none of this reaches the score. The garden
-bowl (`bowlLayout.ts`, `GardenBowl.tsx`) and its landmarks (`landmarkLayout.ts`, `GardenLandmarks.tsx`) follow the same
-split: buildings in the palette's roles, nature in the season (town trees and flowers, with their snow). Nothing tall
-stands where a home run lands or the landing camera stands, and the treehouse scoreboard shows a
-pitch only once its ball is down, as the HUD does (`scoreboard.ts`). The crowd (`crowdLayout.ts`, `Crowd.tsx`) is one
-instanced mesh whose vertex shader turns each fan toward the ball and makes it hop and wave as a result asks, so it costs
-one draw call and no per-fan work on the main thread; fans take approved guestbook looks, padded with random ones and
-never a name (`guestLooks.ts`), and a reduced performance tier draws half of them. The rest of the field
-(`fielderLayout.ts`, `fieldCrewPlay.ts`, `FieldCrew.tsx`) is the other team's seven fielders, the plate umpire under the
-batting shot, our runner on second, and our teammates in our dugout, on the players' rig (`stage/actors/fieldPlayer.ts`)
-and drawn as a few instanced meshes (`stage/actors/rigBatch.ts`). They watch the ball, and for a ball in play the
-fielder nearest its landing runs for it, always to fair ground inside the hedge (`fielderLayout.test.ts`); they only
-show where the derby already sent it. The garden's breeze (`breezeLayout.ts`, `GardenBreeze.tsx`) drifts the season's
-petals or leaves round the park beyond the infield and flies butterflies over the flower beds by day and fireflies at
-night, and when a home run's ball clears the hedge it bursts petals over the hedge and from the far light towers, from
-one bounded pool; nothing of it comes near the pitch or between the camera and the ball, a
-reduced tier draws fewer, and reduced motion leaves it out (the town's own fireflies, which gather round the camera,
-stay out of the stadium). The ballpark's lamps follow the town's (`useLampsOn`): the towers' lamps, the string lights,
-and the windows glow and the conservatory lights up, all emissive with painted halos, and one warm floodlight
-(`Floodlight.tsx`, at nothing by day) grows with the night so the ball and the chalk read as by day.
+Keep these when changing the derby:
 
-`stage/actors/` builds the players in plain Three.js. `ballplayerRig.ts` is the town character's body, look, and
-proportions posed by joints (two-bone IK legs on planted feet, a chest turning about a tilted spine, elbow arms); the
-batter (`batter.ts`) is the visitor's character with a bat and mitten hands, playing the pose lab's swing as monotone
-keyframe tracks (`keyframes.ts`, `swingMotion.ts`). It reads the contact point from `game/field.ts` and aims at it, so a
-PERFECT swing squares the bat there. A swing the camera saw begin leans toward the pitch and eases into the slot, the
-bat still behind the batter, and goes back to the windup by itself unless it is judged by then; once judged it speeds up
-onto its ball, as fast at the ball as a swing from the windup, or it is checked short of the plate and goes back, each
-stretch starting where and as fast as the last left the bat; a left-handed batter is the mirror image. A swing turns its
-bat and leans toward its ball, turning its chest and lunging with its body rather than stretching an arm for a ball
-met far out in front, holds its finish, and comes back to the stance along keys of its own, low and in front of the
-body. Its keys keep the bat out of the body, and the elbows and the head's tilt and turn are solved against the body's
-simple solids (`bodyVolumes.ts`), smoothly from moment to moment, so the arms, the mittens, and the bat stay out of the
-head, its hair and hat, and the body, and the arms and mittens off the bat and each other. That aim is the costliest
-work a frame could do, so no frame does it at once: the aims a swing from the windup takes are solved ahead during the
-windup, and a hit's is solved a slice a frame, each twice the last, while the stage waits (`ballplayerCast.ts`
-`settleBatter`), so even a slow computer holds the clock only a few frames.
-The other team's pitcher (`pitcher.ts`) and catcher (`catcher.ts`) wear its brick red and charcoal (`teamUniforms.ts`);
-the pitcher's throw is keyed on the same tracks with its release key at `game/pitch.ts`'s `RELEASE_POINT`, and the
-catcher's mitt reaches for where each pitch ends up. `ballplayerCast.ts` drives all three from the stage run: the
-pitcher throws on the derby's windup and release, the batter loads with them and swings the swing the stage shows, a
-judged one's bat meeting the ball where and when the stage sends it off, and every head follows the ball
-(`headLook.ts`), the batter's only as far as its arms, mittens, and bat let a hat brim or hair turn, easing away
-ahead of them while the swing moves them. Nothing in `game/` reads the rigs.
-
-### `baseball/vision/`
-
-The webcam is read in the browser only, and nothing it sees leaves the device; `/baseball`'s CSP (`connect-src 'self'`,
-`docker/nginx.conf`) enforces that. `tasksVision.ts` imports MediaPipe Tasks Vision only when asked, pinned to exactly
-0.10.35 because 1.0.0 and later send usage logs, and loads everything from this origin: Vite fingerprints the wasm from
-`frontend/`'s own copy of the package (not the one `@react-three/drei` depends on), and the models are committed in
-`public/assets/models/`. It builds a task on the GPU or, when that fails, the CPU, builds it again after a lost WebGL
-context, and keeps frame timestamps strictly increasing. `cameraInput.ts` asks for video only and stops every track on
-`pagehide`, after two minutes without movement, when the camera ends by itself, and when its caller's signal aborts.
-`poseLandmarks.ts` reduces a pose to the wrists, the shoulders (their width, midpoint, and height), and the head (the
-nose) a swing reads, in the raw, unmirrored image, with the point, box, and grip geometry the held object and the
-tracker share. `poseLoop.ts` runs the pose task on each camera frame from the video's frame callback, times each frame
-by the browser's capture time (so a swing is timed when it happened, not after the frame was carried and tracked), keeps
-the camera on while the visitor moves, and holds whether it sees them through brief flickers. A swing counts only once
-the held object is locked, loaded behind the body on the batting side, and swept across the body's midline:
-`heldObject.ts` locks by itself an object EfficientDet-Lite0 finds within a shoulder width of the visitor's still wrists
-(it boxes a held bottle above the fist, 0.5–0.9 SW off in the drafts' log) once enough sightings agree, or one they tap
-on the camera picture, and lets a detected one go after enough misses while they stand still. It locks only what an
-allow list says a visitor might hold: never a person, nor a remote, which the log's detector took the empty hands for
-through most of the minute, nor a phone or a mouse, the same kind of small thing nobody swings. When nothing has locked
-about two seconds after the hands came into view, `swingTracker.ts` plays free mode on the detector's next run that
-finds nothing by the still hands. That time runs while the detector still rests for the speed check, whose line asks for
-the upper body and the hands in view, so a visitor with nothing to hold waits out the check, not the check and then a
-search, and free mode never starts before the detector has looked. On every step a real object that locks later still
-takes over, and one lost hands back to free mode at once, its caption saying so, so play goes on with the hands: the
-design doc has a lost lock search again, which waits for the detector while it rests through every pitch, so a pitch or
-two could not be swung at. While searching, the caption says it looks for what the visitor swings and that without one
-both hands together will do, as on a bat, while the stance's line asks for the object or both hands held still. It never
-says to swing: the search runs only on the setup step, where a swing meets no pitch and keeps free mode from starting.
-Free mode's caption asks to bring the hands together, never to swing: it starts while the hands keep still, often
-mid-stance on the setup step. Free mode follows where the wrists meet, but one that takes over from an object lost from
-one hand goes on following that hand, for its swings and its stance alike, its caption saying to carry on as before (a
-loss lands while the visitor keeps still, mostly mid-stance, so it never says to swing): in the drafts' real webcam log
-the free hand hung 1.5 shoulder widths off, so the wrists' middle halved the next one-handed swing, which then fell
-short. It turns two-hand, without a caption, once the hands have held a still load together for 300 ms (not hands that
-only look together for a frame or in a swing's turned finish) with their middle loaded too, so that the switch never
-un-counts a stance the one hand held, or follows another hand once an object locks in it. A lock or a loss that keeps
-the hand followed keeps the load too, so the detector locking and losing the log's bottle three times in 15 s on the
-setup step never makes the visitor load again. The detector waits until the computer is timed, then runs 4 times a
-second while looking for an object (searching, or from a sighting by the hands until a lock window passes without
-another), and otherwise only glances: once a second to keep a detected one fresh, back at 4 a second once a glance
-misses it until it is seen again or let go, and in free mode, to spot a real one, once a second in play and twice on the
-setup step, where the visitor picks up what they swing. It never runs while no hands show, as with nobody in view, since
-what it finds is judged against them, nor for a tapped lock. The design doc has 9 a second while looking and 4 once
-locked, but each run holds up the pose frames for some 40–65 ms: on a 30 fps fake camera, runs due every 110 ms left the
-setup screen 15–16 pose frames a second, every 250 ms 22–25, every 500 ms 26–27, and once a second 27–29, against 29–30
-with none. A lock still takes three sightings, so a held bottle locks about 0.5 s after the first run that sees it, or
-1.1 s if the detector misses every other run, which the lock window (1.5 s rather than the drafts' 1 s) still fits; in
-free mode the glance that first sees it comes up to half a second later on the setup step, a second in play. One picked
-up on the setup step in free mode so locks 0.5–1 s later (0.8 s typically) if the detector finds it on every run, but
-some 1.7 s, one time in ten nearly 4 s or more, if on half its runs: a wait of a few seconds is a patchy detector, not a
-fault. Replaying the drafts' real webcam log, its bottle locks 1.3 s after it came within reach from a search and 1.5 s
-from free mode, the visitor moving it in between (within 0.3 s at 9 runs a second). A detected object is let go after
-six misses over 1.5 s with the hands still, so a few misses in a row never drop one still held, and one put down goes
-1.6–2.6 s after it left the hands (the drafts' six misses at 4 a second took 1.5 s from the first). It rests from each
-windup until the pitch's ball is down (the cadence is the tracker's, `objectDetectionInterval`, the pause the page's,
-since both follow the tracker and the derby rather than the camera).
-`swingTracker.ts` follows the grip against the shoulders of frontal frames only (a turned torso narrows them), arms on a
-load, and fires at the interpolated midline crossing once the sweep is fast and long enough, the head
-stayed (a visitor walking by moves both), and `motionEnergy.ts` saw the band it swept through change; a swing whose
-wrists blur out just before the midline still counts, with its bat height unknown. It reports a swing on the first
-frame that meets every rule, usually the crossing's own. Before that, once a sweep toward the batting side closes on
-the midline fast, it cues the stage that a swing has begun and when it should cross, and if the sweep then ends without
-a swing, that it was checked; only the batter's look follows a cue. It confirms a swing within 150 ms of the crossing,
-and the derby waits long enough past the last touching moment for that, a 15 fps frame, and the frame's
-trip to the stage (`LATE_SWING_MARGIN_MS`, tied to it in `stage/stageRun.test.ts`), so a slow camera or computer never
-loses a swing. The bat's height comes from where the grip crossed against the shoulders. `SWING_RULES` and
-`CONTACT_HEIGHT` come from the drafts' synthetic swings and one webcam log and still need tuning on a real webcam; the
-tests build their 30 fps sequences in code and commit no recordings. `performanceTier.ts` times this computer on every
-visit (the 95th percentile of the pose task's time and of the page's drawn-frame gaps after a warm-up, not the camera's
-frame rate; nothing is stored). `deviceGate.ts` names why the camera game cannot start (camera refused, missing, busy,
-or failed; tracking could not start), which the page shows with another try; a computer too slow
-to track is blocked like a phone. `cameraTracking.ts` runs the camera for the page, loading the pose task and the object
-detector while the browser asks for the camera, and draws each frame mirrored with the upper body on the camera panel's
-canvas (`ui/cameraOverlay.ts`), over a dashed box where to stand and, once the tracker follows a grip, how to swing (the
-load zone behind the back shoulder, brighter once loaded, the midline the grip must cross, and the swing's band:
-`vision/swingTracker.ts swingGuide`), with the object it marks: a found one's box, name, and lock progress (while searching,
-or in free mode on the setup step; in play a glimpse by empty hands would only flash), or a locked one's box. It reads
-swings and their cues on the same frames and hands each to the page the moment it is seen, so React hears only
-status changes, whether the camera sees the visitor, and the tracker's short caption: where the tracker is, held at
-least 0.7 s so it never flickers, or at once what just happened (a lock, a lost object, a swing, a sweep that was not
-one). The design doc asks for two- or three-word captions; the search caption is longer on purpose, so it also tells a
-visitor with nothing to hold that both hands together will do. The panel reads from 2 m: above the picture a 9vh chip
-says in a word where the camera and the tracker are, coloured by it (dark looking, red to put right, blue ready, green
-loaded, coral with a pop for a swing), and under it a 6vh line says the caption, or what a step waits for in its
-place (`ui/derbyCues.ts cameraPanelWords`). Once the camera is off, the motion sampler's last picture
-and the tracked body are wiped along with the panel's (a dev build's diagnostics keep their notes, below).
+1. `game/` is plain TypeScript importing at runtime only itself, `statistics.ts`, and constants from `data/models.ts`,
+   so a server can score a run the same way (`replayDerby` over the `RunPlan` and the raw `DerbyInputLog`).
+2. A landing is decided without randomness from timing, power, and bat height; the seeded generator (mulberry32) plans
+   only the pitches and the crowd's padded looks.
+3. The pitcher throws only strikes: every pitch passes through the zone whole (`game/pitchSchedule.test.ts`).
+4. The stage changes the pace (holds, hit-stop, slow motion, pauses), never an outcome; no cue reaches the derby.
+5. The batter's arms, mittens, and bat never enter its head or body, nor the arms and mittens the bat or each other
+   (`bodyVolumes.ts`, `batterOverlap.*.test.ts`); the aim is solved over several frames (`settleBatter`).
+6. The camera picture never leaves the device: `/baseball`'s CSP has `connect-src 'self'` (`docker/nginx.conf`),
+   `@mediapipe/tasks-vision` stays pinned to 0.10.35 (1.0.0 and later send usage logs), and the models are committed in
+   `public/assets/models/`.
+7. Every swing is the camera's: keys only press the focused button, leave with Escape, and cycle the camera panel with
+   V (D and L in a dev build).
+8. `baseball/` never imports `editor/`, `TownScene.tsx`, or the kinds registry.
+9. `devDiagnostics.ts` and `devSeam.ts` are reached only behind `import.meta.env.DEV`; a production build has neither.
+10. `SWING_RULES`, `CONTACT_HEIGHT`, `HELD_OBJECT_RULES`, and `STANCE_HOLD_RULES` are untuned on a real webcam
+    (TODO.md); tests build their camera sequences in code and commit no recordings.
 
 ### The `/baseball` page
 
-`BaseballGate.tsx` reads the town first (`useBallparkGate.ts`). While the admin hides the ballpark
-(`town.venues.ballpark.visible`, false until shown), only the admin's preview plays it (`ballparkOpens` in
-`baseballRoute.ts`, which asks `/v1/me` for the role only then); anyone else gets a coming-soon card in the town's
-style, and neither the derby's chunk nor the camera loads. Nothing in the town links to `/baseball` yet; the town's
-ballpark exterior, its gate, and the statues, when they come, read the same flag and stay out while it is hidden.
+`BaseballGate.tsx` reads the town first. While the admin hides the ballpark (`town.venues.ballpark.visible`, false until
+shown), only an admin's preview plays it (`ballparkOpens` asks `/v1/me` for the role only then); anyone else gets a
+coming-soon card, and neither the derby's chunk nor the camera loads. Nothing in the town links to `/baseball` yet; the
+town's ballpark exterior, its gate, and the statues, when they come, must read the same flag and stay out while it is
+hidden.
 
-The gate hands the town it read to `BaseballApp.tsx`, which checks the device first (`deviceGate.ts`: a phone or
-tablet, then WebGL 2) and shows why one cannot play in the visitor's language (also when the stadium's graphics fail
-later, or when the camera finds this computer too slow to track), then the character, then the derby. Each
-run reads the KST month it starts in and gets a `crypto` seed (`flow/derbyFlow.ts`), so a page left open into a new
-month plays the rules scheduled for it, as loaded with the page, from its next run. The editor's link to `?rules=next`
-(`baseballPreview` in `baseballRoute.ts`) plays the rules scheduled for next month instead, or this month's when none
-are (`plannedBallparkRules`), and its link to `?rules=current`, shown while the ballpark is hidden, plays this month's;
-both are badged `Preview · not ranked`, and once ranked runs exist, a preview must never get a run ticket. The editor
-opens the preview in the same tab, so the preview's back links and Escape return to `/admin`
-(`baseballExit`). The HUD (`ui/`) keeps only what the stage's events tell it (`derbyCues.ts`): a release carries
-nothing it shows, so the pitch type reaches the screen only in a result, and the result banner waits until the ball is
-down so it never covers the play; the scoreboard's home runs and their summed distance count a home run as its banner
-shows. The banner and the HUD show the outcome, the distance, and the pitch type, never a timing verdict or a swing's
-power. The result screen draws the `DerbyResult` that `replayDerby` returns with the `finished` event. The rules card
-promises that the camera picture stays on the device and turns off on leaving or after two minutes without movement,
-then turns the camera on with the only click the derby needs, which also unlocks its sounds and asks for the full
-screen; the screen stays awake while the camera is on, asked again each time the page shows
-(`flow/screenRequests.ts`). `flow/derbyFlow.ts` holds the steps after it: the setup, where the visitor picks the
-batting side (which the batter, the camera panel, and the swing tracker follow), then practice, the step after it, the
-run, and its result. Each step that waits goes on by its focused button (Enter and Space press it, as on any page) or by
-holding the batting stance about three seconds (`flow/stanceHold.ts`), read from the pose rather than the swing
-tracker's states once it has locked what the visitor swings: the grip (both hands together, or the one that holds the
-object) behind the body's midline on the batting side as far as the tracker loads, up by the chest or shoulders, and
-still, its smoothed path measured in shoulder widths against the pose task's jitter as the drafts' real webcam log
-shows it. Nothing counts in a step's first second; on the setup a stance the visitor already stands in counts, while
-after practice or a run one kept from the last swing counts only once they have been seen moving or lowering their
-hands for over 300 ms, so a glitch of the pose task is no fresh stance. A break or a tracking loss under 300 ms neither
-fills nor drains the ring, and a longer one drains it as fast as holding fills it. The vision loop follows the hold and
-fills `ui/StanceGauge.tsx` straight on its element; the line under the ring says what the hold waits for, the first
-unmet first: the upper body in view, the hands inside the picture (a followed wrist within 5% of its edge, or past it
-where the pose task only guesses it, as the drafts' log had the hands at the bottom, so that comes before any height or
-place), the lock, both hands together as on a bat in two-hand free mode, raised by the back shoulder, a fresh stance,
-held still, and in a step's first second, while the ring cannot fill, that the stance is being checked rather than to
-keep holding. Right after swings, hands at the picture's edge are taken for lowered ones, so the line asks for a fresh
-stance and then for the hands raised rather than to step back. React renders only when a step or the line changes, and
-while a step waits the camera panel's line says the same in place of the swing tracker's directions to swing
-(`ui/derbyCues.ts seenCameraState`). The ring and the line beside it are sized for 2 m, and a full ring dings and
-flashes a big word for what it starts (practice, play ball, again). A lock that lands mid-hold leaves the ring filling: the grip moves to one hand only
-when the wrists are too far apart to hold a stance in free mode, or the other is hidden and the grip was that hand
-already. Practice pitches the game core's practice schedule at the practice pace as a derby of its own, and it takes
-swings as late as the calibration still counts one past the contact point, so a slow camera's late swings still teach
-it; each pitch waits at the back of the reach until then, as any of them may be on time. It judges each swing against
-the visitor's own usual timing (`game/calibration.ts practiceTimingOffset`, `game/derbyScore.ts practiceCalibration`):
-from the third valid swing on, the offset a run's calibration takes off, the median error of the valid swings so far
-against the contact point, this one included. Before that there is no usual timing yet, so a valid swing is judged
-against its own error and is on time: the first two say good, however far apart (against their midpoint, a second swing
-far from the first would be early or late). The usual timing keeps to the range a run's offset keeps (−150 to +300 ms),
-so a first swing further off than any run takes off is told early or late, as a run would tell it. The pitch on the
-field and the word under it come from that one judgement, so they always agree: it tells each swing only a bit early,
-good, or a bit late (`shownPracticeFeedback`), its judged error within the difficulty's GOOD window or not. Against the
-contact point alone, as the drafts' design first had it (8.3 (c)), a webcam's steady delay would call nearly every swing
-late. Its swings calibrate every run until the camera turns off, with their raw errors; a run takes the usual timing off
-only from three valid swings (`findsUsualTiming`), so a practice that ends with fewer says so on its last card rather
-than that the timing is set. Practice and a run stand still once the visitor has been out of the camera's view 1.5 s,
-but only between pitches (before the first windup, or once a result's ball is down and another pitch is to come), so a
-ball on its way plays out and no swing made meanwhile meets a pitch; the next pitch comes once they are back. A camera
-that turns off, as after two minutes without movement, takes the page back to the rules card. In a dev build,
-`devSeam.ts` lets an automated check stand in for a visitor the fake camera cannot show, and for their swings, which the
-camera's frames hand over like tracked ones. In a dev build, D also shows `devDiagnostics.ts`'s panel
-(`ui/DiagnosticsPanel.tsx`) for tuning on a real webcam: the camera's and the vision tasks' timing, the tracker and the
-lock, each stance condition against its limit, and the last sweep from leaving the load to the stage's reaction against
-the swing rules, with the judged swing's raw error against the contact point beside its judged one, since practice's and
-a run's judging take the camera's lag out. The sweep shows its swing-start signal too: when its frame was taken and
-handled, how fast the grip closed on the midline then, and the crossing it expected, against `startSpeed` and
-`startHorizonMs` (or, if none was given, the frame it closed fastest on); a sweep that signalled the batter's start but
-never left the load zone is noted too. L saves the last minute as a JSON file on this device: these numbers and, for
-each camera frame, what the swing tracker and the stance hold read of it (the upper body's joint positions and the hips,
-what the object detector handed the tracker, the motion in the swing's band, the picture's size, the batting side, and
-the step that waited), with each pitch's release and result and each tap on the camera picture on the frames' clock;
-never a picture. The file stays on this computer unless the visitor hands it over; until the tab closes, a dev build
-also keeps that minute in memory after the camera turns off, so L can still save it. A dev build's detector reports
-detections down to 0.2 rather than `candidateScore`, which play still filters by, so the panel and the file also show
-what a lower bar would take. The drafts' design leaves out the diagnostics export; dev builds keep it, since the rules
-need a real webcam's tuning. A production build leaves the panel and the saver out. `ui/cameraPanelLayout.ts`
-places the camera panel: the mirrored camera is the stage while it sets up, a column under the scoreboard on the side
-opposite the batter from practice on (medium, 29% of the width, by default; V or the camera button cycles medium, large,
-hidden, remembered in `localStorage`), a corner chip while the camera chases a home run, and beside the result screen
-too, where the design doc hides it, as that screen waits for the visitor's stance (its card, like practice's last one,
-centres in the band the panel leaves, and the screen can turn the camera off). A panel the visitor hid comes back at
-medium while the camera looks for them or a step waits for their stance, so they see the stance they take, and it hides
-below a readable width. The stage centres the play and the HUD its title, caption, and banner in the band the panel
-leaves free (`centreInBand` in `stage/cameraShots.ts`). The HUD's pitch dots and scoreboard hang in the top corners
-beside the pitch line, never within `HUD_RESERVE.centre` of it: the dots on the batter's side, and the scoreboard over
-the panel, as large as the room to the line allows (`scoreboardRoom`); the page's links stay along the bottom under the
-batter, so the panel's column runs down to the screen's bottom. The run's caption shows over the play only while it is
-paused for a visitor out of view, since the title shows each outcome; a screen reader hears every caption. No key
-swings and there is no swing button (keys only press the focused button, leave with Escape, or resize the camera panel
-with V, and in a dev build show the diagnostics with D and save them with L): the swings are the camera's, which the
-stage takes before advancing the derby in the same frame, so a swing seen a little late is still judged at the moment
-its frame was taken.
+`BaseballApp.tsx` then checks the device (a phone or tablet, then WebGL 2, later a computer too slow to track), the
+character, and plays the derby. Each run takes the rules of the KST month it starts in and a `crypto` seed
+(`flow/derbyFlow.ts`). The editor's previews, `?rules=next` (next month's rules, or this month's when none are
+scheduled) and `?rules=current`, are badged `Preview · not ranked` and return to `/admin` (`baseballExit`); once ranked
+runs exist, a preview must never get a run ticket. The rules card's one click turns the camera on, unlocks the sounds,
+and asks for full screen and a wake lock. Then the setup (batting side), practice, the run, and its result each go on by
+the focused button or by holding the batting stance about three seconds. Practice tells each swing early, good, or late
+against the visitor's own usual timing (`practiceCalibration`) and calibrates the runs. Practice and a run stand still
+between pitches while the visitor is out of view, and a camera that turns off goes back to the rules card. The HUD and
+the result show the outcome, the distance, and the pitch type, never a timing verdict or power.
 
 ## Backend (`backend/src`)
 
