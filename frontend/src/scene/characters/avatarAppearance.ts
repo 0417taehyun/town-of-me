@@ -10,7 +10,8 @@ export type AvatarPart = {
   rotation?: Vector3Tuple
 }
 
-const ink = '#352b29'
+/** The color of the eyes and dark mouths, which a statue paints glossier than the rest. */
+export const ink = '#352b29'
 
 export function avatarPart(
   id: string,

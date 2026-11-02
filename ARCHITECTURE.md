@@ -79,6 +79,7 @@ none of the town.
 | `animals/`     | The pet corgi: model, trot, and petting responses.                                                                                                                                                                                                       |
 | `environment/` | Time of day, seasons and their transitions, sun, sky, night lights, weather particles, ground, distant land.                                                                                                                                             |
 | `venues/`      | The venues past the hedge: edge slots (`venueSlots.ts`), placements and gates (`venuePlacements.ts`), exteriors (`VenueExteriors.tsx`), theme palettes, a shared material per color role, the ballpark's shared parts.                                   |
+| `statues/`     | The painted statue of a board's top three (`paintedStatue.ts`): the character as plain Three.js (`statueFigure.ts`), the place finishes, and canvas-painted textures. The board draws it; the town's statues are to reuse it.                            |
 
 ### Object kinds
 
@@ -140,6 +141,9 @@ browser. Why each rule and number is what it is lives in the commit messages.
 - **`ui/`:** DOM overlays: the HUD and what it may show (`DerbyHud.tsx`, `derbyCues.ts`), the camera panel and its
   layout (`cameraPanelLayout.ts`), the setup, practice, result, listing, and blocked screens, and the diagnostics
   panel.
+- **`board/`:** the monthly board at `/baseball/ranking`, its own lazy chunk (`BoardPage.tsx`): the painted statues in
+  one canvas (`BoardPodium.tsx`, `podiumScene.ts`), the list's portraits from one offscreen renderer
+  (`portraitImages.ts`), seasons (`boardSeason.ts`), and what rows show (`boardView.ts`).
 - **`devDiagnostics.ts`, `devSeam.ts`:** dev only. D shows the camera's, tracker's, and stance's numbers; L saves the
   last minute per camera frame (upper-body joints, detections, stance), never a picture, on this computer only. The
   seam lets an automated check stand in for a visitor and their swings.
@@ -174,8 +178,9 @@ shown), only an admin's preview plays it (`ballparkOpens` asks `/v1/me` for the 
 coming-soon card, and neither the derby's chunk nor the camera loads. The town reads the same flag: while it is shown,
 the hedge opens at the end of the north road onto the ballpark's exterior and gate, whose prompt saves the visit and
 leaves by a full page load (`window.location.assign`), so `/baseball` gets its own CSP and camera permission and the
-visitor comes back to the gate; while it is hidden, nothing in the town hints at it. The statues, when they come, must
-read it too.
+visitor comes back to the gate; while it is hidden, nothing in the town hints at it. The board at `/baseball/ranking`
+opens behind the same gate with no preview, so nothing ranked shows while the ballpark is hidden; the town's statues,
+when they come, must read the flag too.
 
 `BaseballApp.tsx` then checks the device (a phone or tablet, then WebGL 2, later a computer too slow to track), the
 character, and plays the derby. Each run asks the monthly board for a ranked run as it starts and plays the rules and
@@ -194,6 +199,14 @@ The HUD and the result show the outcome, the distance, and the pitch type, never
 also says where the run left the visitor on the board; its listing card (`ui/ListingView.tsx`) posts the record only
 after the visitor ticks the box, with the name (or none, an anonymous batter) and, opted in, the character's LinkedIn
 link, whose ownership code it then shows.
+
+`board/BoardPage.tsx` shows a season's board (`?season=YYYY-MM` for one of the last twelve final boards), which works
+on phones too: the top three as painted statues over DOM name plates (read 1, 2, 3, shown 2, 1, 3; the canvas is
+`aria-hidden`), which rise third to first the first time a browser sees a month; places 4 to 50 as an `<ol>`; and the
+visitor's own record between them, which the same listing card posts, hides, or changes. It shows names only once
+approved, a LinkedIn chip only on a statue whose link the admin approved, and the server's order, whose ties go to the
+earlier record. Every row's menu reports its name, character, or link, copies its number, or mails the owner a
+takedown request. The result screen and the rules card link to it.
 
 ## Backend (`backend/src`)
 

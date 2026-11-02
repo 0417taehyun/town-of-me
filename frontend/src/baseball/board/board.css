@@ -1,0 +1,798 @@
+/*
+ * The monthly board (BoardPage.tsx), loaded with its lazy chunk: cream cards in the town's palette, the statues under a
+ * soft sky with bunting, and the name plates in reading order 1, 2, 3 shown 2, 1, 3 under the statues.
+ * Contrast on cream: navy headings 7.3:1, plum notes 5.2:1, muted text 5.1:1.
+ */
+.board-page {
+  --board-heading: #374b65;
+  --board-muted: #59675f;
+  --board-plum: #6b5a6e;
+  --board-page: #f3eddf;
+  --board-surface: #fffaf0;
+  --board-sunk: #f5eedd;
+  --board-zebra: #faf4e7;
+  --board-ground: #ebe0c7;
+  --board-line: rgba(67, 80, 73, 0.14);
+  --board-sage: #6f987c;
+  --board-sage-ink: #4f7a63;
+  --board-sage-deep: #43684f;
+  --board-sage-wash: rgba(111, 152, 124, 0.13);
+  --board-coral-ink: #9a4f43;
+  --board-gold-wash: #f3e6c4;
+  --board-medal-1: #dcc08a;
+  --board-medal-2: #cfd4d8;
+  --board-medal-3: #e2b896;
+  --board-chip: rgba(55, 75, 101, 0.32);
+  --board-shadow: 0 16px 44px rgba(45, 69, 61, 0.12), 0 2px 8px rgba(45, 69, 61, 0.06);
+  --board-shadow-soft: 0 6px 18px rgba(45, 69, 61, 0.08);
+  position: fixed;
+  inset: 0;
+  overflow: auto;
+  color: var(--ink);
+  background: var(--board-page);
+  word-break: keep-all;
+  font-variant-numeric: tabular-nums;
+}
+html[lang='ko'] .board-page {
+  font-family:
+    'Pretendard Variable',
+    Pretendard,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Apple SD Gothic Neo',
+    sans-serif;
+}
+.board-page :is(h1, h2) {
+  margin: 0;
+  color: var(--board-heading);
+  font-family: inherit;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+.board-page p {
+  margin: 0;
+}
+.board-page :focus-visible {
+  outline: 3px solid var(--board-heading);
+  outline-offset: 2px;
+}
+.board-page .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.board-column {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 16px 20px 56px;
+}
+
+.board-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.board-topline-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.board-page .primary-button.compact {
+  width: auto;
+  min-height: 40px;
+  padding: 0 18px;
+  text-decoration: none;
+}
+.board-topline .baseball-language-select {
+  flex: none;
+}
+
+.board-heading .eyebrow {
+  margin-bottom: 2px;
+  color: var(--board-coral-ink);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.board-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+}
+.board-title-row h1 {
+  font-size: clamp(1.75rem, 3.4vw, 2.25rem);
+  line-height: 1.15;
+}
+.board-season {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.board-season-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid var(--board-line);
+  border-radius: 999px;
+  background: var(--board-surface);
+  box-shadow: var(--board-shadow-soft);
+  font-weight: 700;
+}
+.board-season-pill b {
+  color: var(--board-sage-ink);
+}
+.board-season-step {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--board-line);
+  border-radius: 50%;
+  color: var(--board-heading);
+  background: var(--board-surface);
+  font-size: 1.2rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.board-season-step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.board-heading .board-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 8px 0 16px;
+  color: var(--board-muted);
+  font-size: 0.9rem;
+}
+.board-state {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 72px 16px;
+  color: var(--board-muted);
+  font-weight: 700;
+}
+
+/* The statues: a sky with bunting over the canvas, and the plates under it. */
+.board-podium {
+  position: relative;
+  overflow: hidden;
+  margin-top: 16px;
+  border: 1px solid var(--board-line);
+  border-radius: 28px;
+  background: var(--board-ground);
+  box-shadow: var(--board-shadow);
+  container-type: inline-size;
+}
+.board-stage {
+  position: relative;
+  background:
+    radial-gradient(34% 52% at 50% 64%, rgba(255, 245, 216, 0.85), transparent 72%),
+    radial-gradient(130px 34px at 14% 34%, rgba(255, 255, 255, 0.7), transparent 72%),
+    radial-gradient(170px 42px at 84% 26%, rgba(255, 255, 255, 0.62), transparent 72%),
+    linear-gradient(180deg, #d6e6e3 0%, #f6eddb 58%, var(--board-ground) 92%);
+}
+.board-bunting {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 46px;
+  color: #8a7a68;
+  pointer-events: none;
+}
+/* R3F sizes its container inline to fill its parent, so the stage's own height has to win over that. */
+.board-podium-canvas {
+  position: relative;
+  height: clamp(280px, 29vw, 390px) !important;
+  touch-action: pan-y;
+}
+.board-empty-banner {
+  position: absolute;
+  top: 58px;
+  left: 50%;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  padding: 14px 20px 16px;
+  border-radius: 20px;
+  background: var(--board-surface);
+  box-shadow: var(--board-shadow);
+  text-align: center;
+  transform: translateX(-50%);
+}
+.board-empty-banner b {
+  color: var(--board-heading);
+  font-size: 1.05rem;
+}
+.board-empty-banner p + p {
+  margin-bottom: 6px;
+  color: var(--board-muted);
+  font-size: 0.86rem;
+}
+
+.board-plates {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: -12px 0 0;
+  padding: 0 8px 18px;
+  list-style: none;
+}
+.board-plate {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  justify-self: center;
+  align-self: stretch;
+  width: min(92%, 264px);
+  padding: 24px 14px 14px;
+  border-radius: 18px;
+  background: var(--board-surface);
+  box-shadow: var(--board-shadow-soft);
+  text-align: center;
+  transition:
+    opacity 360ms ease,
+    transform 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.board-plate[data-rank='1'] {
+  order: 2;
+  width: min(100%, 300px);
+  margin-top: -18px;
+  padding-top: 28px;
+  background: #f8eedb;
+  box-shadow:
+    var(--board-shadow-soft),
+    inset 0 0 0 2px rgba(216, 184, 121, 0.75);
+}
+.board-plate[data-rank='2'] {
+  order: 1;
+}
+.board-plate[data-rank='3'] {
+  order: 3;
+}
+.board-plate[data-hidden] {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.board-plate[data-empty] {
+  border: 2px dashed var(--board-line);
+  background: rgba(255, 250, 240, 0.45);
+  box-shadow: none;
+}
+.board-medal {
+  position: absolute;
+  top: -17px;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 3px solid var(--board-surface);
+  border-radius: 50%;
+  color: var(--board-heading);
+  background: var(--board-medal-3);
+  font-weight: 900;
+  translate: -50% 0;
+}
+.board-plate[data-rank='1'] .board-medal {
+  top: -22px;
+  width: 42px;
+  height: 42px;
+  font-size: 1.2rem;
+}
+.board-plate[data-rank='1'] .board-medal,
+.board-medal[data-rank='1'] {
+  background: var(--board-medal-1);
+}
+.board-plate[data-rank='2'] .board-medal,
+.board-medal[data-rank='2'] {
+  background: var(--board-medal-2);
+}
+.board-plate-label {
+  color: var(--board-plum);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.board-plate[data-rank='1'] .board-plate-label {
+  margin-bottom: 2px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: var(--board-heading);
+  background: var(--board-medal-1);
+}
+.board-plate-name {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--board-heading);
+  font-size: 1.2rem;
+  font-weight: 800;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-plate[data-rank='1'] .board-plate-name {
+  font-size: 1.55rem;
+}
+.board-plate[data-empty] .board-plate-name,
+.board-page [data-placeholder] {
+  color: var(--board-muted);
+  font-weight: 700;
+}
+.board-plate[data-empty] .board-plate-name {
+  font-size: 0.95rem;
+}
+.board-plate-record {
+  color: var(--board-plum);
+  font-size: 0.86rem;
+}
+.board-plate-challenge {
+  margin-top: 6px;
+  color: var(--board-sage-ink);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+.board-plate-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: auto;
+  padding-top: 10px;
+}
+
+/* A statue's LinkedIn chip: where it leads, in one line, 36 px high (WCAG 2.5.8). */
+.board-linkedin {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  width: min(204px, calc(100% - 42px));
+  min-width: 0;
+  height: 36px;
+  padding: 0 11px 0 8px;
+  border: 1px solid var(--board-chip);
+  border-radius: 999px;
+  color: var(--board-heading);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.board-linkedin:hover {
+  background: var(--board-surface);
+}
+.board-linkedin-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  color: var(--board-surface);
+  background: var(--board-heading);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+.board-linkedin-handle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A record's [⋯] menu. */
+.board-menu {
+  position: relative;
+}
+.board-menu summary {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--board-chip);
+  border-radius: 50%;
+  color: var(--board-heading);
+  font-weight: 900;
+  list-style: none;
+  cursor: pointer;
+}
+.board-menu summary::-webkit-details-marker {
+  display: none;
+}
+.board-menu-items {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 3;
+  display: grid;
+  gap: 6px;
+  width: max-content;
+  max-width: 280px;
+  padding: 10px;
+  border: 1px solid var(--board-line);
+  border-radius: 16px;
+  background: var(--board-surface);
+  box-shadow: var(--board-shadow);
+  text-align: left;
+}
+.board-menu-items :is(button, a) {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--board-line);
+  border-radius: 12px;
+  color: var(--ink);
+  background: var(--board-sunk);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.board-menu-done {
+  color: var(--board-sage-deep);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+.board-menu-done:empty {
+  display: none;
+}
+
+.board-last-season {
+  margin: 0 16px 18px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 250, 240, 0.55);
+}
+.board-last-season-title {
+  margin-bottom: 10px;
+  padding: 0;
+  border: 0;
+  color: var(--board-heading);
+  background: none;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.board-last-season ol {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 16px;
+  margin: 0;
+  padding: 0 0 0 8px;
+  list-style: none;
+}
+.board-last-season li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 8px 22px;
+  border-radius: 16px;
+  background: var(--board-surface);
+}
+.board-last-season .board-medal {
+  top: 50%;
+  left: 0;
+  width: 26px;
+  height: 26px;
+  border-width: 2px;
+  font-size: 0.8rem;
+  translate: -30% -50%;
+}
+.board-last-season li > span:last-child {
+  display: grid;
+  min-width: 0;
+}
+.board-last-season b {
+  overflow: hidden;
+  color: var(--board-heading);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-last-season li span span {
+  color: var(--board-plum);
+  font-size: 0.8rem;
+}
+
+.board-portrait {
+  display: block;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: 15px;
+  background: radial-gradient(circle at 50% 38%, var(--board-surface) 0 38%, var(--board-sunk) 72%);
+  box-shadow: inset 0 0 0 1px var(--board-line);
+}
+.board-portrait img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* The visitor's own record, between the statues and the list. */
+.board-own {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  max-width: 800px;
+  margin: 18px auto;
+  padding: 14px 16px;
+  border: 2px solid var(--board-sage);
+  border-radius: 20px;
+  background: linear-gradient(var(--board-sage-wash), var(--board-sage-wash)), var(--board-surface);
+  box-shadow: var(--board-shadow-soft);
+}
+.board-own[data-kind='none'] {
+  grid-template-columns: minmax(0, 1fr) auto;
+  border-style: dashed;
+  border-color: var(--board-line);
+  background: var(--board-surface);
+}
+.board-own[data-kind='unlisted'] {
+  border-color: var(--board-medal-1);
+  background: linear-gradient(rgba(216, 184, 121, 0.12), rgba(216, 184, 121, 0.12)), var(--board-surface);
+}
+.board-own h2 {
+  color: var(--board-sage-deep);
+  font-size: 0.78rem;
+  letter-spacing: 0;
+}
+.board-own-portrait {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+}
+.board-own-title {
+  color: var(--board-heading);
+  font-size: 1.08rem;
+  font-weight: 800;
+}
+.board-own-detail {
+  color: var(--board-plum);
+}
+.board-own .board-own-status {
+  margin-top: 2px;
+  color: var(--board-muted);
+  font-size: 0.8rem;
+}
+.board-own-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.board-own-actions .derby-secondary {
+  min-height: 40px;
+  padding: 0 16px;
+}
+
+/* Places 4 to 50. */
+.board-list-card {
+  max-width: 800px;
+  margin: 18px auto 0;
+  padding: 18px 18px 14px;
+  border: 1px solid var(--board-line);
+  border-radius: 28px;
+  background: var(--board-surface);
+  box-shadow: var(--board-shadow-soft);
+}
+.board-list-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.board-list-head h2 {
+  font-size: 1.2rem;
+}
+.board-list-head p {
+  color: var(--board-muted);
+  font-size: 0.82rem;
+}
+.board-columns,
+.board-row {
+  display: grid;
+  grid-template-columns: 34px 44px minmax(0, 1fr) 76px 100px 36px;
+  align-items: center;
+  column-gap: 12px;
+}
+.board-columns {
+  padding: 0 12px 6px;
+  color: var(--board-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+.board-columns span:nth-child(4),
+.board-columns span:nth-child(5) {
+  text-align: right;
+}
+.board-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.board-row {
+  padding: 7px 12px;
+  border-radius: 16px;
+}
+.board-row:nth-child(even):not([data-mine]) {
+  background: var(--board-zebra);
+}
+/* The transparent outline becomes a real one in forced colors, where backgrounds and shadows vanish. */
+.board-row[data-mine] {
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  background: var(--board-sage-wash);
+  box-shadow: inset 0 0 0 2px var(--board-sage);
+}
+.board-row-rank {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: var(--board-muted);
+  background: var(--board-sunk);
+  font-weight: 800;
+  font-size: 0.86rem;
+}
+.board-row[data-mine] .board-row-rank {
+  color: #fffaf0;
+  background: var(--board-sage-ink);
+}
+.board-row-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--board-heading);
+  font-weight: 800;
+}
+.board-row-name > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-mine {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: #fffaf0;
+  background: var(--board-sage-ink);
+  font-size: 0.72rem;
+}
+.board-row-home-runs,
+.board-row-distance {
+  text-align: right;
+  white-space: nowrap;
+}
+.board-row-home-runs {
+  font-weight: 800;
+}
+.board-row-distance {
+  color: var(--board-plum);
+  font-size: 0.9rem;
+}
+.board-list-empty {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 26px 12px 30px;
+  color: var(--board-muted);
+  text-align: center;
+}
+.board-list-empty b {
+  color: var(--board-heading);
+  font-size: 1rem;
+}
+.board-list-card .board-tie-rule {
+  margin-top: 12px;
+  padding: 0 12px;
+  color: var(--board-muted);
+  font-size: 0.8rem;
+}
+.board-footer {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 0.86rem;
+}
+.board-footer a {
+  color: var(--board-muted);
+}
+
+/* The listing card over the board, as a dialog. */
+.board-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(28, 42, 38, 0.38);
+}
+.board-dialog .derby-listing {
+  width: min(720px, 100%);
+  background: var(--board-surface);
+  max-height: calc(100vh - 32px);
+  margin: 0;
+  padding: 30px 36px 24px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* Phones: the statues stand in steps over plates stacked 1, 2, 3, and the list keeps the numbers that matter. */
+@container (max-width: 640px) {
+  .board-plates {
+    grid-template-columns: 1fr;
+    gap: 22px;
+    margin-top: 0;
+    padding-top: 18px;
+  }
+  .board-plate,
+  .board-plate[data-rank='1'] {
+    order: 0;
+    width: min(100%, 320px);
+    margin-top: 0;
+  }
+  .board-last-season ol {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .board-topline {
+    flex-wrap: wrap;
+  }
+  .board-topline .baseball-language-select {
+    width: 150px;
+  }
+  .board-columns,
+  .board-row {
+    grid-template-columns: 30px 40px minmax(0, 1fr) auto 36px;
+  }
+  .board-columns span:nth-child(5),
+  .board-row-distance {
+    display: none;
+  }
+  .board-own {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .board-own-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+  .board-podium-canvas {
+    height: 360px !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .board-plate {
+    transition: none;
+  }
+}

@@ -1,18 +1,21 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { usePageLanguage } from '../hooks/usePageLanguage'
 import { type AppLanguage, languageCopy } from '../i18n/language'
 import { LanguageSelect } from '../ui/LanguageSelect'
-import { baseballPreview, EXIT_PATHS } from './baseballRoute'
+import { baseballPreview, EXIT_PATHS, isBoardPath } from './baseballRoute'
 import { useBallparkGate } from './useBallparkGate'
 
 const BaseballApp = lazy(() => import('./BaseballApp').then((module) => ({ default: module.BaseballApp })))
+const BoardPage = lazy(() => import('./board/BoardPage').then((module) => ({ default: module.BoardPage })))
 
 /**
  * `/baseball` reads the town before anything of the derby loads: while the admin hides the ballpark, only the admin's
- * preview opens it, and anyone else gets a card in the town's style without the derby's chunk or the camera.
+ * preview opens it, and anyone else gets a card in the town's style without the derby's chunk or the camera. Its board
+ * (`/baseball/ranking`) opens with the ballpark and has no preview, so nothing ranked shows while it is hidden.
  */
 export function BaseballGate({ townId }: { townId: string }) {
-  const { gate, retry } = useBallparkGate(townId, baseballPreview(window.location.search) !== null)
+  const [board] = useState(() => isBoardPath(window.location.pathname))
+  const { gate, retry } = useBallparkGate(townId, !board && baseballPreview(window.location.search) !== null)
   const [language, setLanguage] = usePageLanguage()
   const copy = languageCopy[language]
 
@@ -30,9 +33,7 @@ export function BaseballGate({ townId }: { townId: string }) {
   const loading = <BaseballLoading language={language} />
   if (gate.status === 'loading') return loading
   return (
-    <Suspense fallback={loading}>
-      <BaseballApp town={gate.town} />
-    </Suspense>
+    <Suspense fallback={loading}>{board ? <BoardPage town={gate.town} /> : <BaseballApp town={gate.town} />}</Suspense>
   )
 }
 

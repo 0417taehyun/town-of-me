@@ -11,9 +11,15 @@ import {
 const signedIn = (role: SessionUser['role']) => vi.fn(async () => ({ id: 'user', displayName: 'Robin', role }))
 
 describe('baseball route', () => {
-  it('matches the ballpark page with or without a trailing slash, and nothing beside or below it', () => {
-    expect(['/baseball', '/baseball/'].map(isBaseballPath)).toEqual([true, true])
-    expect(['/', '/admin', '/baseballs', '/baseball/play'].map(isBaseballPath)).toEqual([false, false, false, false])
+  it('matches the ballpark page and its board with or without a trailing slash, and nothing beside or below them', () => {
+    expect(['/baseball', '/baseball/', '/baseball/ranking', '/baseball/ranking/'].map(isBaseballPath)).toEqual([
+      true,
+      true,
+      true,
+      true,
+    ])
+    const others = ['/', '/admin', '/baseballs', '/baseball/play', '/baseball/rankings', '/baseball/ranking/2026-10']
+    expect(others.map(isBaseballPath)).toEqual([false, false, false, false, false, false])
   })
 
   it("previews next month's rules or this month's only when the query asks, as the editor's links do", () => {

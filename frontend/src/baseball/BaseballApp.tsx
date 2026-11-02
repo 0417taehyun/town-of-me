@@ -28,7 +28,14 @@ import { useReducedMotion } from '../hooks/useReducedMotion'
 import { type AppLanguage, languageCopy, monthName } from '../i18n/language'
 import { resolveBallparkPalette } from '../scene/venues/ballpark/ballparkThemes'
 import { LanguageSelect } from '../ui/LanguageSelect'
-import { type BaseballExit, baseballExit, type BaseballPreview, baseballPreview, EXIT_PATHS } from './baseballRoute'
+import {
+  type BaseballExit,
+  baseballExit,
+  type BaseballPreview,
+  baseballPreview,
+  BOARD_PATH,
+  EXIT_PATHS,
+} from './baseballRoute'
 import { needsCharacter, withVenueProfile } from './baseballSession'
 import { cameraStateId, isCameraOn, useCameraTracking } from './cameraTracking'
 import { diagnoseStageEvent } from './devDiagnostics'
@@ -583,6 +590,11 @@ export function DerbyScreen({
             )}
             <li>{cameraCopy.swingTip}</li>
           </ul>
+          {!preview && (
+            <a className="derby-board-link" href={BOARD_PATH}>
+              {copy.baseball.leaderboard.viewBoard} <span aria-hidden="true">›</span>
+            </a>
+          )}
           {preview === 'next' && (
             <p className="baseball-note derby-preview-note">
               {upcoming

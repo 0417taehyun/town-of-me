@@ -1,7 +1,8 @@
 import type { DerbyInputLog, DerbyResult } from '../baseball/game/derbyScore'
 import { requestJson, requireRecord, requireText, responseRecord } from './apiClient'
+import { normalizeLinkedInProfileUrl } from './linkedInProfile'
 import { BASEBALL_DIFFICULTIES, type BallparkRules } from './models'
-import { profileAppearance, type PlayerProfile } from './playerProfile'
+import { normalizePlayerProfile, profileAppearance, type PlayerProfile } from './playerProfile'
 import { isPitchCount } from './townApi'
 
 // The wire format of the home run derby's monthly board (backend/README.md "Ranked runs"). The client sends no score
@@ -52,6 +53,36 @@ export type OwnBoardEntry = {
   /** The place it holds, or would hold if listed; `null` while disqualified. */
   rank: number | null
 }
+
+/** The visitor's own record as a season's board shows it, with the character it was posted with. */
+export type BoardOwnEntry = OwnBoardEntry & { profile: PlayerProfile }
+
+const nameStates = ['approved', 'reviewing', 'anonymous'] as const
+/** How anyone reads a record's name: shown once the admin approved it, still under review, or an anonymous batter. */
+export type NameState = (typeof nameStates)[number]
+
+/**
+ * A public record on a season's board. `name` is there only once approved; `profile` is `null` for the default batter
+ * an anonymous record shows; `linkedInProfileUrl` is a statue's link the admin approved, and never on a list row.
+ */
+export type BoardRow = {
+  id: string
+  rank: number
+  name: string | null
+  nameState: NameState
+  profile: PlayerProfile | null
+  homeRuns: number
+  totalDistanceDm: number
+  /** The KST day the record was set. */
+  achievedOn: string
+  linkedInProfileUrl: string | null
+}
+
+/** A KST month's board: its bounds, and whether it is over, so its order is final. */
+export type BoardSeason = { id: string; startsAt: number; endsAt: number; final: boolean }
+
+/** A season's statues (places 1–3), its list (4–50), and the visitor's own record on it. */
+export type Board = { season: BoardSeason; podium: BoardRow[]; ranks: BoardRow[]; own: BoardOwnEntry | null }
 
 /** The server's answer to a run's result: the visitor's standing and their record on the run's board. */
 export type RunOutcome = { standing: RunStanding; entry: OwnBoardEntry | null }
@@ -126,6 +157,81 @@ export function parseOwnEntry(value: unknown): OwnBoardEntry {
     homeRuns: wholeNumber(input.homeRuns, 'entry.homeRuns'),
     totalDistanceDm: wholeNumber(input.totalDistanceDm, 'entry.totalDistanceDm'),
     rank: input.rank === null ? null : wholeNumber(input.rank, 'entry.rank'),
+  }
+}
+
+/** The places a statue stands for, and the places the list below them shows. */
+export const STATUE_PLACES = { first: 1, last: 3 }
+export const LIST_PLACES = { first: 4, last: 50 }
+
+/**
+ * One public row, read the way the town reads a guestbook entry: the look goes through `normalizePlayerProfile`, and a
+ * statue's link through `normalizeLinkedInProfileUrl` again, so nothing but a plain LinkedIn profile becomes a link.
+ */
+export function parseBoardRow(value: unknown, onStatue: boolean): BoardRow {
+  const input = requireRecord(value, 'row')
+  const nameState = oneOf(input.nameState, nameStates, 'row.nameState')
+  const look = requireRecord(input.profile, 'row.profile')
+  const rank = wholeNumber(input.rank, 'row.rank')
+  if (rank < 1) throw new Error('row.rank must be a place')
+  return {
+    id: requireText(input.id, 'row.id'),
+    rank,
+    name: nameState === 'approved' ? requireText(input.name, 'row.name') : null,
+    nameState,
+    profile: look.kind === 'default' ? null : normalizePlayerProfile(look),
+    homeRuns: wholeNumber(input.homeRuns, 'row.homeRuns'),
+    totalDistanceDm: wholeNumber(input.totalDistanceDm, 'row.totalDistanceDm'),
+    achievedOn: requireText(input.achievedOn, 'row.achievedOn'),
+    linkedInProfileUrl: onStatue ? normalizeLinkedInProfileUrl(input.linkedInProfileUrl) : null,
+  }
+}
+
+/** A row the page can show, or none: one malformed row never costs the visitor the rest of the board. */
+export function readableRow(value: unknown, onStatue: boolean): BoardRow[] {
+  try {
+    return [parseBoardRow(value, onStatue)]
+  } catch {
+    return []
+  }
+}
+
+/**
+ * The rows within `places`, in the server's order: the rank it gave, which already breaks a tie in home runs and
+ * distance for the earlier record. The page never ranks rows again from their numbers.
+ */
+export function boardRows(value: unknown, places: typeof STATUE_PLACES, onStatue: boolean): BoardRow[] {
+  const rows = (Array.isArray(value) ? value : []).flatMap((row) => readableRow(row, onStatue))
+  return rows
+    .filter((row) => row.rank >= places.first && row.rank <= places.last)
+    .sort((left, right) => left.rank - right.rank)
+}
+
+export function parseBoardSeason(value: unknown): BoardSeason {
+  const input = requireRecord(value, 'season')
+  const id = requireText(input.id, 'season.id')
+  const startsAt = Date.parse(requireText(input.startsAt, 'season.startsAt'))
+  const endsAt = Date.parse(requireText(input.endsAt, 'season.endsAt'))
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/u.test(id) || !(startsAt < endsAt)) throw new Error('season is malformed')
+  return { id, startsAt, endsAt, final: input.final === true }
+}
+
+/** The visitor's own record, or `null` when it cannot be read: the public board still shows. */
+export function readableOwnEntry(value: unknown): BoardOwnEntry | null {
+  try {
+    return { ...parseOwnEntry(value), profile: normalizePlayerProfile(requireRecord(value, 'own').profile) }
+  } catch {
+    return null
+  }
+}
+
+export function parseBoard(value: unknown): Board {
+  const input = requireRecord(value, 'board')
+  return {
+    season: parseBoardSeason(input.season),
+    podium: boardRows(input.podium, STATUE_PLACES, true),
+    ranks: boardRows(input.ranks, LIST_PLACES, false),
+    own: input.own ? readableOwnEntry(input.own) : null,
   }
 }
 
@@ -214,6 +320,27 @@ export async function submitRankedRun(
 export async function updateOwnRecord(choice: ListingChoice, request: typeof fetch = fetch): Promise<OwnBoardEntry> {
   const init = { method: 'PUT', body: JSON.stringify(listingBody(choice)) }
   return parseOwnEntry((await responseRecord(await sendToBoard('/entries/own', init, request))).entry)
+}
+
+/** A season's board (`season` as `YYYY-MM`), or this month's; the visitor's own record comes with it. */
+export async function fetchBoard(season: string | null, request: typeof fetch = fetch): Promise<Board> {
+  const query = season ? `?season=${encodeURIComponent(season)}` : ''
+  return parseBoard(await responseRecord(await sendToBoard(`/leaderboard${query}`, {}, request)))
+}
+
+/** What a report is about, and for a link, whether the profile is the reporter's own. */
+export type ReportTarget = 'name' | 'character' | 'link'
+export type ReportReason = 'mine' | 'other'
+
+/** Reports someone's record; the board answers the same whatever it does, so the page says the same too. */
+export async function reportBoardEntry(
+  entryId: string,
+  target: ReportTarget,
+  reason: ReportReason,
+  request: typeof fetch = fetch,
+): Promise<void> {
+  const path = `/entries/${encodeURIComponent(entryId)}/report`
+  await sendToBoard(path, { method: 'POST', body: JSON.stringify({ target, reason }) }, request)
 }
 
 /** Deletes every run and record of this browser, in every season. */

@@ -97,7 +97,8 @@ north road.
 - **Monthly board:** each run after practice is ranked when the board answers; the result says your place, and
   `Show me on the board` posts it, with your name once the admin checks it, or as an anonymous batter. The top three
   stand as statues, which may show your LinkedIn link after you put the given code on your profile. A preview, or a
-  run the board cannot be reached for, is not ranked.
+  run the board cannot be reached for, is not ranked. `See the board` (on the rules card and the result) opens
+  `/baseball/ranking`: the statues, places 4 to 50, your own record, and the last twelve months' final boards.
 
 | Action                    | Input                                          |
 | ------------------------- | ---------------------------------------------- |

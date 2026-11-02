@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { DerbyInputLog } from '../baseball/game/derbyScore'
-import { rankedRunBody, submitRankedRun, updateOwnRecord } from './leaderboardApi'
+import { fetchBoard, rankedRunBody, submitRankedRun, updateOwnRecord } from './leaderboardApi'
 import { appearanceFields, DEFAULT_PLAYER_PROFILE, type PlayerProfile } from './playerProfile'
 
 const visitor: PlayerProfile = {
@@ -79,5 +79,57 @@ describe('leaderboard API boundary', () => {
     expect(anonymous.linkedIn).toBe(null)
     expect(anonymous.profile).not.toHaveProperty('name')
     expect(unlisted).toEqual({ listed: false })
+  })
+
+  it('reads a board row by row: looks normalized, names only once approved, links only on statues, bad rows dropped', async () => {
+    const row = (rank: number, fields: Record<string, unknown> = {}) => ({
+      id: `entry-${rank}`,
+      rank,
+      name: null,
+      nameState: 'reviewing',
+      profile: { hair: 'crop', colors: { top: '#6f987c' } },
+      homeRuns: 4,
+      totalDistanceDm: 5117,
+      achievedOn: '2026-11-02',
+      ...fields,
+    })
+    const payload = {
+      season: { id: '2026-11', startsAt: '2026-10-31T15:00:00.000Z', endsAt: '2026-11-30T15:00:00.000Z', final: false },
+      podium: [
+        row(1, {
+          name: 'Momo',
+          nameState: 'approved',
+          profile: { hair: 'bob', colors: { top: '#CA7765', hair: 'red' } },
+          linkedInProfileUrl: 'https://www.linkedin.com/in/example-momo',
+        }),
+        row(2, { name: 'Not yet', linkedInProfileUrl: 'https://link.example/in/example-pip' }),
+        row(3, { homeRuns: -1 }),
+      ],
+      // Fourth and fifth tie on home runs and distance; the server ranks the earlier record first, whatever the order.
+      ranks: [
+        row(5, { achievedOn: '2026-11-09' }),
+        row(4, { achievedOn: '2026-11-03', nameState: 'anonymous', profile: { kind: 'default' } }),
+        { rank: 6 },
+        row(7, { linkedInProfileUrl: 'https://www.linkedin.com/in/example-pip' }),
+      ],
+      own: null,
+    }
+    const request = vi.fn<typeof fetch>(async () => Response.json(payload))
+    const board = await fetchBoard('2026-11', request)
+    expect(request.mock.calls[0][0]).toBe('/v1/games/home-run-derby/leaderboard?season=2026-11')
+    const [champion, second] = board.podium
+    expect(board.podium.map(({ rank }) => rank)).toEqual([1, 2])
+    expect(champion.profile).toMatchObject({
+      hair: 'bob',
+      colors: { top: '#ca7765', hair: DEFAULT_PLAYER_PROFILE.colors.hair },
+    })
+    expect([champion.name, second.name]).toEqual(['Momo', null])
+    expect([champion.linkedInProfileUrl, second.linkedInProfileUrl]).toEqual([
+      'https://www.linkedin.com/in/example-momo',
+      null,
+    ])
+    expect(board.ranks.map(({ id }) => id)).toEqual(['entry-4', 'entry-5', 'entry-7'])
+    expect(board.ranks[0].profile).toBe(null)
+    expect(board.ranks[2].linkedInProfileUrl).toBe(null)
   })
 })

@@ -159,6 +159,11 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
 .derby-secondary:hover {
   background: var(--cream-solid);
 }
+a.derby-secondary {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
 .derby-links {
   position: absolute;
   bottom: 0;
@@ -253,6 +258,17 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
 }
 .derby-start .derby-actions .baseball-note {
   margin: 0;
+}
+.derby-board-link {
+  display: inline-flex;
+  gap: 6px;
+  margin-top: 14px;
+  color: var(--leaf-dark);
+  font-weight: 800;
+  text-decoration: none;
+}
+.derby-board-link:hover {
+  text-decoration: underline;
 }
 /* The visitor's own character, the one at the plate, with its name, in a row no taller than a few lines. */
 .derby-batter {

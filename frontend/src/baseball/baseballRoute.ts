@@ -1,14 +1,23 @@
 // In the main chunk with the gate (BaseballGate.tsx, useBallparkGate.ts): everything else under baseball/ loads lazily
-// once the gate opens the derby.
+// once the gate opens the derby or its board.
 import type { SessionUser } from '../data/adminSession'
 import type { BallparkSettings } from '../data/models'
 
-/** Mirrors the `/baseball` location in docker/nginx.conf, which gives this page its own CSP and camera permission. */
+/** Mirrors the `/baseball` location in docker/nginx.conf, which gives these pages their own CSP and camera permission. */
 export const BASEBALL_PATH = '/baseball'
 
-/** Whether the page is the home run derby; a trailing slash matches too, as for `/admin`. */
+/** The derby's monthly board, under the derby's path so it gets the same strict policy. */
+export const BOARD_PATH = `${BASEBALL_PATH}/ranking`
+
+/** Whether the page is the home run derby or its board; a trailing slash matches too, as for `/admin`. */
 export function isBaseballPath(pathname: string) {
-  return pathname.replace(/\/+$/u, '') === BASEBALL_PATH
+  const path = pathname.replace(/\/+$/u, '')
+  return path === BASEBALL_PATH || path === BOARD_PATH
+}
+
+/** Whether the page is the derby's board, which reads the board and never the camera. */
+export function isBoardPath(pathname: string) {
+  return pathname.replace(/\/+$/u, '') === BOARD_PATH
 }
 
 /** The derby under the rules scheduled for next month, for the admin to try; such a run is never ranked. */

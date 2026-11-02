@@ -1,6 +1,6 @@
 import type { CSSProperties, Ref } from 'react'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
-import { type BaseballExit, EXIT_PATHS } from '../baseballRoute'
+import { type BaseballExit, BOARD_PATH, EXIT_PATHS } from '../baseballRoute'
 import type { BoardLine } from '../flow/rankedRun'
 import type { DerbyResult } from '../game/derbyScore'
 import { boardLineText, homeRunDistanceText, resultRow } from './derbyCues'
@@ -19,7 +19,7 @@ export type ResultBoard = { line: BoardLine | null; offerLinkedIn: boolean; onOp
  * pitch with how it ended and how far a ball in play went. Distances show to the decimeter they are scored in, so two
  * totals that rank apart never read the same; the live HUD rounds to meters. No timing, power, or pitch type is shown.
  * Holding the batting stance fills `gauge` and plays again, as the button does, while `stanceNeed` says what the hold
- * waits for. Beside it is the way to the listing card, or to send a result that failed again.
+ * waits for. Beside it is the way to the listing card, or to send a result that failed again, and to the board.
  */
 export function ResultView({
   result,
@@ -79,6 +79,11 @@ export function ResultView({
           {copy.result.playAgain}
         </button>
         <BoardAction board={board} language={language} />
+        {board.line && (
+          <a className="derby-secondary" href={BOARD_PATH}>
+            {copy.leaderboard.viewBoard}
+          </a>
+        )}
         <a className="baseball-back" href={EXIT_PATHS[exit]}>
           {copy.back[exit]}
         </a>
