@@ -50,15 +50,18 @@ export function isSameInteraction(first: Interaction | null, second: Interaction
   return first?.id === second?.id && first?.label === second?.label
 }
 
+/** What the player may interact with nearby, and the prompts' labels in the visitor's language. */
+export type NearbyInteractionOptions = {
+  actors: WorldActor[]
+  seats: BenchSeat[]
+  houses?: TownObject[]
+  guestbookPosition?: Vec3 | null
+  labels: { guestbook: string; house: string; pet: string }
+}
+
 export function getNearbyInteraction(
   position: Vector3,
-  actors: WorldActor[],
-  seats: BenchSeat[],
-  guestbookLabel = 'Read guestbook',
-  houses: TownObject[] = [],
-  houseLabel = 'Try the door',
-  guestbookPosition: Vec3 | null = null,
-  petLabel = 'Pet',
+  { actors, seats, houses = [], guestbookPosition = null, labels }: NearbyInteractionOptions,
 ): Interaction | null {
   const actor = findNearest(actors, (candidate) => position.distanceToSquared(candidate.position))
   if (actor && actor.position.distanceToSquared(position) < 2.6 ** 2) {
@@ -66,16 +69,16 @@ export function getNearbyInteraction(
       id: actor.id,
       actorId: actor.id,
       kind: 'actor',
-      label: actor.kind === 'dog' ? petLabel : `Talk to ${actor.name}`,
+      label: actor.kind === 'dog' ? labels.pet : `Talk to ${actor.name}`,
     }
   }
 
   const guestbookDistance = guestbookPosition ? groundDistanceSquared(position, guestbookPosition) : Infinity
-  if (guestbookDistance < 3 ** 2) return { id: 'town-guestbook', kind: 'guestbook', label: guestbookLabel }
+  if (guestbookDistance < 3 ** 2) return { id: 'town-guestbook', kind: 'guestbook', label: labels.guestbook }
 
   const house = findNearest(houses, (candidate) => houseDoorDistanceSquared(position, candidate))
   if (house && houseDoorDistanceSquared(position, house) < 2.6 ** 2)
-    return { id: `door-${house.id}`, kind: 'house', label: houseLabel }
+    return { id: `door-${house.id}`, kind: 'house', label: labels.house }
 
   const freeSeats = seats.filter((seat) => !actors.some((actor) => actor.seatId === seat.id))
   const seat = findNearest(freeSeats, (candidate) => groundDistanceSquared(position, candidate))

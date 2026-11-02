@@ -428,16 +428,17 @@ export function Player({
     }
 
     updateInteraction(
-      getNearbyInteraction(
-        playerPosition.current,
-        actors.current,
+      getNearbyInteraction(playerPosition.current, {
+        actors: actors.current,
         seats,
-        languageCopy[language].guestbook.boardPrompt,
         houses,
-        languageCopy[language].app.tryHouseDoor,
         guestbookPosition,
-        languageCopy[language].pet.petAction(petName),
-      ),
+        labels: {
+          guestbook: languageCopy[language].guestbook.boardPrompt,
+          house: languageCopy[language].app.tryHouseDoor,
+          pet: languageCopy[language].pet.petAction(petName),
+        },
+      }),
     )
   }, -3)
 

@@ -24,29 +24,33 @@ const seats: BenchSeat[] = [
   { id: 'near', x: 1, z: 0, rotation: 0 },
   { id: 'far', x: 8, z: 0, rotation: 0 },
 ]
+const labels = { guestbook: '방명록 보기', house: '문 열어보기', pet: 'Pet Robin' }
 
 describe('nearby player interaction', () => {
   it('prioritizes the nearest actor over a bench', () => {
     const actors = [actor('maple', 2, 0), actor('pet', 1, 0)]
-    const interaction = getNearbyInteraction(new Vector3(), actors, seats, 'Read', [], 'Door', null, 'Pet Robin')
+    const interaction = getNearbyInteraction(new Vector3(), { actors, seats, labels })
     expect(interaction).toMatchObject({ id: 'pet', kind: 'actor', label: 'Pet Robin' })
   })
 
   it('skips occupied seats and returns no distant target', () => {
-    const occupied = getNearbyInteraction(new Vector3(), [actor('maple', 8, 0, 'near')], seats)
+    const occupied = getNearbyInteraction(new Vector3(), { actors: [actor('maple', 8, 0, 'near')], seats, labels })
     expect(occupied).toBeNull()
-    expect(getNearbyInteraction(new Vector3(20, 0, 20), [], seats)).toBeNull()
+    expect(getNearbyInteraction(new Vector3(20, 0, 20), { actors: [], seats, labels })).toBeNull()
   })
 
   it('offers the closest available bench', () => {
-    expect(getNearbyInteraction(new Vector3(), [], seats)).toMatchObject({ id: 'near', kind: 'bench' })
+    expect(getNearbyInteraction(new Vector3(), { actors: [], seats, labels })).toMatchObject({
+      id: 'near',
+      kind: 'bench',
+    })
   })
 
   it('offers the guestbook when the visitor approaches the board', () => {
     const board = { x: 12, y: 0, z: -20 }
     const position = new Vector3(board.x, 0, board.z + 1)
-    expect(getNearbyInteraction(position, [], [], '방명록 보기')).toBeNull()
-    expect(getNearbyInteraction(position, [], [], '방명록 보기', [], '문 열어보기', board)).toMatchObject({
+    expect(getNearbyInteraction(position, { actors: [], seats: [], labels })).toBeNull()
+    expect(getNearbyInteraction(position, { actors: [], seats: [], guestbookPosition: board, labels })).toMatchObject({
       id: 'town-guestbook',
       kind: 'guestbook',
       label: '방명록 보기',
@@ -63,7 +67,9 @@ describe('nearby player interaction', () => {
     }
     const [x, , z] = getHouseApproachPosition(house)
 
-    expect(getNearbyInteraction(new Vector3(x, 0, z), [], [], '방명록 보기', [house], '문 열어보기')).toMatchObject({
+    expect(
+      getNearbyInteraction(new Vector3(x, 0, z), { actors: [], seats: [], houses: [house], labels }),
+    ).toMatchObject({
       id: 'door-house-maple',
       kind: 'house',
       label: '문 열어보기',
