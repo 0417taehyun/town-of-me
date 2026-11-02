@@ -144,7 +144,9 @@ browser. Why each rule and number is what it is lives in the commit messages.
 Keep these when changing the derby:
 
 1. `game/` is plain TypeScript importing at runtime only itself, `statistics.ts`, and constants from `data/models.ts`,
-   so a server can score a run the same way (`replayDerby` over the `RunPlan` and the raw `DerbyInputLog`).
+   so a server can score a run the same way (`replayDerby` over the `RunPlan` and the raw `DerbyInputLog`). The
+   backend's copy is `backend/src/derbyJudge/`, and `backend/test/derbyJudgeVectors.json` holds both to the same
+   results, so a change to a judging value or operation changes all three.
 2. A landing is decided without randomness from timing, power, and bat height; the seeded generator (mulberry32) plans
    only the pitches and the crowd's padded looks.
 3. The pitcher throws only strikes: every pitch passes through the zone whole (`game/pitchSchedule.test.ts`).
@@ -202,6 +204,7 @@ server.mjs (Node runtime: .env, store, seeding, HTTP)
 | `openrouter.ts`                | Resident dialogue drafts; output validated like a town save.                       |
 | `seed.ts`                      | Stores the seed town at startup when no town with its id exists.                   |
 | `validation.ts`                | Shared input helpers; every request body passes through them.                      |
+| `derbyJudge/`                  | Copy of the frontend's `baseball/game/` judge: scores a run again from its log.    |
 
 Tests run with `npm test` through `test/run.ts`. `test/storeContract.ts` runs the same behaviors against both stores
 (PostgreSQL when `TEST_DATABASE_URL` is set); the flow tests drive the HTTP handler.

@@ -8,6 +8,7 @@ import {
   verifyLinkedInIdToken,
 } from '../src/index.js'
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose'
+import { checkDerbyJudge } from './derbyJudge.js'
 import { checkGuestbookFlow } from './guestbookFlow.js'
 import { checkLoginFlow } from './loginFlow.js'
 import { checkPostgresStoreContract, checkStoreContract } from './storeContract.js'
@@ -266,5 +267,6 @@ await checkPostgresStoreContract(process.env.TEST_DATABASE_URL?.trim(), assert)
 await checkLoginFlow(assert)
 await checkGuestbookFlow(assert)
 await checkTownFlow(assert)
+await checkDerbyJudge(assert)
 
 console.log(`ok - ${assertions} assertions`)
