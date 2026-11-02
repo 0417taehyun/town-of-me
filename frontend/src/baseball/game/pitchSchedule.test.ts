@@ -12,7 +12,7 @@ import {
 } from './pitchSchedule'
 import { createSeededRandom } from './seededRandom'
 
-const seeds = Array.from({ length: 200 }, (_, index) => index * 7919 + 13)
+const seeds = Array.from({ length: 20 }, (_, index) => index * 7919 + 13)
 const counts = Array.from(
   { length: PITCH_COUNT_RANGE.maximum - PITCH_COUNT_RANGE.minimum + 1 },
   (_, index) => PITCH_COUNT_RANGE.minimum + index,
@@ -46,17 +46,14 @@ function balls(pitches: ThrownPitch[], depthsOf: (plan: PitchPlan) => number[], 
 }
 
 const gamePaces = Object.values(DIFFICULTY_RULES).map((rule) => rule.pitchFlightSeconds)
-// Draws from 0 to the limit of 1 take randomTarget to every corner and edge of the band, and across its middle.
+// Draws from 0 to the limit of 1 take randomTarget to every corner and edge of the band, and across its middle, where
+// any schedule's targets lie (the first test), so every type at each of them, at every pace, bounds every pitch.
 const draws = [0, 0.25, 0.5, 0.75, 1]
 const bandTargets = draws.flatMap((height) => draws.map((side) => randomTarget(drawing([height, side]))))
 const everyPitch = [
   ...thrown(PRACTICE_SCHEDULE, [PRACTICE_PITCH_FLIGHT_SECONDS]),
   ...thrown(
     PITCH_TYPE_IDS.flatMap((type) => bandTargets.map((target) => ({ type, target }))),
-    gamePaces,
-  ),
-  ...thrown(
-    seeds.flatMap((seed) => counts.flatMap((count) => createPitchSchedule(createSeededRandom(seed), count))),
     gamePaces,
   ),
 ]

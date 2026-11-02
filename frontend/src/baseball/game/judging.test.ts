@@ -21,7 +21,12 @@ function landingScore(landing: Landing) {
 
 describe('swing judging', () => {
   it('never judges the same timing error better on hard than on normal, or on normal than on easy', () => {
-    const errors = Array.from({ length: 501 }, (_, step) => step - 250)
+    // Every 5 ms out to 250 either way, and either side of each window's edges, where a judgement changes.
+    const edges = difficulties.flatMap(({ timingWindows }) => Object.values(timingWindows))
+    const errors = [
+      ...Array.from({ length: 101 }, (_, step) => step * 5 - 250),
+      ...edges.flatMap((edge) => [edge, edge + 1, -edge, -edge - 1]),
+    ]
     errors.forEach((errorMs) => {
       const [easy, normal, hard] = difficulties.map(
         ({ timingWindows }) => timingRank[judgeTiming(errorMs, timingWindows)],

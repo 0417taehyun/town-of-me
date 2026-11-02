@@ -58,9 +58,10 @@ describe('monotone tracks', () => {
 })
 
 describe('the aimed swing', () => {
+  const batters = sides.map((side) => createBatter(DEFAULT_PLAYER_PROFILE, side))
+
   it('puts the sweet spot on the game core contact point at the contact key, the bat square to the pitch', () => {
-    for (const side of sides) {
-      const batter = createBatter(DEFAULT_PLAYER_PROFILE, side)
+    for (const batter of batters) {
       poseBatter(batter, sampleSwingPose(batter.motion, SWING_KEY_TIMES.contact))
       batter.rig.root.updateMatrixWorld(true)
       const sweetSpot = batter.bat.localToWorld(new Vector3(0, BAT.sweetSpot, 0))
@@ -72,8 +73,8 @@ describe('the aimed swing', () => {
   })
 
   it('squares the bat at the contact depth and height from its keys alone, the aim trimming only a few centimeters', () => {
-    for (const side of sides) {
-      const { x, y, z } = createBatter(DEFAULT_PLAYER_PROFILE, side).motion.aimOffset
+    for (const batter of batters) {
+      const { x, y, z } = batter.motion.aimOffset
       expect(Math.max(Math.abs(x), Math.abs(y), Math.abs(z)) * PLAYER_SCALE).toBeLessThan(0.05)
     }
   })

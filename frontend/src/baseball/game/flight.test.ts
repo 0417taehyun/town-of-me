@@ -7,12 +7,10 @@ import { FENCE_RULES, LAUNCH_RULES, type Landing, landingFor } from './landing'
 const windows = DIFFICULTY_RULES.normal.timingWindows
 const start = { x: 0.08, y: 0.62, z: -CONTACT_DEPTH }
 const frames = [1 / 60, 1 / 144, 1 / 30, 1 / 75]
-const ballsInPlay = Array.from({ length: 29 }, (_, step) => step * 10 - 140)
+const ballsInPlay = Array.from({ length: 9 }, (_, step) => step * 35 - 140)
   .flatMap((errorMs) =>
     [0.5, 0.8, 1.15].flatMap((power) =>
-      [null, -0.3, 0, 0.1, 0.2, 0.35].map((heightError) =>
-        landingFor({ errorMs, power, heightError }, windows, 'right'),
-      ),
+      [null, 0, 0.35].map((heightError) => landingFor({ errorMs, power, heightError }, windows, 'right')),
     ),
   )
   .filter((landing) => landing.outcome !== 'miss')

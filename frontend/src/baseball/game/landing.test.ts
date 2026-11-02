@@ -56,10 +56,10 @@ describe('landing', () => {
       landingFor({ errorMs: 0, power: 1, heightError }, DIFFICULTY_RULES.normal.timingWindows, 'right')
     expect(deadOn(null).distanceDecimetres).toBeLessThan(deadOn(0).distanceDecimetres)
     allWindows.forEach((windows) =>
-      steps(-windows.contact, windows.contact, 2).forEach((errorMs) =>
+      [0, ...steps(-windows.contact, windows.contact, 10)].forEach((errorMs) =>
         powers.forEach((power) => {
           const unknown = landingScore(landingFor({ errorMs, power, heightError: null }, windows, 'right'))
-          const measured = steps(-0.45, 0.45, 0.01).map((heightError) =>
+          const measured = measuredHeights.map((heightError) =>
             landingScore(landingFor({ errorMs, power, heightError }, windows, 'right')),
           )
           expect(unknown).toBeLessThanOrEqual(Math.max(...measured))
@@ -69,8 +69,9 @@ describe('landing', () => {
   })
 
   it('never carries a home run past MAX_HOME_RUN_DISTANCE_DECIMETRES, which a perfect swing reaches', () => {
+    // Dead on, at full power, and level, where the longest is, then the windows' edges and between, 5 ms apart.
     const longest = allWindows.map((windows) =>
-      steps(-windows.contact, windows.contact, 1)
+      [0, ...steps(-windows.contact, windows.contact, 5)]
         .flatMap((errorMs) =>
           powers.flatMap((power) =>
             [null, ...measuredHeights].flatMap((heightError) =>

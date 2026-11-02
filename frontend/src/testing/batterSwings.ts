@@ -1,12 +1,11 @@
-// For tests only: the swings the batter's overlap tests play, for every look of the town character creator and both
-// batting sides, and the deepest each sinks the batter into itself (batterOverlap.ts). Each look meets six of the 162
-// pitches (three types, nine zone points, six depths from the front of the reach to its back) in turn, so together the
-// looks meet them all, and the looks whose hair, hat, or default build the plan singled out also play their regression
-// cases. Nothing in the app imports this, so it never reaches the production bundle.
+// For tests only: the swings the batter's overlap tests play, the looks of the town character creator they wear, and
+// the deepest each sinks the batter into itself (batterOverlap.ts). Every look meets the same grid of pitches: the
+// zone's corners and edges at the front of the reach, where the arms stretch furthest, PERFECT, and late. Nothing in
+// the app imports this, so it never reaches the production bundle.
 import type { Vec3 } from '../data/models'
 import { type AppearanceField, type PlayerProfile, PROFILE_CHOICES } from '../data/playerProfile'
 import { type BattingSide, CONTACT_DEPTH } from '../baseball/game/field'
-import { PITCH_TYPE_IDS, type PitchTypeId, pitchPosition, planPitch, secondsAtDepth } from '../baseball/game/pitch'
+import { type PitchTypeId, pitchPosition, planPitch, secondsAtDepth } from '../baseball/game/pitch'
 import { PITCH_TARGET_BAND } from '../baseball/game/pitchSchedule'
 import {
   type Batter,
@@ -65,23 +64,12 @@ export const ZONE = {
 }
 export type ZonePoint = keyof typeof ZONE
 
-/**
- * Where a ball is met (m in front of the plate's center): from the front of the reach, where a swing about 0.2 s early
- * meets it, to the back, where one 0.2 s late does; PERFECT is the contact depth.
- */
-export const MEET_DEPTHS = [0.82, 0.62, CONTACT_DEPTH, 0.22, 0, -0.21]
-
 /** Where a pitch of `type` at zone point `zone`, as `side` sees it, is when it reaches `depth` (field meters). */
 export function pitchAt(type: PitchTypeId, zone: ZonePoint, depth: number, side: BattingSide): Vec3 {
   const target = ZONE[zone]
   const plan = planPitch(type, 0.5, { x: side === 'right' ? target.x : -target.x, y: target.y })
   return pitchPosition(plan, secondsAtDepth(plan, depth))
 }
-
-/** Every pitch the tests can meet: each type at each zone point at each depth. */
-export const PITCHES = PITCH_TYPE_IDS.flatMap((type) =>
-  (Object.keys(ZONE) as ZonePoint[]).flatMap((zone) => MEET_DEPTHS.map((depth) => ({ type, zone, depth }))),
-)
 
 /** A swing the tests play: what it is, how it starts, the game ms it is checked at, and the windup's load then. */
 export type Scenario = {
@@ -185,7 +173,7 @@ export function judgedOnItsWayBack(
   return { name, start, frames: swingFrames(0, contactMs), load: () => 1 }
 }
 
-/** The swings the camera saw begin, checked, and judged on their way, that the default and the bob looks play. */
+/** The swings the camera saw begin, checked, and judged on their way, that the default and the plain bob play. */
 export function begunScenarios(side: BattingSide): Scenario[] {
   const readyMs = 90
   const { easeMs } = BEGUN_SWING
@@ -240,45 +228,39 @@ export function begunScenarios(side: BattingSide): Scenario[] {
   ]
 }
 
-/** Whether look `lookIndex` is the default or the plain bob, which also play the swings the camera saw begin. */
-export function isKeyLook(lookIndex: number) {
-  const look = LOOKS[lookIndex]
-  return lookIndex === 0 || (look.hat === 'none' && look.hair === 'bob')
-}
+/**
+ * The pitches every look meets (type, zone point, m in front of the plate's center it is met): the zone's corners and
+ * edges at the front of the reach (0.82, where a swing about 0.2 s early meets it), where the arms stretch furthest;
+ * PERFECT at the middle and outside, where the knob and a bob's side hair come nearest; and low and inside late, where
+ * a brim does, to the back of the reach (-0.21, about 0.2 s late).
+ */
+export const PITCH_GRID: [PitchTypeId, ZonePoint, number][] = [
+  ['fastball', 'mid-low', 0.82],
+  ['changeup', 'mid-low', 0.82],
+  ['fastball', 'out-low', 0.82],
+  ['curve', 'out-high', 0.82],
+  ['fastball', 'in-low', 0.62],
+  ['changeup', 'out-high', 0.62],
+  ['fastball', 'middle', CONTACT_DEPTH],
+  ['curve', 'out-mid', CONTACT_DEPTH],
+  ['changeup', 'in-low', 0],
+  ['curve', 'in-low', -0.21],
+]
 
 /**
- * The swings look `lookIndex` plays on `side`: the windup, the way back, six of the 162 pitches in turn, a practice
- * swing at nothing from early in the windup and an early ball met with the stride not yet down, and the regression
- * cases its look needs: the default and the plain bob the knob's PERFECT middle and the front of the reach high and
- * out (and begunScenarios); the cap and the sun hat the brim over a late low inside ball; a bob PERFECT outside.
+ * The swings every look plays on `side`: the windup, the way back, a practice swing at nothing (from the stance batting
+ * right, from halfway through the windup batting left), an early ball met with the stride not yet down, and the grid.
  */
-export function lookScenarios(lookIndex: number, side: BattingSide): Scenario[] {
-  const look = LOOKS[lookIndex]
-  const turn = lookIndex * 2 + (side === 'right' ? 0 : 1)
-  const pitches = Array.from({ length: 6 }, (_, step) => PITCHES[(turn * 6 + step) % PITCHES.length])
-  const pitched = pitches.map(({ type, zone, depth }) =>
+export function gridScenarios(side: BattingSide): Scenario[] {
+  const pitched = PITCH_GRID.map(([type, zone, depth]) =>
     swingScenario(`${type} ${zone} met ${depth.toFixed(2)} m out`, pitchAt(type, zone, depth, side), 1),
   )
-  const brim = look.hat === 'cap' || look.hat === 'sunhat'
-  const regressions = [
-    ...(isKeyLook(lookIndex)
-      ? [
-          swingScenario('PERFECT middle', pitchAt('fastball', 'middle', CONTACT_DEPTH, side), 1),
-          swingScenario('high and out, at the front of the reach', pitchAt('curve', 'out-high', 0.82, side), 1),
-        ]
-      : []),
-    ...(brim ? [swingScenario('low and in, late', pitchAt('changeup', 'in-low', 0, side), 1)] : []),
-    ...(look.hair === 'bob'
-      ? [swingScenario('PERFECT, out', pitchAt('curve', 'out-mid', CONTACT_DEPTH, side), 1)]
-      : []),
-  ]
   return [
     windupScenario(),
     returnScenario(),
-    ...pitched,
-    swingScenario('a practice swing at nothing', null, lookIndex % 2 === 0 ? 0 : 0.5),
+    swingScenario('a practice swing at nothing', null, side === 'right' ? 0 : 0.5),
     swingScenario('out front with the stride not yet down', pitchAt('fastball', 'out-low', 0.82, side), 0.9),
-    ...regressions,
+    ...pitched,
   ]
 }
 

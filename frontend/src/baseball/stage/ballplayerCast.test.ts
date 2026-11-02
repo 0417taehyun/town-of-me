@@ -355,17 +355,18 @@ describe('ballplayer cast', () => {
     expect(Math.max(...fieldersOffBall)).toBeLessThan(0.5)
   })
 
-  // The looks whose brim or hair comes nearest the bat, the shoulders, and the hands, on both sides, through a home
-  // run, an early and a late swing, a pitch let go into the mitt, and a swing the camera saw begin and checked: the
-  // eyes follow the ball, and the swing's own head turn hands over to them on the way back. A frame every 4 ms, so a
-  // jump shows, measured every fifth.
+  // The looks whose brim or hair comes nearest the bat, the shoulders, and the hands, each once, the sides taking turns,
+  // through a home run, an early and a late swing, a pitch let go into the mitt, and a swing the camera saw begin and
+  // checked: the eyes follow the ball, and the swing's own head turn hands over to them on the way back. A frame every
+  // 4 ms, so a jump shows, measured every fifth.
   const headLooks: Partial<PlayerProfile>[] = [
     { hat: 'cap', hair: 'crop' },
     { hat: 'beanie', hair: 'bob' },
     { hat: 'sunhat', hair: 'crop' },
     { hat: 'none', hair: 'bob', ears: 'pointed' },
   ]
-  const headCases = (['right', 'left'] as const).flatMap((side) => headLooks.map((look) => ({ side, look })))
+  const headSides: BattingSide[] = ['right', 'left']
+  const headCases = headLooks.map((look, index) => ({ side: headSides[index % 2], look }))
   it.each(headCases)(
     'keeps the arms, the mittens, and the bat out of the head as its eyes follow the ball, smoothly: $look, $side',
     ({ side, look }) => {

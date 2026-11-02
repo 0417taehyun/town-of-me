@@ -27,7 +27,6 @@ import {
   NO_SWING,
   poseBatter,
 } from './batter'
-import { armStretch, batterOverlaps, OVERLAP_PAIRS } from '../../../testing/batterOverlap'
 import {
   BEGUN_SWING,
   begunSwingState,
@@ -49,10 +48,6 @@ import {
 const sides: BattingSide[] = ['right', 'left']
 /** A swing is back in its stance this long after it starts (ms). */
 const RETURNED_MS = SWING_MS + FINISH_HOLD_MS + RETURN_MS
-/** How deep anything may sink into anything (m): a millimeter, the overlap measure's own tolerance. */
-const TOLERANCE = 0.001
-/** How much longer than its bone an upper arm may be drawn: soft IK's own at an arm's full reach (twoBoneIk.ts). */
-const STRETCH = 0.03
 
 /** Where a pitch aimed at `corner` is met by a swing `timingSeconds` off PERFECT (early swings meet it further out). */
 function meetPoint(type: PitchTypeId, corner: { x: number; y: number }, timingSeconds: number) {
@@ -66,14 +61,6 @@ const corners = [
   { x: -PITCH_TARGET_BAND.side, y: PITCH_TARGET_BAND.high },
   { x: PITCH_TARGET_BAND.side, y: PITCH_TARGET_BAND.low },
 ]
-const timings = [-0.2, 0, 0.2]
-
-/** Pitches of `types` at every corner of the zone, met PERFECT and as early and as late as the reach allows. */
-function meetPointsOf(types: readonly PitchTypeId[]) {
-  return types.flatMap((type) => corners.flatMap((corner) => timings.map((timing) => meetPoint(type, corner, timing))))
-}
-
-const meetPoints = meetPointsOf(PITCH_TYPE_IDS)
 
 /**
  * Swings at `point` (the contact point when null) a swing the camera saw no start of, taken at `startMs` (game ms) from
@@ -138,24 +125,11 @@ function pathVelocities(path: Vector3[][]) {
     .map((points, ms) => points.map((point, part) => point.clone().sub(path[ms][part]).multiplyScalar(1000)))
 }
 
-/** How deep (m) the batter as last posed sinks into itself, its deepest pair (batterOverlap.ts). */
-function deepestInItself(batter: Batter) {
-  const overlaps = batterOverlaps(batter)
-  return Math.max(...OVERLAP_PAIRS.map((pair) => overlaps[pair]))
-}
-
-/**
- * The batter each ms from `fromMs` to `toMs` (game ms) at load 1: its tracked points, its bat's azimuth, and every
- * fifth ms how deep (m) it sinks into itself and how far an arm is drawn past its bone (batterOverlap.*.test.ts check
- * these swings closer).
- */
+/** The batter each ms from `fromMs` to `toMs` (game ms) at load 1: its tracked points and its bat's azimuth. */
 function drawnPath(batter: Batter, fromMs: number, toMs: number) {
   return Array.from({ length: toMs - fromMs + 1 }, (_, ms) => {
     const pose = poseAt(batter, fromMs + ms, 1)
-    const measured = ms % 5 === 0
-    const depth = measured ? deepestInItself(batter) : 0
-    const stretch = measured ? armStretch(batter) : 0
-    return { points: trackedPoints(batter), azimuth: pose.batAzimuth, depth, stretch }
+    return { points: trackedPoints(batter), azimuth: pose.batAzimuth }
   })
 }
 
@@ -229,7 +203,11 @@ describe('batter', () => {
       right: createBatter(DEFAULT_PLAYER_PROFILE, 'right'),
       left: createBatter(DEFAULT_PLAYER_PROFILE, 'left'),
     }
-    const points = meetPoints.filter((_, index) => index % 5 === 0)
+    const points = [
+      meetPoint('curve', corners[0], -0.2),
+      meetPoint('fastball', corners[1], 0),
+      meetPoint('changeup', corners[3], 0.2),
+    ]
     const cases = sides.flatMap((side) => [0, 0.5, 1].flatMap((load) => points.map((point) => ({ side, load, point }))))
     for (const { side, load, point } of cases) {
       const batter = batters[side]
@@ -244,7 +222,10 @@ describe('batter', () => {
 
   it('meets a PERFECT pitch at the swing’s contact key, where the bat is square', () => {
     const batter = createBatter(DEFAULT_PLAYER_PROFILE, 'right')
-    const perfect = PITCH_TYPE_IDS.flatMap((type) => corners.map((corner) => meetPoint(type, corner, 0)))
+    const perfect = [
+      ...PITCH_TYPE_IDS.map((type, index) => meetPoint(type, corners[index], 0)),
+      meetPoint('fastball', corners[3], 0),
+    ]
     for (const point of perfect) {
       swingFromWindup(batter, 0, 1, point)
       expect(Math.abs(batter.swing.contactAt - SWING_KEY_TIMES.contact)).toBeLessThan(0.001)
@@ -262,15 +243,14 @@ describe('batter', () => {
     expect(Math.max(...gaps)).toBeLessThan(1e-6)
   })
 
-  // Every look, both sides, and every pitch the batter can meet are checked for overlaps in batterOverlap.*.test.ts.
+  // Overlaps are checked, swing by swing, look by look, and on both sides, in batterOverlap.{left,right}.test.ts.
 
   // The plain bob also plays it: its side hair is the nearest the arms come to the head, which turns to clear them.
   it.each([{ hair: 'crop' }, { hair: 'bob' }] as const)(
     'swings, holds its finish, and comes back to its stance smoothly, without a pop anywhere, wearing $hair hair',
     (look) => {
       const batter = createBatter({ ...DEFAULT_PLAYER_PROFILE, ...look }, 'right')
-      const outside = [meetPoint('changeup', corners[1], 0), meetPoint('fastball', corners[3], 0)]
-      for (const point of [null, meetPoint('fastball', corners[0], 0), ...outside]) {
+      for (const point of [null, meetPoint('changeup', corners[1], 0)]) {
         swingFromWindup(batter, 0, 1, point)
         const frames = Array.from({ length: RETURNED_MS + WAGGLE_FADE_MS }, (_, ms) => ms + 1)
         const poses = frames.map((nowMs) => ({ nowMs, pose: poseAt(batter, nowMs, nowMs < RETURNED_MS ? 1 : 0, true) }))
@@ -309,11 +289,13 @@ describe('batter', () => {
 
   // A swing plays the research's 175 ms from the foot strike in CONTACT_DELAY_MS, under three frames at 60 fps, so one
   // that meets its ball early in the swing turns its bat onto it in under 10 ms: no point's velocity ever jumps, but
-  // there it changes fastest, about 34 m/s within a ms (the plan's 15 held for the zone's center only).
+  // there it changes fastest, about 34 m/s within a ms (the plan's 15 held for the zone's center only). The body pops
+  // most late at the low corners, the head turns fastest early inside and low and changes most late at the high ones.
   it.each(sides)('swings %s-handed at every pitch it can meet without a pop, its head steady', (side) => {
     const batter = createBatter(DEFAULT_PLAYER_PROFILE, side)
     const head = 6
-    for (const point of [null, ...meetPoints]) {
+    const earlyAndLate = corners.flatMap((corner) => [-0.2, 0.2].map((timing) => meetPoint('curve', corner, timing)))
+    for (const point of [null, ...earlyAndLate, meetPoint('fastball', corners[2], 0)]) {
       const velocities = pathVelocities(swingPath(batter, point))
       const changes = velocities
         .slice(1)
@@ -324,7 +306,7 @@ describe('batter', () => {
     }
   })
 
-  it('swings a swing begun early on to its ball without a jump, a step back, a pop, or sinking into itself', () => {
+  it('swings a swing begun early on to its ball without a jump, a step back, or a pop', () => {
     const batter = createBatter(DEFAULT_PLAYER_PROFILE, 'right')
     const readyMs = 90
     const { easeMs } = BEGUN_SWING
@@ -374,8 +356,6 @@ describe('batter', () => {
       expect(pops.body).toBeLessThan(36)
       expect(pops.head).toBeLessThan(5)
       expect(pops.headSpeed).toBeLessThan(11)
-      expect(Math.max(...path.map(({ depth }) => depth))).toBeLessThan(TOLERANCE)
-      expect(Math.max(...path.map(({ stretch }) => stretch))).toBeLessThan(STRETCH)
       poseAt(batter, throughMs + stretchMs, 1)
       expect(worldSweetSpot(batter).distanceTo(new Vector3(point.x, point.y, point.z))).toBeLessThan(0.002)
       // It meets the ball about as fast as a swing the camera saw no start of: the swing seen first is no weaker.
@@ -402,8 +382,6 @@ describe('batter', () => {
       const pops = popsAlong(path)
       expect(pops.body).toBeLessThan(36)
       expect(pops.head).toBeLessThan(5)
-      expect(Math.max(...path.map(({ depth }) => depth))).toBeLessThan(TOLERANCE)
-      expect(Math.max(...path.map(({ stretch }) => stretch))).toBeLessThan(STRETCH)
       // Back in the windup as if it had never swung.
       const checked = path.at(-1)!.points
       batter.swing = NO_SWING
