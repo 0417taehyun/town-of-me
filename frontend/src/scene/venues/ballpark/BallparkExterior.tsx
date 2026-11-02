@@ -12,6 +12,7 @@ import { RoofSnow } from '../../objects/houses/RoofSnow'
 import { useVenueMaterials } from '../venueMaterials'
 import type { VenueExteriorProps } from '../VenueExteriors'
 import { glowPositions } from './ballparkParts'
+import { BallparkStatues } from './BallparkStatues'
 import {
   archSnowRise,
   CORNICE_SNOW,
@@ -38,7 +39,7 @@ const hedgeColors = getSeasonColors('hedge')
  * town's season, and the flowers in the hedges close up under the snow. Snow settles on the gate's arch, the bowl's
  * top, and the hall's cornice as on the houses' roofs, while the forecourt carries on the road that meets the gate,
  * cleared like it. While the town's lamps are on, the doors, the windows, the conservatory, and the towers' lamps glow,
- * with painted halos rather than lights.
+ * with painted halos rather than lights. Inside the hedge, beside the road to the gate, stands its podium garden.
  */
 export function BallparkExterior({
   settings,
@@ -175,6 +176,7 @@ export function BallparkExterior({
         <meshStandardMaterial color={approachColor} roughness={1} />
       </mesh>
       <GuestbookSign title={sign} height={EXTERIOR_SIGN.height} position={EXTERIOR_SIGN.at} />
+      <BallparkStatues seasonChange={seasonChange} lampsOn={lampsOn} language={language} />
       {lampsOn && (
         <>
           <Halos positions={glows.towers} size={11} />

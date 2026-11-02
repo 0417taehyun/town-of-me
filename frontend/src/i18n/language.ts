@@ -970,6 +970,8 @@ export const languageCopy = {
         previewPlays: (month: string) => `This preview plays the rules from ${month}.`,
         previewCurrent: 'Nothing is scheduled, so this preview plays this month’s rules.',
         previewThisMonth: 'This preview plays this month’s rules.',
+        /** The podium garden beside the north road: its sign, and an empty pedestal's plaque. */
+        statues: { sign: 'Home run champions', waiting: 'Waiting for a challenger' },
       },
     },
   },
@@ -1894,6 +1896,7 @@ export const languageCopy = {
         previewPlays: (month: string) => `${month}부터 적용될 규칙으로 해봐요.`,
         previewCurrent: '예약된 규칙이 없어서 이번 달 규칙으로 해봐요.',
         previewThisMonth: '이번 달 규칙으로 해봐요.',
+        statues: { sign: '이달의 홈런왕', waiting: '도전자를 기다려요' },
       },
     },
   },

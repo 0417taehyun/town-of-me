@@ -21,12 +21,15 @@ import {
   Sprite,
   SpriteMaterial,
   CircleGeometry,
+  type Texture,
   TorusGeometry,
   Vector2,
   Vector3,
 } from 'three'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { DEFAULT_PLAYER_PROFILE, type PlayerProfile } from '../../data/playerProfile'
 import { ink } from '../characters/avatarAppearance'
+import { getRoundedBox } from '../roundedBox'
 import {
   DEFAULT_BATTER_COLOR,
   EYE_FINISH,
@@ -95,13 +98,13 @@ export function bentPlane(width: number, height: number, radius: number) {
 
 /**
  * A round cake pedestal on a wide plinth: a fat metal rim on its top edge over a broad metal band, a thin bead at its
- * foot, and a plaque with the place's star in front. Returns it with the height of its top.
+ * foot, and `plaque` in front. Returns it with the height of its top.
  */
 export function createPedestal(
   finish: RankFinish,
   metal: MeshStandardMaterial,
   textures: StatueTextures,
-  rank: StatueRank,
+  plaque: Texture,
 ) {
   const { radius, plinthRadius, plinthHeight, plaqueWidth, plaqueHeight, band } = PEDESTAL
   const top = plinthHeight + finish.bodyHeight
@@ -157,12 +160,49 @@ export function createPedestal(
     alphaTest: 0.5,
   })
   const frame = new Mesh(bentPlane(plaqueWidth + 0.03, plaqueHeight + 0.03, radius + 0.004), frameMaterial)
-  const plaqueMaterial = new MeshStandardMaterial({ map: textures.plaques[rank], roughness: 0.5, alphaTest: 0.5 })
-  const plaque = new Mesh(bentPlane(plaqueWidth, plaqueHeight, radius + 0.008), plaqueMaterial)
+  const plaqueMaterial = new MeshStandardMaterial({ map: plaque, roughness: 0.5, alphaTest: 0.5 })
+  const plaqueMesh = new Mesh(bentPlane(plaqueWidth, plaqueHeight, radius + 0.008), plaqueMaterial)
   frame.position.y = plaqueY
-  plaque.position.y = plaqueY
-  pedestal.add(frame, plaque)
+  plaqueMesh.position.y = plaqueY
+  pedestal.add(frame, plaqueMesh)
   return { pedestal, top }
+}
+
+/** The height of a place's pedestal top over its floor. */
+export function pedestalTop(rank: StatueRank) {
+  return PEDESTAL.plinthHeight + RANK_FINISHES[rank].bodyHeight
+}
+
+/** The low round stage the pedestals stand on: a unit disc with a soft rim, scaled to an ellipse per layout. */
+export function createPodiumStageGeometry(height = 0.07) {
+  const rim = 0.025
+  const profile = [
+    [0, -height],
+    [0.99, -height],
+    [1, -height + 0.012],
+    [1, -rim],
+    [1 - rim * 0.4, -rim * 0.15],
+    [1 - rim * 1.6, 0],
+    [0, 0],
+  ].map(([radius, y]) => new Vector2(radius, y))
+  return new LatheGeometry(profile, 96)
+}
+
+/** A baseball with its red stitches, centred on its origin. */
+export function createBaseball(radius: number) {
+  const ball = new Mesh(
+    new SphereGeometry(radius, 20, 14),
+    new MeshStandardMaterial({ color: '#f7f1e3', roughness: 0.55 }),
+  )
+  const stitchGeometry = new TorusGeometry(radius * 0.72, radius * 0.0933, 6, 24)
+  const stitchMaterial = new MeshStandardMaterial({ color: '#ca7765', roughness: 0.7 })
+  for (const side of [-1, 1]) {
+    const stitch = new Mesh(stitchGeometry, stitchMaterial)
+    stitch.position.x = side * radius * 0.6933
+    stitch.rotation.y = Math.PI / 2
+    ball.add(stitch)
+  }
+  return ball
 }
 
 /** The champion's cup with ear handles and a little baseball in its bowl; origin at its foot. */
@@ -193,19 +233,8 @@ export function createTrophy(metal: Material) {
     handle.rotation.z = (side * -Math.PI) / 2
     trophy.add(handle)
   }
-  const ball = new Mesh(
-    new SphereGeometry(0.075, 20, 14),
-    new MeshStandardMaterial({ color: '#f7f1e3', roughness: 0.55 }),
-  )
+  const ball = createBaseball(0.075)
   ball.position.y = 0.31
-  const stitchGeometry = new TorusGeometry(0.054, 0.007, 6, 24)
-  const stitchMaterial = new MeshStandardMaterial({ color: '#ca7765', roughness: 0.7 })
-  for (const side of [-1, 1]) {
-    const stitch = new Mesh(stitchGeometry, stitchMaterial)
-    stitch.position.x = side * 0.052
-    stitch.rotation.y = Math.PI / 2
-    ball.add(stitch)
-  }
   trophy.add(ball)
   return trophy
 }
@@ -461,19 +490,119 @@ export function collectOwned(
   if (object instanceof Mesh || object instanceof Sprite) materials.add(object.material as Material)
 }
 
-/** A statue of `look` in `rank`'s place: a pedestal with a figure, or with plaster and no props while empty. */
-export function createPaintedStatue(look: StatueLook, rank: StatueRank, textures: StatueTextures): PaintedStatue {
-  const standing = look !== null
-  const finish = RANK_FINISHES[rank]
-  const group = new Group()
-  const metal = new MeshStandardMaterial({
+/** The polished metal of a place's band, rim, and props, reflecting the studio. */
+export function createPlaceMetal(finish: RankFinish, textures: StatueTextures) {
+  return new MeshStandardMaterial({
     color: finish.metal,
     metalness: 1,
     roughness: finish.roughness,
     envMap: textures.environment,
     envMapIntensity: 1.05,
   })
-  const { pedestal, top } = createPedestal(finish, metal, textures, rank)
+}
+
+/** A baseball on a coral velvet cushion with gold tassels, which says a place is open; origin on the pedestal top. */
+export function createWaitingBall() {
+  const waiting = new Group()
+  const cushion = new Mesh(
+    getRoundedBox(0.62, 0.15, 0.62, 0.07),
+    new MeshStandardMaterial({ color: '#ad514a', roughness: 0.75 }),
+  )
+  cushion.position.y = 0.075
+  cushion.castShadow = true
+  const ball = createBaseball(0.21)
+  ball.position.y = 0.33
+  ball.rotation.set(0.4, 0.6, 0.2)
+  ball.castShadow = true
+  const tasselGeometry = new SphereGeometry(0.035, 8, 6)
+  const tasselMaterial = new MeshStandardMaterial({ color: '#d8b879', roughness: 0.5 })
+  const tassels = [-1, 1].flatMap((sideX) =>
+    [-1, 1].map((sideZ) => {
+      const tassel = new Mesh(tasselGeometry, tasselMaterial)
+      tassel.position.set(sideX * 0.3, 0.06, sideZ * 0.3)
+      return tassel
+    }),
+  )
+  waiting.add(cushion, ball, ...tassels)
+  return waiting
+}
+
+/**
+ * An empty place in the town: its pedestal with `plaque` in front and the waiting baseball on top. Its figure would
+ * be plaster, which reads as a ghost at night, so the town shows the ball instead.
+ */
+export function createWaitingStatue(rank: StatueRank, textures: StatueTextures, plaque: Texture) {
+  const finish = RANK_FINISHES[rank]
+  const { pedestal, top } = createPedestal(finish, createPlaceMetal(finish, textures), textures, plaque)
+  const waiting = createWaitingBall()
+  waiting.position.y = top
+  const group = new Group()
+  group.add(pedestal, waiting)
+  return group
+}
+
+/**
+ * Still statues as one mesh per look of material, their parts' geometry merged where they stand under `root`: parts
+ * that look alike share a draw call, across statues too, instead of costing one each. The first material of each look
+ * draws its parts; a merged mesh casts a shadow if any of its parts did, and every one receives shadows.
+ */
+export function mergeByMaterial(root: Object3D) {
+  root.updateMatrixWorld(true)
+  const parts = new Map<string, MaterialParts>()
+  root.traverse((object) => collectPart(object, parts))
+  const merged = new Group()
+  parts.forEach(({ material, geometries, castShadow }) => {
+    const mesh = new Mesh(mergeGeometries(geometries) ?? undefined, material)
+    mesh.castShadow = castShadow
+    mesh.receiveShadow = true
+    merged.add(mesh)
+  })
+  return merged
+}
+
+/** The parts drawn alike: the material that draws them, their geometry where they stand, and whether any casts. */
+export type MaterialParts = { material: Material; geometries: BufferGeometry[]; castShadow: boolean }
+
+/** What makes two materials draw the same: their kind, colors, finish, textures, and blending. */
+export function materialLook(material: Material) {
+  if (!(material instanceof MeshStandardMaterial)) return material.uuid
+  const textures = [material.map, material.alphaMap, material.envMap].map((texture) => texture?.uuid ?? '')
+  return [
+    material.type,
+    material.color.getHex(),
+    material.emissive.getHex(),
+    material.emissiveIntensity,
+    material.roughness,
+    material.metalness,
+    material.envMapIntensity,
+    material.opacity,
+    material.transparent,
+    material.alphaTest,
+    material.side,
+    ...textures,
+  ].join('|')
+}
+
+/** Adds a visible mesh's geometry, placed where it stands and without an index, to its material look's parts. */
+export function collectPart(object: Object3D, parts: Map<string, MaterialParts>) {
+  if (!(object instanceof Mesh) || !object.visible) return
+  const geometry = object.geometry as BufferGeometry
+  const placed = (geometry.index ? geometry.toNonIndexed() : geometry.clone()).applyMatrix4(object.matrixWorld)
+  const material = object.material as Material
+  const look = materialLook(material)
+  const part = parts.get(look) ?? { material, geometries: [], castShadow: false }
+  part.geometries.push(placed)
+  part.castShadow ||= object.castShadow
+  parts.set(look, part)
+}
+
+/** A statue of `look` in `rank`'s place: a pedestal with a figure, or with plaster and no props while empty. */
+export function createPaintedStatue(look: StatueLook, rank: StatueRank, textures: StatueTextures): PaintedStatue {
+  const standing = look !== null
+  const finish = RANK_FINISHES[rank]
+  const group = new Group()
+  const metal = createPlaceMetal(finish, textures)
+  const { pedestal, top } = createPedestal(finish, metal, textures, textures.plaques[rank])
   const figure = createStatueFigure(lookProfile(look), statuePaint(look, textures))
   // Collected before any prop goes on, so the props are freed with the statue and the town's geometry never is.
   const shared = figureGeometries(figure)

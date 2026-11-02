@@ -1,7 +1,9 @@
 import type { TownObject, TownSnapshot, Vec3 } from '../data/models'
 import { clamp, lerp } from '../motionMath'
 import { TOWN_OBJECT_KINDS } from '../scene/objects/kinds'
-import { clampToTown, createEditorId, getRemovalBlock, townIds, updateObjects, type RemovalBlock } from './townEditing'
+import { openVenueSlots } from '../scene/venues/venuePlacements'
+import type { VenueSlot } from '../scene/venues/venueSlots'
+import { createEditorId, getRemovalBlock, placeInTown, townIds, updateObjects, type RemovalBlock } from './townEditing'
 
 export type NumberRange = { minimum: number; maximum: number }
 
@@ -80,10 +82,16 @@ export function moveObjects(town: TownSnapshot, origins: readonly ObjectOrigin[]
 }
 
 /** A copy beside the original with an id that is not in `taken`, which the new id then joins. */
-export function copyObject(original: TownObject, taken: Set<string>, random: () => number): TownObject {
+export function copyObject(
+  original: TownObject,
+  taken: Set<string>,
+  random: () => number,
+  openSlots: readonly VenueSlot[],
+): TownObject {
   const id = createEditorId(original.type, taken, random)
   taken.add(id)
-  const position = clampToTown(original.type, { ...original.position, x: original.position.x + COPY_OFFSET })
+  const moved = { ...original.position, x: original.position.x + COPY_OFFSET }
+  const position = placeInTown(original.type, moved, openSlots)
   return { ...structuredClone(original), id, position }
 }
 
@@ -92,7 +100,8 @@ export function duplicateObjects(town: TownSnapshot, ids: readonly string[], ran
   const listed = new Set(ids)
   const originals = town.objects.filter((object) => listed.has(object.id) && !TOWN_OBJECT_KINDS[object.type].singleton)
   const taken = townIds(town)
-  const copies = originals.map((original) => copyObject(original, taken, random))
+  const openSlots = openVenueSlots(town.venues)
+  const copies = originals.map((original) => copyObject(original, taken, random, openSlots))
   return {
     town: copies.length ? { ...town, objects: [...town.objects, ...copies] } : town,
     ids: copies.map(({ id }) => id),

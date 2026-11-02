@@ -21,6 +21,8 @@ import { getDefaultPetRoute } from '../scene/animals/corgiGait'
 import { getBenchPose, getBenchSeats } from '../scene/motion/characterPose'
 import { TOWN_OBJECT_KINDS } from '../scene/objects/kinds'
 import { getRoadWorldPoints } from '../scene/objects/roads/roadLayout'
+import { openVenueSlots } from '../scene/venues/venuePlacements'
+import { pushOutOfVenueApproach, type VenueSlot } from '../scene/venues/venueSlots'
 import { clamp } from '../motionMath'
 
 export const EMPTY_LOCALIZED_TEXT: LocalizedText = { ko: '', en: '' }
@@ -81,6 +83,18 @@ export function clampToTown(type: TownObjectType, position: Vec3): Vec3 {
   }
 }
 
+/**
+ * Where an object stands once placed or moved: inside the town and, if it stands on the ground, out of the approaches
+ * the shown venues (`openSlots`) keep for themselves. A road is left where it is: it is painted, and its position is
+ * only the origin of its points.
+ */
+export function placeInTown(type: TownObjectType, position: Vec3, openSlots: readonly VenueSlot[]): Vec3 {
+  const clamped = clampToTown(type, position)
+  if (type === 'road' || isSkyObject(type)) return clamped
+  const [x, z] = pushOutOfVenueApproach(openSlots, [clamped.x, clamped.z])
+  return { ...clamped, x, z }
+}
+
 export function clampPoint([x, z]: TownPoint): TownPoint {
   return [
     rounded(clamp(x, -TOWN_GROUND_LIMIT, TOWN_GROUND_LIMIT)),
@@ -126,15 +140,18 @@ export function updateObjects(
   changes: (object: TownObject) => ObjectChanges,
 ): TownSnapshot {
   const listed = new Set(ids)
+  const openSlots = openVenueSlots(town.venues)
   return {
     ...town,
-    objects: town.objects.map((object) => (listed.has(object.id) ? changedObject(object, changes(object)) : object)),
+    objects: town.objects.map((object) =>
+      listed.has(object.id) ? changedObject(object, changes(object), openSlots) : object,
+    ),
   }
 }
 
-export function changedObject(object: TownObject, changes: ObjectChanges): TownObject {
+export function changedObject(object: TownObject, changes: ObjectChanges, openSlots: readonly VenueSlot[]): TownObject {
   const next = { ...object, ...changes }
-  return { ...next, position: clampToTown(object.type, next.position) }
+  return { ...next, position: placeInTown(object.type, next.position, openSlots) }
 }
 
 export function updateObject(town: TownSnapshot, id: string, changes: ObjectChanges) {
@@ -154,7 +171,7 @@ export function addObject(
   const object: TownObject = {
     id,
     type,
-    position: clampToTown(type, { x: at.x, y: height, z: at.z }),
+    position: placeInTown(type, { x: at.x, y: height, z: at.z }, openVenueSlots(town.venues)),
     rotation: 0,
     scale: 1,
     ...kind.defaults?.(newcomerName),

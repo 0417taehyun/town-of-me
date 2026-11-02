@@ -18,7 +18,6 @@ import type { PetSound } from './animals/petInteraction'
 import type { SkidSound, SquealLength } from '../audio/skidSqueal'
 import type { AmbientScene } from '../audio/ambience'
 import { getGroundSurface, getTownPlaza, type Footstep } from './environment/groundSurface'
-import { getTownRoads } from './objects/roads/roadLayout'
 import { getSnowCover, seasonClock } from './environment/seasonTransition'
 import { Residents } from './characters/Residents'
 import { createTownCollision } from './townCollision'
@@ -38,7 +37,7 @@ import { TownGuideMarker } from './TownGuideMarker'
 import { groupTownObjects } from './townObjectGroups'
 import type { TownLayerProps } from './objects/townObjectKind'
 import { installWorldCurve } from './worldCurve'
-import { getVenueEntrances } from './venues/venuePlacements'
+import { getGroundRoads, getVenueCollision, getVenueEntrances } from './venues/venuePlacements'
 
 // Before any town material compiles; the editor's scene renders inside this one, so `/admin` bends too.
 installWorldCurve()
@@ -136,7 +135,10 @@ export function TownScene({
   const residentSpecs = useMemo(() => createResidentSpecs(town.residents), [town.residents])
   const actors = useMemo(() => ({ current: createWorldActors(residentSpecs) }), [residentSpecs])
   const seats = useMemo(() => getBenchSeats(town.objects), [town.objects])
-  const collision = useMemo(() => createTownCollision(town.objects), [town.objects])
+  const collision = useMemo(
+    () => createTownCollision(town.objects, getVenueCollision(town.venues)),
+    [town.objects, town.venues],
+  )
   const groups = useMemo(() => groupTownObjects(town.objects), [town.objects])
   const fountain = groups.fountain
   const obstacles = useMemo<RoundObstacle[]>(
@@ -151,7 +153,7 @@ export function TownScene({
   const lampsOn = useLampsOn(dayPeriods[period].lamps, reducedMotion)
   const seasonChange = useSeasonChange(season, reducedMotion)
   const dialogueFocus = useRef<Vector3 | null>(null)
-  const roads = useMemo(() => getTownRoads(groups.roads), [groups.roads])
+  const roads = useMemo(() => getGroundRoads(groups.roads, town.venues), [groups.roads, town.venues])
   const plaza = useMemo(() => getTownPlaza(town.objects), [town.objects])
   const surfaceAt = (x: number, z: number) =>
     getGroundSurface({ x, z, running: false, snow: getSnowCover(seasonChange.current, seasonClock()) }, roads, plaza)

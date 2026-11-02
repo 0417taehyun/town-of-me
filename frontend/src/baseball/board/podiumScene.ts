@@ -1,14 +1,4 @@
-import {
-  type BufferGeometry,
-  Color,
-  DoubleSide,
-  InstancedMesh,
-  LatheGeometry,
-  MathUtils,
-  MeshStandardMaterial,
-  Object3D,
-  Vector2,
-} from 'three'
+import { type BufferGeometry, Color, DoubleSide, InstancedMesh, MathUtils, MeshStandardMaterial, Object3D } from 'three'
 import { getRoundedBox } from '../../scene/roundedBox'
 import type { StatueRank } from '../../scene/statues/statueFinishes'
 
@@ -21,7 +11,6 @@ const tanHalfFov = Math.tan(MathUtils.degToRad(PODIUM_FOV / 2))
 const statueRadius = 0.95
 const sceneTop = 3.3
 const turnToCentre = MathUtils.degToRad(10)
-const stageHeight = 0.07
 const stageMargin = 1.15
 /** Narrower than this (CSS px), the statues stand in steps and the plates stack, as the page's CSS does. */
 export const STACKED_WIDTH = 640
@@ -72,21 +61,6 @@ export function framePodium(aspect: number, stacked: boolean) {
 
 /** The height the camera looks at, half way up the tallest statue. */
 export const LOOK_HEIGHT = sceneTop / 2 - 0.08
-
-/** The low round stage the pedestals stand on: a unit disc with a soft rim, scaled to an ellipse per layout. */
-export function createPodiumStageGeometry() {
-  const rim = 0.025
-  const profile = [
-    [0, -stageHeight],
-    [0.99, -stageHeight],
-    [1, -stageHeight + 0.012],
-    [1, -rim],
-    [1 - rim * 0.4, -rim * 0.15],
-    [1 - rim * 1.6, 0],
-    [0, 0],
-  ].map(([radius, y]) => new Vector2(radius, y))
-  return new LatheGeometry(profile, 96)
-}
 
 /** The first look, in seconds from its start: when each pedestal pops up, then its plate, then the confetti. */
 export const REVEAL = {

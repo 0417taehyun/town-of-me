@@ -15,6 +15,8 @@ import type { TownObject, TownPoint, TownSnapshot, Vec3 } from '../data/models'
 import { useReducedMotion } from '../hooks/useReducedMotion'
 import { TOWN_OBJECT_KINDS } from '../scene/objects/kinds'
 import { getRoadWorldPoints } from '../scene/objects/roads/roadLayout'
+import { openVenueSlots } from '../scene/venues/venuePlacements'
+import { venueApproachOutline } from '../scene/venues/venueSlots'
 import { getObjectOrigins, moveObjects } from './bulkEditing'
 import {
   addToObjectSelection,
@@ -75,6 +77,7 @@ const markerLooks: Record<MarkerLook, { color: string; groundOpacity: number; sk
   dimmed: { color: '#c9cfcb', groundOpacity: 0.18, skyOpacity: 0.14, order: 3 },
 }
 const BLOCKED_LEG_COLOR = '#d9483b'
+const VENUE_APPROACH_COLOR = '#fff6d6'
 const DRAG_THRESHOLD_PIXELS = 4
 
 type DragState = {
@@ -231,6 +234,7 @@ export function TownEditorScene({
   const benchStop = selectedResident ? getBenchStop(town, selectedResident) : null
   const petRoute = single?.kind === 'pet' ? town.pet.route : null
   const blockedLegs = useMemo(() => getSelectedBlockedLegs(town, selection), [selection, town])
+  const venueApproaches = useMemo(() => openVenueSlots(town.venues).map(venueApproachOutline), [town.venues])
   // The visitor view shows the town as visitors see it, so editing markers and handles stay in the top view.
   const marking = view === 'top'
   // The people tab has no markers to pick, so select mode leaves its camera alone.
@@ -541,6 +545,19 @@ export function TownEditorScene({
           }}
         />
       )}
+      {/* The ground a shown venue keeps for its own garden; objects placed in it move out to its edge. */}
+      {marking &&
+        venueApproaches.map((outline, index) => (
+          <Line
+            key={index}
+            points={outline.map(([x, z]) => [x, 0.16, z] as const)}
+            color={VENUE_APPROACH_COLOR}
+            lineWidth={2.5}
+            dashed
+            dashSize={0.7}
+            gapSize={0.45}
+          />
+        ))}
       {marking && blockedLegs.length > 0 && (
         <Line
           segments

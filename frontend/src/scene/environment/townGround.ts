@@ -2,17 +2,22 @@ import { CanvasTexture, Color, SRGBColorSpace, type WebGLProgramParametersWithUn
 import { lerp, seededFraction, smoothstep } from '../../motionMath'
 
 import type { Plaza } from './groundSurface'
+import { closePaving, hexChannels, roundingWindow } from './pavingCorners'
 import type { TownRoad } from '../objects/roads/roadLayout'
 
 export type GroundLayout = { roads: TownRoad[]; plaza: Plaza | null }
 
+/** The ground texture's span in metres and its size in pixels. */
+const GROUND_SIZE = 106
+const GROUND_PIXELS = 2048
+
 export function drawGround({ roads, plaza }: GroundLayout) {
   const canvas = document.createElement('canvas')
-  canvas.width = 2048
-  canvas.height = 2048
+  canvas.width = GROUND_PIXELS
+  canvas.height = GROUND_PIXELS
   const context = canvas.getContext('2d')!
-  context.translate(1024, 1024)
-  context.scale(2048 / 106, 2048 / 106)
+  context.translate(GROUND_PIXELS / 2, GROUND_PIXELS / 2)
+  context.scale(GROUND_PIXELS / GROUND_SIZE, GROUND_PIXELS / GROUND_SIZE)
   context.lineCap = 'round'
   context.lineJoin = 'round'
   roads.forEach(({ color, width, points }) => {
@@ -42,10 +47,29 @@ export function drawGround({ roads, plaza }: GroundLayout) {
     context.arc(x, z, width * 0.76, 0, Math.PI * 2)
     context.fill()
   })
+  roads.forEach((road) => roundPavingCorners(context, road))
   const texture = new CanvasTexture(canvas)
   texture.colorSpace = SRGBColorSpace
   texture.anisotropy = 4
   return texture
+}
+
+/**
+ * Rounds the inner corners around a road that asks for it (a venue's branch path) to its `rounding` radius, in the
+ * painted pixels themselves: the branch and the road it leaves stay one paving with no seam or color step.
+ */
+export function roundPavingCorners(context: CanvasRenderingContext2D, road: TownRoad) {
+  if (!road.rounding) return
+  const scale = GROUND_PIXELS / GROUND_SIZE
+  const toPixel = (metres: number) => (metres + GROUND_SIZE / 2) * scale
+  const bounds = roundingWindow(road, road.rounding)
+  const left = Math.max(0, Math.floor(toPixel(bounds.minX)))
+  const top = Math.max(0, Math.floor(toPixel(bounds.minZ)))
+  const width = Math.min(GROUND_PIXELS, Math.ceil(toPixel(bounds.maxX))) - left
+  const height = Math.min(GROUND_PIXELS, Math.ceil(toPixel(bounds.maxZ))) - top
+  const image = context.getImageData(left, top, width, height)
+  closePaving(image.data, width, height, road.rounding * scale, hexChannels(road.color))
+  context.putImageData(image, left, top)
 }
 
 // How deep the snow lies at a ground point, from 0 to 1: deep drifts arrive first and melt last.

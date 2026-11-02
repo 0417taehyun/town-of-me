@@ -2,7 +2,7 @@ import { useFrame } from '@react-three/fiber'
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 import type { MutableRefObject } from 'react'
 import { Mesh, MeshStandardMaterial, type WebGLProgramParametersWithUniforms } from 'three'
-import type { TownObject, TownSnapshot } from '../data/models'
+import type { TownObject, TownSnapshot, TownVenues } from '../data/models'
 import { ContactShadows } from './ContactShadows'
 import { DistantWorld } from './environment/DistantWorld'
 import { getFountainPlaza } from './environment/groundSurface'
@@ -12,10 +12,9 @@ import { SnowFootprints } from './environment/SnowFootprints'
 import { addSnowCover, drawGround, drawSnowDepth, type GroundLayout } from './environment/townGround'
 import { useSeasonalColor } from './environment/useSeasonChange'
 import { getContactShadowLayout, getTownLayers } from './objects/kinds'
-import { getTownRoads } from './objects/roads/roadLayout'
 import type { TownLayerProps } from './objects/townObjectKind'
 import { groupTownObjects } from './townObjectGroups'
-import { openVenueSlots } from './venues/venuePlacements'
+import { getGroundRoads, openVenueSlots } from './venues/venuePlacements'
 import { VenueExteriors } from './venues/VenueExteriors'
 
 const groundColors = getSeasonColors('ground')
@@ -24,10 +23,13 @@ export function TownGround({
   seasonChange,
   roads,
   fountain,
+  venues,
 }: {
   seasonChange: MutableRefObject<SeasonChange>
   roads: TownObject[]
   fountain: TownObject | undefined
+  /** A shown venue paints its own roads with the town's, such as the branch to its podium garden. */
+  venues: TownVenues
 }) {
   const grass = useRef<MeshStandardMaterial>(null)
   const snow = useRef<Mesh>(null)
@@ -42,7 +44,7 @@ export function TownGround({
     if (snow.current) snow.current.visible = snowCover.current.value > 0.001
   })
   // A value key keeps dragging any other object from redrawing and re-uploading the 2k ground texture.
-  const layoutKey = JSON.stringify({ roads: getTownRoads(roads), plaza: getFountainPlaza(fountain) })
+  const layoutKey = JSON.stringify({ roads: getGroundRoads(roads, venues), plaza: getFountainPlaza(fountain) })
   const texture = useMemo(() => drawGround(JSON.parse(layoutKey) as GroundLayout), [layoutKey])
   const snowDepth = useMemo(() => drawSnowDepth(JSON.parse(layoutKey) as GroundLayout), [layoutKey])
   useEffect(() => () => texture.dispose(), [texture])
@@ -86,7 +88,12 @@ export const Town = memo(function Town({ town, scene }: { town: TownSnapshot; sc
   const openSlots = useMemo(() => openVenueSlots(town.venues), [town.venues])
   return (
     <>
-      <TownGround seasonChange={scene.seasonChange} roads={groups.roads} fountain={groups.fountain} />
+      <TownGround
+        seasonChange={scene.seasonChange}
+        roads={groups.roads}
+        fountain={groups.fountain}
+        venues={town.venues}
+      />
       <SnowFootprints playerPosition={scene.playerPosition} seasonChange={scene.seasonChange} />
       <DistantWorld seasonChange={scene.seasonChange} openSlots={openSlots} />
       <VenueExteriors venues={town.venues} roads={groups.roads} scene={scene} />

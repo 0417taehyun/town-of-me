@@ -78,7 +78,7 @@ none of the town.
 | `characters/`  | The procedural character (player and residents) and its merged head geometry.                                                                                                                                                                            |
 | `animals/`     | The pet corgi: model, trot, and petting responses.                                                                                                                                                                                                       |
 | `environment/` | Time of day, seasons and their transitions, sun, sky, night lights, weather particles, ground, distant land.                                                                                                                                             |
-| `venues/`      | The venues past the hedge: edge slots (`venueSlots.ts`), placements and gates (`venuePlacements.ts`), exteriors (`VenueExteriors.tsx`), theme palettes, a shared material per color role, the ballpark's shared parts.                                   |
+| `venues/`      | The venues past the hedge: edge slots and their approaches (`venueSlots.ts`), placements and gates (`venuePlacements.ts`), exteriors (`VenueExteriors.tsx`), theme palettes, a material per color role, the ballpark's parts and podium garden.          |
 | `statues/`     | The painted statue of a board's top three (`paintedStatue.ts`): the character as plain Three.js (`statueFigure.ts`), the place finishes, and canvas-painted textures. The board draws it; the town's statues are to reuse it.                            |
 
 ### Object kinds
@@ -178,9 +178,9 @@ shown), only an admin's preview plays it (`ballparkOpens` asks `/v1/me` for the 
 coming-soon card, and neither the derby's chunk nor the camera loads. The town reads the same flag: while it is shown,
 the hedge opens at the end of the north road onto the ballpark's exterior and gate, whose prompt saves the visit and
 leaves by a full page load (`window.location.assign`), so `/baseball` gets its own CSP and camera permission and the
-visitor comes back to the gate; while it is hidden, nothing in the town hints at it. The board at `/baseball/ranking`
-opens behind the same gate with no preview, so nothing ranked shows while the ballpark is hidden; the town's statues,
-when they come, must read the flag too.
+visitor comes back to the gate, and a branch of that road, painted into the ground with it, leads to the podium garden
+beside it, whose approach the editor keeps clear; while it is hidden, nothing in the town hints at it. The board at
+`/baseball/ranking` opens behind the same gate with no preview, so nothing ranked shows while the ballpark is hidden.
 
 `BaseballApp.tsx` then checks the device (a phone or tablet, then WebGL 2, later a computer too slow to track), the
 character, and plays the derby. Each run asks the monthly board for a ranked run as it starts and plays the rules and

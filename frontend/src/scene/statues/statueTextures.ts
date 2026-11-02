@@ -1,4 +1,5 @@
 import { CanvasTexture, EquirectangularReflectionMapping, SRGBColorSpace, type Texture } from 'three'
+import { clamp } from '../../motionMath'
 import { PEDESTAL_COLORS, RANK_FINISHES, STATUE_RANKS, type StatueRank } from './statueFinishes'
 
 // What every painted statue in one canvas shares, painted on 2D canvases: no file to fetch, so the statues draw under
@@ -114,26 +115,61 @@ export function paintPool(context: CanvasRenderingContext2D, width: number) {
 /** The plaque: enamel in `color` with a soft top highlight, a thin inlay line, and a star in the place's metal. */
 export function paintPlaque(color: string, metal: string): Painter {
   return (context, width, height) => {
-    const inset = 6
-    context.beginPath()
-    context.roundRect(inset, inset, width - inset * 2, height - inset * 2, 34)
-    context.fillStyle = color
-    context.fill()
-    const shine = context.createLinearGradient(0, inset, 0, height - inset)
-    shine.addColorStop(0, 'rgba(255,255,255,0.3)')
-    shine.addColorStop(0.35, 'rgba(255,255,255,0)')
-    shine.addColorStop(0.85, 'rgba(0,0,0,0)')
-    shine.addColorStop(1, 'rgba(0,0,0,0.08)')
-    context.fillStyle = shine
-    context.fill()
-    context.beginPath()
-    context.roundRect(20, 20, width - 40, height - 40, 22)
-    context.strokeStyle = metal
-    context.globalAlpha = 0.55
-    context.lineWidth = 3
-    context.stroke()
-    context.globalAlpha = 1
+    paintEnamel(context, width, height, color, metal)
     paintStar(context, width / 2, height / 2 + 2, height * 0.36, metal)
+  }
+}
+
+/** The plaque's enamel in `color` with a soft top highlight and a thin inlay line in `metal`. */
+export function paintEnamel(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  color: string,
+  metal: string,
+) {
+  const inset = 6
+  context.beginPath()
+  context.roundRect(inset, inset, width - inset * 2, height - inset * 2, 34)
+  context.fillStyle = color
+  context.fill()
+  const shine = context.createLinearGradient(0, inset, 0, height - inset)
+  shine.addColorStop(0, 'rgba(255,255,255,0.3)')
+  shine.addColorStop(0.35, 'rgba(255,255,255,0)')
+  shine.addColorStop(0.85, 'rgba(0,0,0,0)')
+  shine.addColorStop(1, 'rgba(0,0,0,0.08)')
+  context.fillStyle = shine
+  context.fill()
+  context.beginPath()
+  context.roundRect(20, 20, width - 40, height - 40, 22)
+  context.strokeStyle = metal
+  context.globalAlpha = 0.55
+  context.lineWidth = 3
+  context.stroke()
+  context.globalAlpha = 1
+}
+
+/** The town plaque's lettering, and the system font it uses until the web font has loaded its glyphs. */
+export const PLAQUE_FONT = "800 72px 'Pretendard Variable', Pretendard, system-ui, sans-serif"
+const PLAQUE_FALLBACK_FONT = '800 72px system-ui, sans-serif'
+
+/**
+ * A town plaque: the board's enamel with the place's star on the left and `text` beside it, as large as fits, so a
+ * name reads from a few steps away and a longer note still fits. It is painted again once `webFontReady`.
+ */
+export function paintNamePlaque(color: string, metal: string, text: string, webFontReady: boolean): Painter {
+  return (context, width, height) => {
+    paintEnamel(context, width, height, color, metal)
+    paintStar(context, 70, height / 2 + 2, height * 0.3, metal)
+    const room = width - 160
+    const font = webFontReady ? PLAQUE_FONT : PLAQUE_FALLBACK_FONT
+    context.font = font
+    const size = clamp((72 * room) / Math.max(1, context.measureText(text).width), 30, 72)
+    context.font = font.replace('72px', `${size}px`)
+    context.fillStyle = '#374b65'
+    context.textAlign = 'center'
+    context.textBaseline = 'middle'
+    context.fillText(text, width / 2 + 34, height / 2 + 4, room)
   }
 }
 

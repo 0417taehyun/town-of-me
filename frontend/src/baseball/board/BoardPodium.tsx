@@ -4,12 +4,11 @@ import { type Group, NeutralToneMapping } from 'three'
 import type { AppLanguage } from '../../i18n/language'
 import { GraphicsCanvas } from '../../scene/GraphicsCanvas'
 import { lookKey } from './boardView'
-import { createPaintedStatue, type StatueLook } from '../../scene/statues/paintedStatue'
+import { createPaintedStatue, createPodiumStageGeometry, type StatueLook } from '../../scene/statues/paintedStatue'
 import { STATUE_RANKS, type StatueRank } from '../../scene/statues/statueFinishes'
 import { createStatueTextures, disposeStatueTextures } from '../../scene/statues/statueTextures'
 import {
   type Confetti,
-  createPodiumStageGeometry,
   dropConfetti,
   framePodium,
   IDLE_SECONDS,

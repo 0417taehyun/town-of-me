@@ -46,6 +46,23 @@ describe('town editing', () => {
     expect(SAMPLE_TOWN.objects.find(({ id }) => id === 'house-maple')!.position.x).toBe(22)
   })
 
+  it('moves a tree or a new lamp out of the shown ballpark’s garden, but no road, bird, or anything while it is hidden', () => {
+    const shown = { ...SAMPLE_TOWN, venues: { ballpark: { ...SAMPLE_TOWN.venues.ballpark, visible: true } } }
+    const hidden = { ...SAMPLE_TOWN, venues: { ballpark: { ...SAMPLE_TOWN.venues.ballpark, visible: false } } }
+    const inGarden = { x: 3.5, y: 0, z: -41 }
+    expect(find('tree-5', updateObject(shown, 'tree-5', { position: inGarden })).position).toEqual({
+      ...inGarden,
+      x: 2.8,
+    })
+    expect(find('tree-5', updateObject(hidden, 'tree-5', { position: inGarden })).position).toEqual(inGarden)
+    const lamp = addObject(shown, 'lamp', { x: 9, y: 0, z: -46 }, 'Newcomer', sequence(0.5))
+    expect(find(lamp.id, lamp.town).position).toEqual({ x: 9, y: 0, z: -46.6 })
+    expect(find('road-north-south', updateObject(shown, 'road-north-south', { position: inGarden })).position).toEqual(
+      inGarden,
+    )
+    expect(find('bird-2', updateObject(shown, 'bird-2', { position: { ...inGarden, y: 7 } })).position.x).toBe(3.5)
+  })
+
   it('keeps sky objects in the sky and birds inside their flight wrap', () => {
     expect(clampToTown('bird', { x: 120, y: 90, z: -3 })).toEqual({ x: 75, y: 40, z: -3 })
     expect(clampToTown('cloud', { x: 104, y: 0, z: 0 })).toEqual({ x: 104, y: 2, z: 0 })

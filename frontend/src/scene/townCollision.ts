@@ -33,10 +33,16 @@ export function getObjectCollision(objects: TownObject[]): TownCollision {
   }
 }
 
-/** The town's solid footprints and its fence. Build it once per layout. */
-export function createTownCollision(objects: TownObject[]): TownCollision {
+/** The town's solid footprints, its fence, and `venueSolids`, what the shown venues build inside it. Build it once. */
+export function createTownCollision(
+  objects: TownObject[],
+  venueSolids: TownCollision = { boxes: [], circles: [] },
+): TownCollision {
   const solids = getObjectCollision(objects)
-  return { boxes: [...TOWN_WALLS, ...solids.boxes], circles: solids.circles }
+  return {
+    boxes: [...TOWN_WALLS, ...solids.boxes, ...venueSolids.boxes],
+    circles: [...solids.circles, ...venueSolids.circles],
+  }
 }
 
 export function distanceToSegment(point: PlanarPoint, start: PlanarPoint, end: PlanarPoint) {
