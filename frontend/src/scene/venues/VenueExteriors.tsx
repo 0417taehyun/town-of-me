@@ -1,11 +1,10 @@
-import { useMemo } from 'react'
+import { lazy, Suspense, useMemo } from 'react'
 import type { ComponentType, MutableRefObject } from 'react'
 import type { TownObject, TownVenues } from '../../data/models'
 import type { AppLanguage } from '../../i18n/language'
 import type { SeasonChange } from '../environment/seasonTransition'
 import { getTownRoads } from '../objects/roads/roadLayout'
 import type { TownLayerProps } from '../objects/townObjectKind'
-import { BallparkExterior } from './ballpark/BallparkExterior'
 import { openVenueIds, VENUE_PLACEMENTS, type VenueId } from './venuePlacements'
 import { gateRoadColor, VENUE_SLOTS } from './venueSlots'
 
@@ -19,12 +18,12 @@ export type VenueExteriorProps<Id extends VenueId> = {
   approachColor: string
 }
 
-/** How each venue looks from the town, drawn in its slot's frame. */
+/** How each venue looks from the town, drawn in its slot's frame; its code loads only once the admin shows it. */
 const VENUE_EXTERIORS: { [Id in VenueId]: ComponentType<VenueExteriorProps<Id>> } = {
-  ballpark: BallparkExterior,
+  ballpark: lazy(() => import('./ballpark/BallparkExterior').then((module) => ({ default: module.BallparkExterior }))),
 }
 
-/** Every venue the admin shows, past its gate in the hedge; a hidden venue draws nothing. */
+/** Every venue the admin shows, past its gate in the hedge; a hidden venue neither draws nor downloads anything. */
 export function VenueExteriors({
   venues,
   roads,
@@ -40,13 +39,15 @@ export function VenueExteriors({
     const Exterior = VENUE_EXTERIORS[id]
     return (
       <group key={id} position={[slot.gate[0], 0, slot.gate[1]]} rotation-y={slot.rotation}>
-        <Exterior
-          settings={venues[id]}
-          seasonChange={scene.seasonChange}
-          lampsOn={scene.lampsOn}
-          language={scene.language}
-          approachColor={gateRoadColor(townRoads, slot)}
-        />
+        <Suspense fallback={null}>
+          <Exterior
+            settings={venues[id]}
+            seasonChange={scene.seasonChange}
+            lampsOn={scene.lampsOn}
+            language={scene.language}
+            approachColor={gateRoadColor(townRoads, slot)}
+          />
+        </Suspense>
       </group>
     )
   })

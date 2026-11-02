@@ -13,11 +13,13 @@ import { useVenueMaterials } from '../venueMaterials'
 import type { VenueExteriorProps } from '../VenueExteriors'
 import { glowPositions } from './ballparkParts'
 import {
+  archSnowRise,
   CORNICE_SNOW,
   corniceSnowGeometry,
   createExteriorGeometries,
   EXTERIOR_BOWL,
   EXTERIOR_FORECOURT,
+  EXTERIOR_GATE,
   EXTERIOR_SIGN,
   exteriorBlooms,
   HALL_FRONT,
@@ -33,10 +35,10 @@ const hedgeColors = getSeasonColors('hedge')
 /**
  * The garden ballpark beyond the town's hedge (ballparkExteriorLayout.ts). The hall, the cornice, the trims, and the
  * towers' petals take the admin's building colors; the hedges, the topiaries' plinths, and the towers' stems follow the
- * town's season, and the flowers in the hedges close up under the snow. Snow settles on the bowl's top and the hall's
- * cornice as on the houses' roofs, while the forecourt carries on the road that meets the gate, cleared like it. While
- * the town's lamps are on, the doors, the windows, the conservatory, and the towers' lamps glow, with painted halos
- * rather than lights.
+ * town's season, and the flowers in the hedges close up under the snow. Snow settles on the gate's arch, the bowl's
+ * top, and the hall's cornice as on the houses' roofs, while the forecourt carries on the road that meets the gate,
+ * cleared like it. While the town's lamps are on, the doors, the windows, the conservatory, and the towers' lamps glow,
+ * with painted halos rather than lights.
  */
 export function BallparkExterior({
   settings,
@@ -65,6 +67,7 @@ export function BallparkExterior({
   const hedge = useRef<MeshStandardMaterial>(null)
   const greens = useRef<MeshStandardMaterial>(null)
   const bowlSnow = useRef<Group>(null)
+  const archSnow = useRef<Group>(null)
   const bloomMesh = useRef<InstancedMesh>(null)
   const bloomMaterial = useRef<MeshStandardMaterial>(null)
   useSeasonalColor(hedge, seasonChange, hedgeColors, 'ground')
@@ -84,6 +87,10 @@ export function BallparkExterior({
       bowlSnow.current.visible = cover > 0.001
       bowlSnow.current.scale.y = Math.max(0.001, cover)
     }
+    if (archSnow.current) {
+      archSnow.current.visible = cover > 0.001
+      archSnow.current.scale.y = archSnowRise(cover)
+    }
     if (bloomMesh.current && bloomMaterial.current) {
       bloomMesh.current.visible = cover < 0.999
       bloomMaterial.current.opacity = 1 - cover
@@ -102,6 +109,11 @@ export function BallparkExterior({
       <group ref={bowlSnow} position-y={EXTERIOR_BOWL.height} visible={false}>
         <mesh geometry={geometries.bowlSnow} position-y={-EXTERIOR_BOWL.height}>
           <meshStandardMaterial color="#f3f8f9" roughness={1} side={DoubleSide} />
+        </mesh>
+      </group>
+      <group ref={archSnow} position-y={EXTERIOR_GATE.pillarHeight} visible={false}>
+        <mesh geometry={geometries.archSnow} position-y={-EXTERIOR_GATE.pillarHeight}>
+          <meshStandardMaterial color="#f3f8f9" roughness={1} />
         </mesh>
       </group>
       <group position={CORNICE_SNOW.at}>

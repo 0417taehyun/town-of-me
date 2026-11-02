@@ -12,6 +12,8 @@ import {
   Vector3,
 } from 'three'
 import { seededFraction } from '../../../motionMath'
+import { VENUE_PLACEMENTS } from '../venuePlacements'
+import { VENUE_SLOTS, worldPointToSlot } from '../venueSlots'
 import {
   blossomFrame,
   box,
@@ -38,6 +40,8 @@ import {
 
 /** The gate's two hedge pillars and the flattened arch between them, on the town hedge's line. */
 export const EXTERIOR_GATE = { pillarX: 4.1, pillarHeight: 3.5, archRise: 2.1, archRadius: 0.42, line: -0.1 }
+/** The snow along the arch's top: its tube's radius, and how far over the arch's line it lies when deepest. */
+export const ARCH_SNOW = { radius: 0.2, lift: 0.38 }
 /** The hedge bowl: its outer radius, wall thickness and height, its front's distance, and its reach either side. */
 export const EXTERIOR_BOWL = { radius: 30, thickness: 2.4, height: 6.4, front: -8, reach: 1.3 }
 export const EXTERIOR_HALL = { width: 13.4, height: 7.2, depth: 1.2, z: -8.8 }
@@ -138,6 +142,36 @@ export function gateHedgeParts(): PlacedPart[] {
   ]
 }
 
+/**
+ * The snow on the gate in winter: along the arch's top, short of its ends where the arch meets the pillars, and a cap
+ * on each pillar's ball whose rim tucks into the ball.
+ */
+export function archSnowParts(): PlacedPart[] {
+  const { pillarX, pillarHeight, line } = EXTERIOR_GATE
+  const top = new CatmullRomCurve3(
+    Array.from({ length: 25 }, (_, step) => archPoint(0.08 + (step / 24) * 0.84, ARCH_SNOW.lift)),
+  )
+  const cap = new SphereGeometry(1, 16, 6, 0, Math.PI * 2, 0, 1.2)
+  return [
+    { geometry: new TubeGeometry(top, 40, ARCH_SNOW.radius, 8) },
+    ...[-1, 1].map((side) => ({
+      geometry: cap,
+      at: [side * pillarX, pillarHeight + 0.45, line] as Triple,
+      size: [0.66, 0.72, 0.66] as Triple,
+    })),
+  ]
+}
+
+/**
+ * How far the gate's snow stands up from the pillars' tops under `cover` of snow, as a scale: the arch's snow lifts
+ * from just inside the hedge, where none shows, to its full depth, and the caps rise out of the balls with it.
+ */
+export function archSnowRise(cover: number) {
+  const { archRise, archRadius } = EXTERIOR_GATE
+  const hidden = archRadius - ARCH_SNOW.radius
+  return (archRise + hidden + (ARCH_SNOW.lift - hidden) * cover) / (archRise + ARCH_SNOW.lift)
+}
+
 /** An arched doorway 2.6 m wide, its sides 2.6 m up to where the arch springs. */
 export function doorwayGeometry() {
   const doorway = new Shape()
@@ -160,10 +194,11 @@ export function towerFrame(tower: ExteriorTower) {
   return partMatrix({ at: [tower.x, 0, tower.z], size: TOWER_SCALE })
 }
 
-/** The tower in its own frame, its blossom facing the bowl's middle like the stadium's face the field. */
+/** The tower in its own frame, its blossom facing the town's middle so the town sees its face, not its back. */
 export function framedTower(tower: ExteriorTower): FlowerTower {
-  const bowlMiddle = new Vector3(-tower.x, 0, EXTERIOR_BOWL.front - EXTERIOR_BOWL.radius - tower.z)
-  return { x: 0, z: 0, height: tower.height / TOWER_SCALE, target: bowlMiddle.divideScalar(TOWER_SCALE) }
+  const [x, z] = worldPointToSlot(VENUE_SLOTS[VENUE_PLACEMENTS.ballpark.slot], [0, 0])
+  const townMiddle = new Vector3(x - tower.x, 0, z - tower.z)
+  return { x: 0, z: 0, height: tower.height / TOWER_SCALE, target: townMiddle.divideScalar(TOWER_SCALE) }
 }
 
 export function towerParts(parts: (tower: FlowerTower) => PlacedPart[], towers: readonly ExteriorTower[]) {
@@ -262,6 +297,7 @@ export function createExteriorGeometries() {
   return {
     hedge: mergeParts([...gateHedgeParts(), ...bowlWallParts(bowlProfile()), ...bothCorgis(corgi.hedge)]),
     bowlSnow: mergeParts(bowlWallParts(bowlSnowProfile())),
+    archSnow: mergeParts(archSnowParts()),
     greens: mergeParts(towerParts(towerGreenParts, EXTERIOR_TOWERS)),
     walls: mergeParts([
       box([0, height / 2, z], [width, height, depth]),
