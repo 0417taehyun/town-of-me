@@ -203,10 +203,11 @@ link, whose ownership code it then shows.
 `board/BoardPage.tsx` shows a season's board (`?season=YYYY-MM` for one of the last twelve final boards), which works
 on phones too: the top three as painted statues over DOM name plates (read 1, 2, 3, shown 2, 1, 3; the canvas is
 `aria-hidden`), which rise third to first the first time a browser sees a month; places 4 to 50 as an `<ol>`; and the
-visitor's own record between them, which the same listing card posts, hides, or changes. It shows names only once
-approved, a LinkedIn chip only on a statue whose link the admin approved, and the server's order, whose ties go to the
-earlier record. Every row's menu reports its name, character, or link, copies its number, or mails the owner a
-takedown request. The result screen and the rules card link to it.
+visitor's own record between them, which the same listing card posts, hides, or changes (a past season's record can
+still turn its LinkedIn link off). It shows names only once approved, a LinkedIn chip only on a statue whose link the
+admin approved, and the server's order, whose ties go to the earlier record. Every row's menu reports its name,
+character, or link, copies its number, or mails the owner a takedown request, and the footer deletes all of the
+visitor's records whatever their state. The result screen and the rules card link to it.
 
 ## Backend (`backend/src`)
 

@@ -15,6 +15,7 @@ import {
   type BoardRun,
   ISSUE_TIMEOUT_MS,
   pause,
+  postedBoardName,
   RESULT_GRACE_MS,
   sendRankedResult,
   unrankedBeforeIssue,
@@ -28,8 +29,9 @@ import type { DerbyInputLog, DerbyResult } from './game/derbyScore'
  * to the run to play, or to `null` to play it unranked: always for a `preview`, which never asks, and whenever the
  * board does not answer in time. `finish` sends the ranked run's result, again while the network fails, and `retry`
  * sends it again at once. `entry` is the visitor's record on this month's board, which `saveListing` and
- * `deleteRecords` change; the name a listing posts goes with the next runs' results, so they still look like the same
- * player to the board. `abandon` forgets a run the camera stopped, so no later finish is taken for it.
+ * `deleteRecords` change. The runs' results go with the board name of the visitor's listed record, read as the page
+ * loads (postedBoardName) and changed by `saveListing`, so they still look like the same player to the board. `abandon`
+ * forgets a run the camera stopped, so no later finish is taken for it.
  */
 export function useRankedRuns(preview: BaseballPreview | null, batter: PlayerProfile) {
   const [boardRun, setBoardRun] = useState<BoardRun | null>(null)
@@ -39,6 +41,18 @@ export function useRankedRuns(preview: BaseballPreview | null, batter: PlayerPro
   const sending = useRef<{ done: Promise<void>; stop: AbortController } | null>(null)
 
   useEffect(() => () => sending.current?.stop.abort(), [])
+  useEffect(() => {
+    if (preview !== null) return
+    let active = true
+    // Without an answer the character's name goes, as for a visitor not on the board.
+    void postedBoardName(batter.name).then(
+      (posted) => active && setName(posted),
+      () => undefined,
+    )
+    return () => {
+      active = false
+    }
+  }, [preview, batter.name])
 
   const send = useCallback((run: IssuedRun, body: RankedRunBody) => {
     sending.current?.stop.abort()

@@ -1,5 +1,7 @@
+import { previousRankingMonth } from '../../data/ballparkRules'
 import {
   boardName,
+  fetchBoard,
   type IssuedRun,
   LeaderboardRequestError,
   type ListingChoice,
@@ -111,6 +113,18 @@ export function sendRankedResult(
   })
 }
 
+/**
+ * The name a run's result goes with: the board name of the visitor's latest listed record (`null` for an anonymous
+ * batter), this month's or, before one, last month's, which a listing on either page may have set before this page
+ * loaded; or else the character's. A result under another name looks like someone else's to the board, which then
+ * takes the record off it with its name and link, or does not carry last month's listing over.
+ */
+export async function postedBoardName(characterName: string, request: typeof fetch = fetch) {
+  const board = await fetchBoard(null, request)
+  const own = board.own ?? (await fetchBoard(previousRankingMonth(board.season.id), request)).own
+  return own?.listed ? own.name : characterName
+}
+
 /** What the result card says: nothing for a preview, whose badge says it is not ranked, or for a run still on. */
 export function boardLine(boardRun: BoardRun | null, entry: OwnBoardEntry | null): BoardLine | null {
   if (boardRun === null || boardRun.kind === 'playing') return null
@@ -147,7 +161,7 @@ export function offersLinkedIn(entry: OwnBoardEntry | null, profileUrl: string) 
 /** What the listing form found wrong, before anything is sent. */
 export type ListingProblem = 'listedNeeded' | 'nameInvalid' | 'ownershipNeeded'
 /** What went wrong with the listing card: the form, or the board's answer. */
-export type ListingFailure = ListingProblem | 'saveFailed' | 'linkedInRefused' | 'deleteFailed'
+export type ListingFailure = ListingProblem | 'saveFailed' | 'linkedInRefused'
 
 /** The listing form as the visitor left it. */
 export type ListingForm = { listed: boolean; name: string; linkedInOn: boolean; ownProfile: boolean }

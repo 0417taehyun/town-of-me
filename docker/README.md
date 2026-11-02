@@ -24,9 +24,10 @@ WebAssembly) and connections from this origin only; images, media, and workers a
 (images from `data:` too); styles and fonts from this origin only; no plugins or `<base>`; forms post
 only to this origin; and no page may frame it (`frame-ancestors 'none'`). It is also sent with
 `Cross-Origin-Opener-Policy: same-origin`, so a page that opens it gets no handle to it, and
-`Referrer-Policy: no-referrer`. Every other document, `/` and `/admin` included, is sent with
-`camera=()`. Browsers apply these headers only on a full page load, so the town and the ballpark link
-to each other with plain links. A CDN in front must pass them through unchanged.
+`Referrer-Policy: no-referrer`. Its monthly board at `/baseball/ranking` gets the same headers, and
+both carry `X-Robots-Tag: noindex, noarchive`, since the board keeps names and links with no end date.
+Every other document, `/` and `/admin` included, is sent with `camera=()`. Browsers apply these
+headers only on a full page load, so the town and the ballpark link to each other with plain links. A CDN in front must pass them through unchanged.
 
 ```sh
 FRONTEND_PORT=8081 BACKEND_PORT=3001 docker compose up --build

@@ -13,7 +13,7 @@ import { linkedInStatusText, recordText } from './derbyCues'
  * the name, takes the record off, or turns the statue's LinkedIn link on or off. The name is the board's own, at first
  * the character's; left empty, the record shows as an anonymous batter without the character. The link offered is the
  * one the visitor's character already has, and only with the box saying it is theirs; once saved, the code the admin
- * looks for on the profile shows here. The record can also be deleted, every season of it, after a second press.
+ * looks for on the profile shows here. The record can also be deleted, every season of it (DeleteOwnRecords).
  */
 export function ListingView({
   entry,
@@ -43,7 +43,6 @@ export function ListingView({
   }))
   const [failure, setFailure] = useState<ListingFailure | null>(null)
   const [busy, setBusy] = useState(false)
-  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [copied, setCopied] = useState(false)
   const change = (patch: Partial<ListingForm>) => {
     setForm((current) => ({ ...current, ...patch }))
@@ -60,11 +59,6 @@ export function ListingView({
     setBusy(true)
     const choice = listingChoice(form, batter, linkedInAddress, entry.linkedIn !== null)
     await onSave(choice).catch((error: unknown) => setFailure(saveFailure(error, choice)))
-    setBusy(false)
-  }
-  const remove = async () => {
-    setBusy(true)
-    await onDelete().catch(() => setFailure('deleteFailed'))
     setBusy(false)
   }
   const copyCode = async (code: string) => setCopied(await copyText(code, navigator.clipboard))
@@ -170,23 +164,47 @@ export function ListingView({
         </ul>
         <p>{copy.dataNotice}</p>
       </details>
-      <div className="derby-listing-delete">
-        {confirmingDelete ? (
-          <>
-            <p role="alert">{copy.deleteOwnConfirm}</p>
-            <button className="derby-secondary" type="button" disabled={busy} onClick={remove}>
-              {copy.deleteConfirm}
-            </button>
-            <button className="text-button" type="button" onClick={() => setConfirmingDelete(false)}>
-              {copy.keep}
-            </button>
-          </>
-        ) : (
-          <button className="text-button" type="button" onClick={() => setConfirmingDelete(true)}>
-            {copy.deleteOwn}
-          </button>
-        )}
-      </div>
+      <DeleteOwnRecords language={language} onDelete={onDelete} />
     </section>
+  )
+}
+
+/**
+ * Deletes every record of this browser, in every season, after a second press. The board's page offers it too, so a
+ * record of a past month, one disqualified or held, or no record this month leaves it within reach.
+ */
+export function DeleteOwnRecords({ language, onDelete }: { language: AppLanguage; onDelete: () => Promise<void> }) {
+  const copy = languageCopy[language].baseball.board
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const remove = async () => {
+    setBusy(true)
+    setFailed(false)
+    await onDelete().then(
+      () => setConfirming(false),
+      () => setFailed(true),
+    )
+    setBusy(false)
+  }
+  return (
+    <div className="derby-listing-delete">
+      {confirming ? (
+        <>
+          <p role="alert">{copy.deleteOwnConfirm}</p>
+          <button className="derby-secondary" type="button" disabled={busy} onClick={remove}>
+            {copy.deleteConfirm}
+          </button>
+          <button className="text-button" type="button" onClick={() => setConfirming(false)}>
+            {copy.keep}
+          </button>
+        </>
+      ) : (
+        <button className="text-button" type="button" onClick={() => setConfirming(true)}>
+          {copy.deleteOwn}
+        </button>
+      )}
+      {failed && <p role="alert">{copy.problems.deleteFailed}</p>}
+    </div>
   )
 }

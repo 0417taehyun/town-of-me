@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { LeaderboardRequestError, type OwnBoardEntry, type RankedRunBody } from '../../data/leaderboardApi'
-import { retryPauseMs, standingLine, unrankedBeforeIssue, unsavedRun } from './rankedRun'
+import { postedBoardName, retryPauseMs, standingLine, unrankedBeforeIssue, unsavedRun } from './rankedRun'
 
 const timed = [100, 120, 110].map((errorMs) => ({ errorMs, speed: 8 }))
 const entry: OwnBoardEntry = {
@@ -15,6 +15,15 @@ const entry: OwnBoardEntry = {
 }
 const run = { id: 'run-7', expiresAt: 600_000, rules: { pitchCount: 5, difficulty: 'normal' as const }, seed: 7 }
 const body = {} as RankedRunBody
+/** A season's board as the server sends it, empty but for the visitor's own record. */
+const boardOf = (id: string, own: Partial<OwnBoardEntry> | null) => ({
+  season: { id, startsAt: `${id}-01T00:00:00+09:00`, endsAt: `${id}-28T00:00:00+09:00`, final: false },
+  podium: [],
+  ranks: [],
+  own: own && { ...entry, ...own, profile: { hair: 'bob' } },
+})
+const boardsOf = (boards: Record<string, ReturnType<typeof boardOf>>) =>
+  vi.fn<typeof fetch>(async (input) => Response.json(boards[new URL(String(input), 'http://town.test').search]))
 
 describe('ranked runs', () => {
   it('never asks the board for an admin’s preview, nor for a run practice could not time', () => {
@@ -43,6 +52,21 @@ describe('ranked runs', () => {
     expect(standingLine(anotherPlayer, unlisted).kind).toBe('consentNeeded')
     // Once the visitor posts it, the record they just set stands as a statue.
     expect(standingLine(anotherPlayer, entry)).toEqual({ kind: 'statue', rank: 2 })
+  })
+
+  it('sends the next runs under the name the record was posted with, even once the page loads again', async () => {
+    // Posted as "Pipster" while playing Pip: a result under "Pip" would take the record and its link off the board.
+    expect(await postedBoardName('Pip', boardsOf({ '': boardOf('2026-11', { name: 'Pipster' }) }))).toBe('Pipster')
+    expect(await postedBoardName('Pip', boardsOf({ '': boardOf('2026-11', { name: null }) }))).toBe(null)
+    // A record off the board kept no name, so the character's goes.
+    const unlisted = boardsOf({ '': boardOf('2026-11', { listed: false, name: null, nameStatus: null }) })
+    expect(await postedBoardName('Pip', unlisted)).toBe('Pip')
+    // A month's first run is listed like last month's record when it goes under that record's name.
+    const newMonth = boardsOf({
+      '': boardOf('2026-11', null),
+      '?season=2026-10': boardOf('2026-10', { name: 'Pipster' }),
+    })
+    expect(await postedBoardName('Pip', newMonth)).toBe('Pipster')
   })
 
   it('tells a result the board refused apart from one worth sending again, and stops at the run’s time', () => {

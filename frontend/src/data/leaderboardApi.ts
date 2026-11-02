@@ -322,6 +322,12 @@ export async function updateOwnRecord(choice: ListingChoice, request: typeof fet
   return parseOwnEntry((await responseRecord(await sendToBoard('/entries/own', init, request))).entry)
 }
 
+/** Turns off the LinkedIn link of the visitor's record on `season` (`YYYY-MM`), whose statue keeps it until then. */
+export async function turnOffLinkedIn(season: string, request: typeof fetch = fetch): Promise<void> {
+  const path = `/entries/own?season=${encodeURIComponent(season)}`
+  await sendToBoard(path, { method: 'PUT', body: JSON.stringify({ linkedIn: null }) }, request)
+}
+
 /** A season's board (`season` as `YYYY-MM`), or this month's; the visitor's own record comes with it. */
 export async function fetchBoard(season: string | null, request: typeof fetch = fetch): Promise<Board> {
   const query = season ? `?season=${encodeURIComponent(season)}` : ''

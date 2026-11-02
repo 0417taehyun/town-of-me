@@ -16,6 +16,7 @@ import {
   reportBoardEntry,
   type ReportReason,
   type ReportTarget,
+  turnOffLinkedIn,
   updateOwnRecord,
 } from '../../data/leaderboardApi'
 import type { TownSnapshot } from '../../data/models'
@@ -28,7 +29,7 @@ import { STATUE_RANKS, type StatueRank } from '../../scene/statues/statueFinishe
 import { LanguageSelect } from '../../ui/LanguageSelect'
 import { BASEBALL_PATH, BOARD_PATH } from '../baseballRoute'
 import { homeRunDistanceText, linkedInStatusText, recordText } from '../ui/derbyCues'
-import { ListingView } from '../ui/ListingView'
+import { DeleteOwnRecords, ListingView } from '../ui/ListingView'
 import { BoardPodium } from './BoardPodium'
 import { daysUntilSeasonEnds, oldestShownSeason, requestedSeason, seasonEndsAt, seasonSearch } from './boardSeason'
 import {
@@ -75,6 +76,8 @@ export function BoardPage({ town }: { town: TownSnapshot }) {
 
   return (
     <main className="board-page">
+      {/* The board keeps names, characters, and statues' links with no end date; nginx sends X-Robots-Tag too. */}
+      <meta name="robots" content="noindex, noarchive" />
       <div className="board-column">
         <nav className="board-topline">
           <a className="baseball-back" href={BASEBALL_PATH}>
@@ -303,7 +306,11 @@ export function BoardSections({
         language={language}
         onOpen={() => setListing(true)}
         onUnlist={async () => {
-          await updateOwnRecord({ listed: false }).catch(() => undefined)
+          await updateOwnRecord({ listed: false })
+          onReload()
+        }}
+        onLinkedInOff={async () => {
+          await turnOffLinkedIn(season.id)
           onReload()
         }}
       />
@@ -346,6 +353,13 @@ export function BoardSections({
       </section>
       <footer className="board-footer">
         <a href={takedownHref(contactEmail, copy.takedown)}>{copy.takedown}</a>
+        <DeleteOwnRecords
+          language={language}
+          onDelete={async () => {
+            await deleteOwnRecords()
+            onReload()
+          }}
+        />
       </footer>
       {listing && own && !season.final && (
         <div className="board-dialog" role="dialog" aria-modal="true" aria-labelledby="derby-listing-title">
@@ -569,7 +583,11 @@ export function BoardListRow({
   )
 }
 
-/** The visitor's own record on this board, kept in this browser only, with what they can do with it. */
+/**
+ * The visitor's own record on this board, kept in this browser only, with what they can do with it: this month's
+ * record goes on or off the board or changes; a past season's, or one disqualified, can still turn its LinkedIn link
+ * off. A change the board did not take says so. Deleting every record sits in the page's footer.
+ */
 export function OwnRecordCard({
   own,
   final,
@@ -577,6 +595,7 @@ export function OwnRecordCard({
   language,
   onOpen,
   onUnlist,
+  onLinkedInOff,
 }: {
   own: BoardOwnEntry | null
   final: boolean
@@ -584,10 +603,12 @@ export function OwnRecordCard({
   language: AppLanguage
   onOpen: () => void
   onUnlist: () => Promise<void>
+  onLinkedInOff: () => Promise<void>
 }) {
   const copy = languageCopy[language].baseball
   const boardCopy = copy.leaderboard
   const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
   if (!own && final) return null
   if (!own)
     return (
@@ -603,11 +624,13 @@ export function OwnRecordCard({
         </div>
       </section>
     )
-  const unlist = async () => {
+  const save = async (change: () => Promise<void>) => {
     setBusy(true)
-    await onUnlist()
+    setFailed(false)
+    await change().catch(() => setFailed(true))
     setBusy(false)
   }
+  const changeable = !final && own.rank !== null
   return (
     <section className="board-own" data-kind={own.listed ? 'listed' : 'unlisted'} aria-labelledby="board-own-title">
       <Portrait profile={own.profile} className="board-portrait board-own-portrait" />
@@ -627,15 +650,20 @@ export function OwnRecordCard({
           </p>
         )}
         <p className="board-own-status">{boardCopy.ownBrowserOnly}</p>
+        {failed && (
+          <p className="board-own-status" role="alert">
+            {copy.board.problems.saveFailed}
+          </p>
+        )}
       </div>
-      {!final && own.rank !== null && (
+      {changeable && (
         <div className="board-own-actions">
           {own.listed ? (
             <>
               <button className="derby-secondary" type="button" onClick={onOpen}>
                 {boardCopy.change}
               </button>
-              <button className="derby-secondary" type="button" disabled={busy} onClick={unlist}>
+              <button className="derby-secondary" type="button" disabled={busy} onClick={() => save(onUnlist)}>
                 {boardCopy.unlist}
               </button>
             </>
@@ -644,6 +672,13 @@ export function OwnRecordCard({
               {copy.board.list}
             </button>
           )}
+        </div>
+      )}
+      {!changeable && own.linkedIn && (
+        <div className="board-own-actions">
+          <button className="derby-secondary" type="button" disabled={busy} onClick={() => save(onLinkedInOff)}>
+            {boardCopy.linkedInOff}
+          </button>
         </div>
       )}
     </section>

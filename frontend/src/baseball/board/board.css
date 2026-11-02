@@ -578,6 +578,10 @@ html[lang='ko'] .board-page {
   color: var(--board-muted);
   font-size: 0.8rem;
 }
+.board-own .board-own-status[role='alert'] {
+  color: #9a3b29;
+  font-weight: 700;
+}
 .board-own-actions {
   display: flex;
   flex-wrap: wrap;
@@ -725,6 +729,12 @@ html[lang='ko'] .board-page {
 }
 .board-footer a {
   color: var(--board-muted);
+}
+.board-footer .derby-listing-delete {
+  justify-content: center;
+  margin-top: 6px;
+  padding-top: 0;
+  border-top: 0;
 }
 
 /* The listing card over the board, as a dialog. */
