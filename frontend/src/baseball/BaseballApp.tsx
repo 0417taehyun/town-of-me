@@ -1,6 +1,7 @@
 import {
   type CSSProperties,
   lazy,
+  type SetStateAction,
   Suspense,
   useCallback,
   useEffect,
@@ -17,6 +18,7 @@ import {
   upcomingBallparkRules,
 } from '../data/ballparkRules'
 import { InMemoryDemoRepository } from '../data/InMemoryDemoRepository'
+import type { IssuedRun } from '../data/leaderboardApi'
 import type { BallparkSettings, TownSnapshot } from '../data/models'
 import { normalizePlayerProfile, type PlayerProfile } from '../data/playerProfile'
 import { useDemoSession } from '../hooks/useDemoSession'
@@ -35,6 +37,7 @@ import { browserDeviceBlock, type DeviceBlock } from './deviceGate'
 import {
   createDerbyRun,
   createPracticeRun,
+  createRankedRun,
   DEFAULT_BATTING_SIDE,
   type DerbyFlow,
   type DerbyPlays,
@@ -48,7 +51,9 @@ import {
   shownRun,
   stanceWait,
   startedFlow,
+  startsRun,
 } from './flow/derbyFlow'
+import { boardLine, offersLinkedIn } from './flow/rankedRun'
 import { keepScreenOn, requestFullscreen } from './flow/screenRequests'
 import type { StanceWatch } from './flow/stanceHold'
 import { findsUsualTiming } from './game/calibration'
@@ -82,10 +87,12 @@ import {
   stanceTicked,
 } from './ui/derbyCues'
 import { DeviceBlocked } from './ui/DeviceBlocked'
+import { ListingView } from './ui/ListingView'
 import { PracticeDoneView, PracticeView } from './ui/PracticeView'
 import { ResultView } from './ui/ResultView'
 import { SetupView } from './ui/SetupView'
 import { useViewportSize } from './ui/useViewportSize'
+import { useRankedRuns } from './useRankedRuns'
 import './baseball.css'
 
 const CharacterCreator = lazy(() =>
@@ -231,10 +238,14 @@ const DerbyDiagnostics = import.meta.env.DEV ? DiagnosticsPanel : null
  * be played without it. The camera locks what the visitor holds by itself (or lets them swing with their hands), and
  * its object detector rests from each windup until the pitch's ball is down (derbyCues.ts pitchInPlay). A computer that
  * tracks too slowly is blocked for the visit. Every run reads the KST month when it starts, never when
- * the page loaded. A `preview` is the admin's try: of next month's rules, which plays those scheduled (or this month's
- * when none are), or of the hidden ballpark, which plays this month's; it says so on every screen and is never ranked. V (or the camera view button) resizes or hides the camera
- * panel beside the play, the result screen can turn the camera off, and Escape leaves from any of these screens: for
- * the town, or from a preview back to the editor.
+ * the page loaded. A run asks the monthly board for its rules and seed as it starts and plays those, ranked
+ * (useRankedRuns.ts); without an answer in time it plays unranked, and its result says so. The result card says where
+ * the run left the visitor on the board, and its listing card (ui/ListingView.tsx), opened from there, puts the record
+ * on the board or changes it; while that card is open the stance waits, and Escape closes it. A `preview` is the
+ * admin's try: of next month's rules, which plays those scheduled (or this month's when none are), or of the hidden
+ * ballpark, which plays this month's; it says so on every screen and never asks the board. V (or the camera view button)
+ * resizes or hides the camera panel beside the play, the result screen can turn the camera off, and Escape leaves from
+ * any of these screens: for the town, or from a preview back to the editor.
  */
 export function DerbyScreen({
   ballpark,
@@ -283,20 +294,38 @@ export function DerbyScreen({
   )
   const rulesFor = preview === 'next' ? plannedBallparkRules : effectiveBallparkRules
   const exit = baseballExit(preview !== null)
+  const board = useRankedRuns(preview, batter)
+  const [listing, setListing] = useState(false)
+  const starting = useRef(false)
 
-  const begin = (next: DerbyFlow) => {
+  const begin = (next: SetStateAction<DerbyFlow>) => {
     swings.current = []
     swingCues.current = []
     setHud(NEW_RUN_HUD)
     setFlow(next)
   }
-  const plays: DerbyPlays = {
+  // A ranked run plays the rules and seed the board issued it; any other plays this page's.
+  const plays = (issued: IssuedRun | null): DerbyPlays => ({
     practice: () => createPracticeRun(ballpark, new Date(), side, rulesFor),
-    run: (practice) => createDerbyRun(ballpark, new Date(), randomRunSeed(), { side, practice }, rulesFor),
+    run: (practice) =>
+      issued
+        ? createRankedRun(issued, { side, practice })
+        : createDerbyRun(ballpark, new Date(), randomRunSeed(), { side, practice }, rulesFor),
+  })
+  // A run first asks the board, once however often it is asked, and starts on the answer or without one.
+  const startRun = () => {
+    if (starting.current) return
+    starting.current = true
+    setListing(false)
+    void board.issue(flow.practice).then((issued) => {
+      starting.current = false
+      begin((current) => startedFlow(current, performance.now(), plays(issued)))
+    })
   }
   // A go on a step that waits, by the held stance or its button.
   const start = () => {
-    const next = startedFlow(flow, performance.now(), plays)
+    if (startsRun(flow)) return startRun()
+    const next = startedFlow(flow, performance.now(), plays(null))
     if (next !== flow) begin(next)
   }
   // The gauge ticks each second it fills and dings full, so a visitor standing back hears the hold count.
@@ -324,7 +353,12 @@ export function DerbyScreen({
     const timer = window.setTimeout(() => setHeldWord(null), HELD_WORD_MS)
     return () => window.clearTimeout(timer)
   }, [heldWord])
-  const stance: StanceWatch = { wait: stanceWait(flow), onProgress: onStanceProgress, onHeld: onStanceHeld }
+  // The listing card is read and filled in at the computer, so the stance waits until it closes.
+  const stance: StanceWatch = {
+    wait: listing ? null : stanceWait(flow),
+    onProgress: onStanceProgress,
+    onHeld: onStanceHeld,
+  }
   const camera = useCameraTracking({
     side,
     objectsPaused: cameraSwinging && pitchInPlay(hud),
@@ -383,6 +417,10 @@ export function DerbyScreen({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const action = derbyKeyAction(event, screen)
+      if (action === 'leave' && listing) {
+        setListing(false)
+        return
+      }
       if (action === 'leave') {
         window.location.assign(EXIT_PATHS[exit])
         return
@@ -391,25 +429,30 @@ export function DerbyScreen({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [screen, cyclePanelSize, exit])
+  }, [screen, cyclePanelSize, exit, listing])
 
+  const { finish: finishRankedRun } = board
   const onStageEvent = useCallback(
     (event: StageEvent) => {
       const at = performance.now()
       setHud((current) => hudAfterEvent(current, event))
       setFlow((current) => flowAfterEvent(current, event, at))
+      // Only a ranked run is waiting for its finish: practice comes after a setup, which forgets any.
+      if (event.type === 'finished') finishRankedRun(event.result, event.log)
       const sound = derbySoundFor(event)
       if (sound) sounds.play(sound)
       queueDerbyDevSwing?.(event)
       noteDerbyStageEvent?.(event)
     },
-    [sounds],
+    [sounds, finishRankedRun],
   )
 
   // The one click the derby needs: the camera, the sounds, and the full screen all need a click, so it asks for all.
   const startWithCamera = () => {
     sounds.unlock()
     requestFullscreen()
+    board.abandon()
+    setListing(false)
     begin(setupFlow(performance.now()))
     camera.turnOn()
   }
@@ -563,14 +606,35 @@ export function DerbyScreen({
           </div>
         </section>
       )}
-      {step === 'result' && flow.result && (
+      {step === 'result' && flow.result && !(listing && board.entry) && (
         <ResultView
           result={flow.result}
+          board={{
+            line: boardLine(board.boardRun, board.entry),
+            offerLinkedIn: offersLinkedIn(board.entry, batter.linkedInProfileUrl),
+            onOpen: () => setListing(true),
+            onRetry: board.retry,
+          }}
           exit={exit}
           gauge={gauge}
           stanceNeed={stanceNeed}
           language={language}
           onPlayAgain={start}
+        />
+      )}
+      {step === 'result' && listing && board.entry && (
+        <ListingView
+          key={board.entry.listed ? 'listed' : 'unlisted'}
+          entry={board.entry}
+          batter={batter}
+          name={board.name}
+          language={language}
+          onSave={board.saveListing}
+          onDelete={async () => {
+            await board.deleteRecords()
+            setListing(false)
+          }}
+          onClose={() => setListing(false)}
         />
       )}
       <BaseballLinks

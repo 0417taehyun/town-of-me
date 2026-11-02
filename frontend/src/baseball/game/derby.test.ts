@@ -153,7 +153,7 @@ describe('derby', () => {
     const finished = advanceDerby(derby.derby, 10 ** 9)
     const replayed = replayDerby(plan, finished.derby.log)
     expect(finished.derby.results).toEqual(replayed.pitches)
-    expect(finished.events).toEqual([{ type: 'finished', result: replayed }])
+    expect(finished.events).toEqual([{ type: 'finished', result: replayed, log: finished.derby.log }])
     expect(replayed.pitches.map((pitch) => pitch.outcome)).toEqual([
       'homeRun',
       'homeRun',

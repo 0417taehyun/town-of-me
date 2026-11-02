@@ -1,4 +1,5 @@
 import { effectiveBallparkRules, rankingMonth } from '../../data/ballparkRules'
+import type { IssuedRun } from '../../data/leaderboardApi'
 import type { BallparkSettings, BaseballDifficulty } from '../../data/models'
 import type { CameraStatus } from '../cameraTracking'
 import type { PracticeSample } from '../game/calibration'
@@ -71,13 +72,18 @@ export function stanceWait(flow: DerbyFlow): StanceWait | null {
 /** What a go can start: the practice, and a run calibrated by `practice`. */
 export type DerbyPlays = { practice: () => StageRunSetup; run: (practice: PracticeSample[]) => StageRunSetup }
 
+/** Whether a go starts a run: after practice, and after a result. */
+export function startsRun(flow: DerbyFlow) {
+  return flow.step === 'practiceDone' || flow.step === 'result'
+}
+
 /**
  * The flow after the visitor's go at `at` (the held stance, or the step's button): practice from the setup, a run
  * after practice, and another after a result, both calibrated by the practice. Other steps take no go.
  */
 export function startedFlow(flow: DerbyFlow, at: number, plays: DerbyPlays): DerbyFlow {
   if (flow.step === 'setup') return { ...flow, step: 'practice', since: at, run: plays.practice(), practice: [] }
-  if (flow.step !== 'practiceDone' && flow.step !== 'result') return flow
+  if (!startsRun(flow)) return flow
   return { ...flow, step: 'play', since: at, run: plays.run(flow.practice), result: null }
 }
 
@@ -153,7 +159,7 @@ export const DEFAULT_BATTING_SIDE: BattingSide = 'right'
  * A run played as `log` says under the rules `rulesFor` picks for the KST month of `now`: by default those in effect,
  * or in an admin's preview those planned next (data/ballparkRules.ts). Each run reads the month when it starts, so a
  * page left open into a new month plays the rules `ballpark` scheduled for it (as loaded with the page) from its next
- * run. Ranked runs will take their plan from the server instead.
+ * run. A ranked run takes its plan from the server instead (createRankedRun).
  */
 export function createDerbyRun(
   ballpark: BallparkSettings,
@@ -183,7 +189,18 @@ export function createPracticeRun(
   }
 }
 
-/** A fresh 32-bit seed for a run; ranked runs will get theirs from the server instead. */
+/**
+ * A ranked run, played as `log` says under the rules and seed the server issued it, so the server's replay plans the
+ * same pitches whatever the page loaded.
+ */
+export function createRankedRun(
+  issued: Pick<IssuedRun, 'rules' | 'seed'>,
+  log: Omit<DerbyInputLog, 'swings'>,
+): StageRunSetup {
+  return { plan: createRunPlan(issued.rules, issued.seed), log }
+}
+
+/** A fresh 32-bit seed for a run the board does not rank; a ranked run gets its seed from the server. */
 export function randomRunSeed() {
   return crypto.getRandomValues(new Uint32Array(1))[0]
 }

@@ -1,7 +1,9 @@
 import type { DerbySound } from '../../audio/derbySounds'
+import type { LinkedInStatus } from '../../data/leaderboardApi'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import type { CameraStateId } from '../cameraTracking'
 import type { DerbyStep, PracticeFeedback } from '../flow/derbyFlow'
+import type { BoardLine } from '../flow/rankedRun'
 import { STANCE_HOLD_RULES, type StanceNeed } from '../flow/stanceHold'
 import type { DerbyPhase } from '../game/derby'
 import { homeRunTotals, type PitchResult } from '../game/derbyScore'
@@ -193,6 +195,31 @@ export function inPlayDistance(result: PitchResult, language: AppLanguage, fract
  */
 export function resultRow(result: PitchResult, language: AppLanguage) {
   return { outcome: pitchOutcome(result), distance: inPlayDistance(result, language, 1) }
+}
+
+/** A record on the board as its places read: home runs and their total distance, to the decimeter it ranks by. */
+export function recordText(homeRuns: number, totalDistanceDm: number, language: AppLanguage) {
+  return languageCopy[language].baseball.board.record(homeRuns, homeRunDistanceText(totalDistanceDm, language, 1))
+}
+
+/** The result card's line about the monthly board (flow/rankedRun.ts boardLine). */
+export function boardLineText(line: BoardLine, language: AppLanguage) {
+  const copy = languageCopy[language].baseball.board
+  if (line.kind === 'unranked') return copy.unranked[line.reason]
+  if (line.kind === 'unsaved') return copy.unsaved[line.reason]
+  if (line.kind === 'statue' || line.kind === 'newBest') return copy[line.kind](line.rank)
+  if (line.kind === 'offBoard' || line.kind === 'consentNeeded') return copy[line.kind](line.wouldBeRank)
+  if (line.kind === 'bestStands') {
+    return copy.bestStands(line.rank, recordText(line.homeRuns, line.totalDistanceDm, language))
+  }
+  return copy[line.kind]
+}
+
+/** Where the visitor's LinkedIn link stands on their statue (backend/README.md "Ranked runs"). */
+export function linkedInStatusText(status: LinkedInStatus, language: AppLanguage) {
+  const copy = languageCopy[language].baseball.board
+  if (status === 'approved') return copy.linkedInShown
+  return status === 'reported' ? copy.linkedInHidden : copy.linkedInCode
 }
 
 /**

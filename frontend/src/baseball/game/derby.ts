@@ -64,7 +64,7 @@ export type DerbyEvent =
   | { type: 'windup'; pitchIndex: number }
   | { type: 'release'; pitchIndex: number; pitch: PitchPlan; releasedMs: number }
   | { type: 'result'; pitchIndex: number; result: PitchResult; swing: SwingEvent | null }
-  | { type: 'finished'; result: DerbyResult }
+  | { type: 'finished'; result: DerbyResult; log: DerbyInputLog }
 
 export type DerbyUpdate = { derby: Derby; events: DerbyEvent[] }
 
@@ -225,7 +225,10 @@ export function finishPitch(derby: Derby, swing: SwingEvent | null, atMs: number
   }
 }
 
-/** The next pitch's ready phase, or after the last result the finished run, replayed from its log. */
+/**
+ * The next pitch's ready phase, or after the last result the finished run, replayed from its log, with the log a ranked
+ * run's result sends.
+ */
 export function nextPitch(derby: Derby, atMs: number): DerbyUpdate {
   const pitchIndex = derby.pitchIndex + 1
   if (pitchIndex < derby.plan.schedule.length) {
@@ -234,6 +237,6 @@ export function nextPitch(derby: Derby, atMs: number): DerbyUpdate {
   const replay = derby.practice ? replayPractice : replayDerby
   return {
     derby: { ...derby, phase: 'finished', phaseStartedMs: atMs },
-    events: [{ type: 'finished', result: replay(derby.plan, derby.log) }],
+    events: [{ type: 'finished', result: replay(derby.plan, derby.log), log: derby.log }],
   }
 }

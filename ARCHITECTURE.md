@@ -119,8 +119,9 @@ browser. Why each rule and number is what it is lives in the commit messages.
 
 - **Top level:** the visibility gate (`BaseballGate.tsx`, `useBallparkGate.ts`), the path, previews, and exits
   (`baseballRoute.ts`, in the main chunk), the page (`BaseballApp.tsx`), the camera and vision tasks run for the page
-  (`cameraTracking.ts`), the device check (`deviceGate.ts`), the character check (`baseballSession.ts`), and the
-  median and percentile helpers (`statistics.ts`).
+  (`cameraTracking.ts`), the device check (`deviceGate.ts`), the character check (`baseballSession.ts`), ranked runs on
+  the monthly board (`useRankedRuns.ts` over `data/leaderboardApi.ts`), and the median and percentile helpers
+  (`statistics.ts`).
 - **`game/`:** scoring a server can mirror: run plans and seeds, the pitch schedule, judging, landing, calibration, the
   live derby on `gameClock.ts` time (`derby.ts`), and its replay (`derbyScore.ts`). `flight.ts` only draws a path to
   the decided landing.
@@ -134,10 +135,11 @@ browser. Why each rule and number is what it is lives in the commit messages.
   of day.
 - **`vision/`:** MediaPipe (`tasksVision.ts`), the camera stream (`cameraInput.ts`), the pose loop, the held object
   (`heldObject.ts`), the swing tracker (`swingTracker.ts`), motion energy, and the performance tier.
-- **`flow/`:** the steps after the rules card (`derbyFlow.ts`), the stance hold (`stanceHold.ts`), full screen, and
-  the wake lock.
+- **`flow/`:** the steps after the rules card (`derbyFlow.ts`), the stance hold (`stanceHold.ts`), a run and the board
+  (`rankedRun.ts`), full screen, and the wake lock.
 - **`ui/`:** DOM overlays: the HUD and what it may show (`DerbyHud.tsx`, `derbyCues.ts`), the camera panel and its
-  layout (`cameraPanelLayout.ts`), the setup, practice, result, and blocked screens, and the diagnostics panel.
+  layout (`cameraPanelLayout.ts`), the setup, practice, result, listing, and blocked screens, and the diagnostics
+  panel.
 - **`devDiagnostics.ts`, `devSeam.ts`:** dev only. D shows the camera's, tracker's, and stance's numbers; L saves the
   last minute per camera frame (upper-body joints, detections, stance), never a picture, on this computer only. The
   seam lets an automated check stand in for a visitor and their swings.
@@ -146,8 +148,9 @@ Keep these when changing the derby:
 
 1. `game/` is plain TypeScript importing at runtime only itself, `statistics.ts`, and constants from `data/models.ts`,
    so a server can score a run the same way (`replayDerby` over the `RunPlan` and the raw `DerbyInputLog`). The
-   backend's copy is `backend/src/derbyJudge/`, and `backend/test/derbyJudgeVectors.json` holds both to the same
-   results, so a change to a judging value or operation changes all three.
+   backend's copy is `backend/src/derbyJudge/`, and `backend/test/derbyJudgeVectors.json` (copied byte for byte to
+   `game/derbyJudgeVectors.json`, checked by both) holds both to the same results, so a change to a judging value or
+   operation changes all four.
 2. A landing is decided without randomness from timing, power, and bat height; the seeded generator (mulberry32) plans
    only the pitches and the crowd's padded looks.
 3. The pitcher throws only strikes: every pitch passes through the zone whole (`game/pitchSchedule.test.ts`).
@@ -175,15 +178,22 @@ visitor comes back to the gate; while it is hidden, nothing in the town hints at
 read it too.
 
 `BaseballApp.tsx` then checks the device (a phone or tablet, then WebGL 2, later a computer too slow to track), the
-character, and plays the derby. Each run takes the rules of the KST month it starts in and a `crypto` seed
-(`flow/derbyFlow.ts`). The editor's previews, `?rules=next` (next month's rules, or this month's when none are
-scheduled) and `?rules=current`, are badged `Preview · not ranked` and return to `/admin` (`baseballExit`); once ranked
-runs exist, a preview must never get a run ticket. The rules card's one click turns the camera on, unlocks the sounds,
-and asks for full screen and a wake lock. Then the setup (batting side), practice, the run, and its result each go on by
-the focused button or by holding the batting stance about three seconds. Practice tells each swing early, good, or late
-against the visitor's own usual timing (`practiceCalibration`) and calibrates the runs. Practice and a run stand still
-between pitches while the visitor is out of view, and a camera that turns off goes back to the rules card. The HUD and
-the result show the outcome, the distance, and the pitch type, never a timing verdict or power.
+character, and plays the derby. Each run asks the monthly board for a ranked run as it starts and plays the rules and
+seed the server issued (`useRankedRuns.ts`); without an answer within 3 s, while the ballpark is hidden, or after a
+practice that timed fewer than three swings, it plays unranked on the rules of the KST month it starts in and a
+`crypto` seed (`flow/derbyFlow.ts`), and its result says so in a line. A ranked result sends only the
+`DerbyInputLog`, the claimed totals, and the character's look with the board name (`rankedRunBody`), never gender, a
+LinkedIn link, or anything the tracker saw; the server scores it again. The editor's previews, `?rules=next` (next
+month's rules, or this month's when none are scheduled) and `?rules=current`, are badged `Preview · not ranked`, never
+ask the board, and return to `/admin` (`baseballExit`). The rules card's one click turns the camera on, unlocks the
+sounds, and asks for full screen and a wake lock. Then the setup (batting side), practice, the run, and its result each
+go on by the focused button or by holding the batting stance about three seconds. Practice tells each swing early,
+good, or late against the visitor's own usual timing (`practiceCalibration`) and calibrates the runs. Practice and a run
+stand still between pitches while the visitor is out of view, and a camera that turns off goes back to the rules card.
+The HUD and the result show the outcome, the distance, and the pitch type, never a timing verdict or power. The result
+also says where the run left the visitor on the board; its listing card (`ui/ListingView.tsx`) posts the record only
+after the visitor ticks the box, with the name (or none, an anonymous batter) and, opted in, the character's LinkedIn
+link, whose ownership code it then shows.
 
 ## Backend (`backend/src`)
 

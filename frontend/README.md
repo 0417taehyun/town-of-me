@@ -94,6 +94,10 @@ north road.
 - **Practice:** five pitches tell each swing only `A bit early`, `Good`, or `A bit late`, against your own usual
   timing, and set the runs' timing.
 - **Away:** practice and a run pause between pitches while you are out of the camera's view.
+- **Monthly board:** each run after practice is ranked when the board answers; the result says your place, and
+  `Show me on the board` posts it, with your name once the admin checks it, or as an anonymous batter. The top three
+  stand as statues, which may show your LinkedIn link after you put the given code on your profile. A preview, or a
+  run the board cannot be reached for, is not ranked.
 
 | Action                    | Input                                          |
 | ------------------------- | ---------------------------------------------- |

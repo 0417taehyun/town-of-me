@@ -27,3 +27,16 @@ export function linkedInProfileUrlError(value: string) {
   if (!value.trim()) return null
   return normalizeLinkedInProfileUrl(value) ? null : 'Enter a valid LinkedIn profile URL.'
 }
+
+/**
+ * A profile address as a statue's chip reads it, `linkedin.com/in/<id>`, so the visitor sees where it goes: the id
+ * decoded when it can be, as stored (percent-encoded) when it cannot.
+ */
+export function linkedInAddressText(profileUrl: string) {
+  const address = profileUrl.replace(/^https:\/\/(www\.)?/u, '')
+  try {
+    return decodeURI(address)
+  } catch {
+    return address
+  }
+}
