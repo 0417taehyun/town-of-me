@@ -22,8 +22,6 @@ import type { DialogueMessage, Interaction, InteractionRequest } from './scene/p
 import type { DayPeriod } from './scene/environment/dayCycle'
 import type { Season } from './scene/environment/season'
 import { nextTownGuideStep, type TownGuideEvent } from './data/townGuide'
-import { getGroundSurface, getTownPlaza } from './scene/environment/groundSurface'
-import { getTownRoads } from './scene/objects/roads/roadLayout'
 import { Dialogue, InteractionPrompt, Toast } from './ui/OverlayUI'
 import { useDialogueReveal } from './ui/useDialogueReveal'
 import { EntryOverlay } from './ui/EntryOverlay'
@@ -379,9 +377,7 @@ export function TownApp() {
               void bgm[sound]().then((played) => !played && showToast(copy.app.petAudioError(petName)))
             }
             onSkid={(sound, intensity, length) => void bgm.skid(sound, intensity, length)}
-            onFootstep={(step) =>
-              bgm.footstep(getGroundSurface(step, getTownRoads(town.objects), getTownPlaza(town.objects)), step.running)
-            }
+            onFootstep={(surface, running) => bgm.footstep(surface, running)}
             guideStep={guideStep}
             onGuideEvent={handleGuideEvent}
             language={language}

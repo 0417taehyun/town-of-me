@@ -17,7 +17,7 @@ import { getPetRoute } from './animals/corgiGait'
 import type { PetSound } from './animals/petInteraction'
 import type { SkidSound, SquealLength } from '../audio/skidSqueal'
 import type { AmbientScene } from '../audio/ambience'
-import { getGroundSurface, getTownPlaza, type Footstep } from './environment/groundSurface'
+import { getGroundSurface, getTownPlaza, type GroundSurface } from './environment/groundSurface'
 import { getSnowCover, seasonClock } from './environment/seasonTransition'
 import { Residents } from './characters/Residents'
 import { createTownCollision } from './townCollision'
@@ -62,7 +62,8 @@ type Props = {
   onDialogue: (message: DialogueMessage | null) => void
   onPetSound: (sound: PetSound) => void
   onSkid: (sound: SkidSound, intensity: number, length: SquealLength) => void
-  onFootstep: (step: Footstep) => void
+  /** A step on the ground the player's own `surfaceAt` reads there, the shown venues' paths included. */
+  onFootstep: (surface: GroundSurface, running: boolean) => void
   /** Feeds the ambient sound a few times a second; without it the town has none. */
   onAmbience?: (scene: AmbientScene | null) => void
   guideStep: TownGuideStep
@@ -157,8 +158,7 @@ export function TownScene({
   const plaza = useMemo(() => getTownPlaza(town.objects), [town.objects])
   const surfaceAt = (x: number, z: number) =>
     getGroundSurface({ x, z, running: false, snow: getSnowCover(seasonChange.current, seasonClock()) }, roads, plaza)
-  const footstep = (x: number, z: number, running: boolean) =>
-    onFootstep({ x, z, running, snow: getSnowCover(seasonChange.current, seasonClock()) })
+  const footstep = (x: number, z: number, running: boolean) => onFootstep(surfaceAt(x, z), running)
   const petName = town.pet.name[language]
   const ownerName = town.owner.name[language]
   const venueEntrances = useMemo(() => getVenueEntrances(town.venues, language), [language, town.venues])

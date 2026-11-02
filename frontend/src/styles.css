@@ -1955,9 +1955,66 @@ input[type='range']::-webkit-slider-thumb {
 .statue-card-link:hover {
   filter: brightness(0.96);
 }
-.statue-card a:focus-visible {
+.statue-card :is(a, summary, button):focus-visible {
   outline: 3px solid var(--leaf);
   outline-offset: 2px;
+}
+/* The LinkedIn chip's [⋯]: its choices open over the card, so they stay on screen wherever the button wraps. */
+.statue-card-menu summary {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(55, 75, 101, 0.32);
+  border-radius: 50%;
+  color: #374b65;
+  font-weight: 900;
+  list-style: none;
+  cursor: pointer;
+}
+.statue-card-menu summary::-webkit-details-marker {
+  display: none;
+}
+.statue-card-menu-items {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 18px;
+  background: rgba(255, 250, 239, 0.98);
+  box-shadow: var(--shadow);
+}
+.statue-card-menu-items button {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid rgba(55, 75, 101, 0.18);
+  border-radius: 12px;
+  color: var(--ink);
+  background: rgba(71, 111, 96, 0.08);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.statue-card-menu-items button:hover {
+  filter: brightness(0.96);
+}
+/* After the card's links, on a line of its own. */
+.statue-card-done {
+  order: 1;
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--leaf-dark);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.statue-card-done:empty {
+  display: none;
 }
 .virtual-stick {
   display: none;

@@ -45,8 +45,8 @@ npm run build
 - **The ballpark:** once the admin shows it, the hedge opens at the end of the north road onto the garden ballpark's
   gate, and `E` there opens `/baseball`; coming back starts you at the gate. A branch of the road leads to a podium
   garden where this month's home-run leaders stand as statues; walking up to one opens a card with their record, their
-  LinkedIn link once the admin approved it, and the board, and an empty pedestal invites you to swing. While it is
-  hidden the hedge stays closed and none of it shows.
+  LinkedIn link once the admin approved it (with a menu to report it), and the board, and an empty pedestal invites you
+  to swing. While it is hidden the hedge stays closed and none of it shows.
 - **Guestbook:** anyone may write one note a day per browser and edit it that day. Notes appear after an admin approves
   them, and only the character's name and look are sent with a note.
 - **Time and seasons:** lighting, sky, lamps, music, birds, and clouds follow local time; the season follows the

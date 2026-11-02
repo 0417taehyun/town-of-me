@@ -350,12 +350,18 @@ export function washInLampLight(merged: Group, lampsOn: boolean) {
   merged.children
     .map((child) => (child as Mesh).material as Material)
     .filter(isPaint)
-    .forEach((material) =>
-      material.emissive
-        .copy(material.color)
-        .multiply(LAMP_WASH)
-        .multiplyScalar(lampsOn ? 0.3 : 0),
-    )
+    .forEach((material) => washPaint(material, lampsOn ? 0.3 : 0))
+}
+
+/**
+ * Washes one paint in the lamps' light. A painted texture, the name plaque's, takes the wash through it too, so its
+ * dark lettering stays dark on the cream rather than lifting toward it.
+ */
+export function washPaint(material: MeshStandardMaterial, strength: number) {
+  material.emissive.copy(material.color).multiply(LAMP_WASH).multiplyScalar(strength)
+  if (material.emissiveMap === material.map) return
+  material.emissiveMap = material.map
+  material.needsUpdate = true
 }
 
 /** The standing statues' twinkles round each figure, in the garden's frame, and the sprites that twinkle. */

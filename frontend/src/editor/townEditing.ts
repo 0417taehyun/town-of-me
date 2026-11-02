@@ -83,16 +83,25 @@ export function clampToTown(type: TownObjectType, position: Vec3): Vec3 {
   }
 }
 
-/**
- * Where an object stands once placed or moved: inside the town and, if it stands on the ground, out of the approaches
- * the shown venues (`openSlots`) keep for themselves. A road is left where it is: it is painted, and its position is
- * only the origin of its points.
- */
+/** Where an object stands once placed or moved: inside the town and out of the shown venues' approaches. */
 export function placeInTown(type: TownObjectType, position: Vec3, openSlots: readonly VenueSlot[]): Vec3 {
-  const clamped = clampToTown(type, position)
-  if (type === 'road' || isSkyObject(type)) return clamped
-  const [x, z] = pushOutOfVenueApproach(openSlots, [clamped.x, clamped.z])
-  return { ...clamped, x, z }
+  return clearOfVenueApproaches(type, clampToTown(type, position), openSlots)
+}
+
+/**
+ * Out of the approaches the shown venues (`openSlots`) keep for themselves, if the object stands on the ground. A road
+ * is left where it is: it is painted, and its position is only the origin of its points.
+ */
+export function clearOfVenueApproaches(type: TownObjectType, position: Vec3, openSlots: readonly VenueSlot[]): Vec3 {
+  if (type === 'road' || isSkyObject(type)) return position
+  const [x, z] = pushOutOfVenueApproach(openSlots, [position.x, position.z])
+  return { ...position, x, z }
+}
+
+/** The object moved out of the shown venues' approaches, or the very same object when it already stands clear. */
+export function objectClearOfVenues(object: TownObject, openSlots: readonly VenueSlot[]): TownObject {
+  const position = clearOfVenueApproaches(object.type, object.position, openSlots)
+  return position.x === object.position.x && position.z === object.position.z ? object : { ...object, position }
 }
 
 export function clampPoint([x, z]: TownPoint): TownPoint {
@@ -370,9 +379,15 @@ export function removePetRoutePoint(town: TownSnapshot, index: number) {
   )
 }
 
-/** Shows the ballpark to visitors or hides it; like the colors, this applies as soon as the town is saved. */
+/**
+ * Shows the ballpark to visitors or hides it; like the colors, this applies as soon as the town is saved. Showing it
+ * moves the ground objects already standing in its garden's approach out, as placing them there would, in the same
+ * edit, so one undo puts them back and they save together.
+ */
 export function withBallparkVisible(town: TownSnapshot, visible: boolean): TownSnapshot {
-  return { ...town, venues: { ...town.venues, ballpark: { ...town.venues.ballpark, visible } } }
+  const venues = { ...town.venues, ballpark: { ...town.venues.ballpark, visible } }
+  const openSlots = openVenueSlots(venues)
+  return { ...town, venues, objects: town.objects.map((object) => objectClearOfVenues(object, openSlots)) }
 }
 
 /** The admin's color for one of the ballpark's building roles, or the theme's color again when `color` is null. */

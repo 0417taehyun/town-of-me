@@ -29,6 +29,7 @@ import {
   updateResident,
   withBallparkColor,
   withBallparkSchedule,
+  withBallparkVisible,
   withoutBallparkSchedule,
 } from './townEditing'
 
@@ -61,6 +62,21 @@ describe('town editing', () => {
       inGarden,
     )
     expect(find('bird-2', updateObject(shown, 'bird-2', { position: { ...inGarden, y: 7 } })).position.x).toBe(3.5)
+  })
+
+  it('moves a tree already in the garden out of it as the ballpark is shown, but no bird or other object', () => {
+    const hidden = { ...SAMPLE_TOWN, venues: { ballpark: { ...SAMPLE_TOWN.venues.ballpark, visible: false } } }
+    const inGarden = { x: 3.5, y: 0, z: -41 }
+    const planted = updateObject(updateObject(hidden, 'tree-5', { position: inGarden }), 'bird-2', {
+      position: { ...inGarden, y: 7 },
+    })
+    const shown = withBallparkVisible(planted, true)
+    expect(find('tree-5', shown).position).toEqual({ ...inGarden, x: 2.8 })
+    expect(find('bird-2', shown).position).toEqual({ ...inGarden, y: 7 })
+    expect(shown.objects.filter((object, index) => object !== planted.objects[index]).map(({ id }) => id)).toEqual([
+      'tree-5',
+    ])
+    expect(find('tree-5', withBallparkVisible(planted, false)).position).toEqual(inGarden)
   })
 
   it('keeps sky objects in the sky and birds inside their flight wrap', () => {
