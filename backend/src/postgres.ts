@@ -38,8 +38,8 @@ import {
 } from './town.js'
 
 const migrationLockKey = 7_301_202_610
-// The first key of the two-key advisory locks that serialize issuing runs for one visitor; a key space of its own.
-const runIssueLockSpace = 7_301_203
+// The first key of the two-key advisory locks that serialize one visitor's runs and records (`lockVisitorGame`).
+const visitorGameLockSpace = 7_301_203
 
 type UserRow = {
   id: string
@@ -429,10 +429,7 @@ export class PostgresStore implements Store {
   async issueRun(run: GameRun): Promise<void> {
     await inTransaction(this.pool, async (client) => {
       // Without it, two issues at once would each find nothing to abandon, and the second would break the one-open index.
-      await client.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [
-        runIssueLockSpace,
-        `${run.game}:${run.visitorHash}`,
-      ])
+      await lockVisitorGame(client, run.game, run.visitorHash)
       await client.query(
         `UPDATE minigame_runs SET status = 'abandoned' WHERE game = $1 AND visitor_hash = $2 AND status = 'issued'`,
         [run.game, run.visitorHash],
@@ -466,6 +463,7 @@ export class PostgresStore implements Store {
     settle: SettleEntry | null,
   ): Promise<{ run: GameRun; settlement: EntrySettlement | null } | null> {
     return inTransaction(this.pool, async (client) => {
+      await lockRunVisitor(client, id)
       // The row lock this takes makes a second result for the same run wait, then find it no longer issued.
       const { rows } = await client.query<GameRunRow>(
         `UPDATE minigame_runs
@@ -600,6 +598,7 @@ export class PostgresStore implements Store {
   ): Promise<{ run: GameRun; settlement: EntrySettlement } | null> {
     // A throwing `settle` rolls the acceptance back with the record.
     return inTransaction(this.pool, async (client) => {
+      await lockRunVisitor(client, id)
       const { rows } = await client.query<GameRunRow>(
         `UPDATE minigame_runs SET status = 'scored', reviewed_at = $2
          WHERE id = $1 AND status = 'flagged' AND reviewed_at IS NULL RETURNING *`,
@@ -651,6 +650,13 @@ export class PostgresStore implements Store {
     )
   }
 
+  async forgetKeptReports(entryId: string, targets: readonly ReportTarget[]): Promise<void> {
+    await this.pool.query(
+      `DELETE FROM minigame_reports WHERE entry_id = $1 AND target = ANY($2::text[]) AND resolution = 'kept'`,
+      [entryId, targets],
+    )
+  }
+
   async isLinkBlocked(profileHash: string): Promise<boolean> {
     const { rows } = await this.pool.query('SELECT 1 FROM minigame_link_blocks WHERE profile_hash = $1', [profileHash])
     return rows.length > 0
@@ -665,6 +671,8 @@ export class PostgresStore implements Store {
 
   async eraseVisitorGameData(game: string, visitorHash: string): Promise<void> {
     await inTransaction(this.pool, async (client) => {
+      // Without it, a run finished or accepted meanwhile could settle a record after the records below are deleted.
+      await lockVisitorGame(client, game, visitorHash)
       // Records first, which takes their reports with them, so no record points at a run being deleted.
       await client.query('DELETE FROM minigame_entries WHERE game = $1 AND visitor_hash = $2', [game, visitorHash])
       await client.query('DELETE FROM minigame_runs WHERE game = $1 AND visitor_hash = $2', [game, visitorHash])
@@ -673,8 +681,9 @@ export class PostgresStore implements Store {
 }
 
 /**
- * Settles the visitor's record on the finished run's board inside its transaction. The record's row lock keeps an
- * owner's or admin's change from landing in between; a first record needs none, since a visitor has one open run.
+ * Settles the visitor's record on the finished run's board inside its transaction. The caller holds the visitor's lock
+ * (`lockVisitorGame`), so no other run creates or deletes the record meanwhile, and the record's row lock keeps an
+ * owner's or admin's change from landing in between.
  */
 export async function settleEntryWithin(
   client: PoolClient,
@@ -689,6 +698,24 @@ export async function settleEntryWithin(
   const settlement = settle(current, current ? null : await latestEntry(client, run.game, run.visitorHash))
   if (settlement.changed) await writeEntry(client, settlement.entry)
   return settlement
+}
+
+/**
+ * Serializes the transactions that create or delete one visitor's runs and records of a game: issuing, finishing, and
+ * accepting a run, and erasing them all. Each takes it first, before any row lock, so they never deadlock.
+ */
+export async function lockVisitorGame(client: PoolClient, game: string, visitorHash: string): Promise<void> {
+  await client.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [visitorGameLockSpace, `${game}:${visitorHash}`])
+}
+
+/** `lockVisitorGame` for a stored run's visitor and game; nothing for a run that does not exist. */
+export async function lockRunVisitor(client: PoolClient, runId: string): Promise<void> {
+  const { rows } = await client.query<{ game: string; visitor_hash: string }>(
+    'SELECT game, visitor_hash FROM minigame_runs WHERE id = $1',
+    [runId],
+  )
+  const run = rows[0]
+  if (run) await lockVisitorGame(client, run.game, run.visitor_hash)
 }
 
 export async function latestEntry(client: PoolClient, game: string, visitorHash: string) {

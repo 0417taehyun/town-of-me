@@ -13,6 +13,7 @@ import {
   type EntrySettlement,
   type GameRun,
   type LeaderboardEntry,
+  type SettleEntry,
   type Store,
   type VerifiedLinkedInIdentity,
 } from '../src/index.js'
@@ -228,6 +229,7 @@ export async function checkStoreContract(store: Store, assert: Assert): Promise<
   await checkRunStore(store, assert)
   await checkEntryStore(store, assert)
   await checkModerationStore(store, assert)
+  await checkVisitorRace(store, assert)
 }
 
 /** The admin list is seeded once, decides the role at every sign-in, and removing an email ends that role at once. */
@@ -736,6 +738,12 @@ async function checkModerationStore(store: Store, assert: Assert): Promise<void>
     ]) && (await store.listReports({ game: runGame, season: '2026-06' })).length === 0,
     "resolving closes the record's open reports on one target only, and reports are listed by board",
   )
+  await store.forgetKeptReports(entry.id, ['link'])
+  await store.forgetKeptReports(entry.id, ['name'])
+  assert(
+    isDeepStrictEqual(await store.listReports(board), [linkReport]),
+    "forgetting a target's kept reports deletes those only, never an open report",
+  )
 
   await store.blockLink('blocked-profile-hash', reviewedAt)
   await store.blockLink('blocked-profile-hash', reviewedAt)
@@ -753,6 +761,43 @@ async function checkModerationStore(store: Store, assert: Assert): Promise<void>
       (await store.listReports(board)).length === 0 &&
       (await store.getEntry(unlisted.id)) !== null,
     "a visitor's deletion removes their runs, records, and the reports on them in every season, and no one else's",
+  )
+}
+
+/** The visitor's record as it stands, or `entry` when there is none yet. */
+function settleOnto(entry: LeaderboardEntry): SettleEntry {
+  return (current) =>
+    current ? { entry: current, changed: false, consentNeeded: false } : { entry, changed: true, consentNeeded: false }
+}
+
+/** A held run accepted, the visitor's next run finished, and all their data erased, at the same moment. */
+async function raceVisitor(store: Store, visitorHash: string) {
+  const season = '2026-05'
+  const flagged = { ...scoredRun, status: 'flagged' as const, flags: ['claimed-mismatch'] }
+  const held = issuedRun(visitorHash, season)
+  await store.issueRun(held)
+  await store.finishRun(held.id, visitorHash, flagged, null)
+  const next = issuedRun(visitorHash, season)
+  await store.issueRun(next)
+  const results = await Promise.allSettled([
+    store.acceptRun(held.id, new Date(runIssuedAt + 2 * 60_000).toISOString(), settleOnto(entryFor(held))),
+    store.finishRun(next.id, visitorHash, scoredRun, settleOnto(entryFor(next))),
+    store.eraseVisitorGameData(runGame, visitorHash),
+  ])
+  return { results, left: await store.getBoardEntryByVisitor({ game: runGame, season }, visitorHash) }
+}
+
+/**
+ * What creates or deletes one visitor's records happens one at a time: two runs settling at once never both insert a
+ * first record, and an erasure at the same moment leaves none. PostgreSQL shows it; MemoryStore runs each step whole.
+ */
+async function checkVisitorRace(store: Store, assert: Assert): Promise<void> {
+  const raced = await Promise.all(
+    ['race-a', 'race-b', 'race-c', 'race-d'].map((visitor) => raceVisitor(store, visitor)),
+  )
+  assert(
+    raced.every(({ results, left }) => results.every(({ status }) => status === 'fulfilled') && left === null),
+    "settling and erasing one visitor's records at once never fails, and the erasure leaves no record",
   )
 }
 

@@ -30,6 +30,8 @@ export const lateAcceptanceMs = 7 * 24 * 60 * 60_000
 export const noHistoryRunCount = 2
 /** Reports one visitor may send in an hour; more are dropped without a word. */
 export const reportsPerHour = 5
+/** How often the report counter forgets the visitors with no report in the last hour (`forgetQuietReporters`). */
+export const reportSweepIntervalMs = 60_000
 const hourMs = 60 * 60_000
 /** Names this many places either side, so names that read as a sentence together are seen together. */
 const neighbourDistance = 3
@@ -529,6 +531,26 @@ export function recentReports(times: readonly number[], now: number): number[] {
   return times.filter((time) => now - time < hourMs)
 }
 
+/** Drops the visitors with no report in the last hour, since visitor cookies cost nothing to make. */
+export function forgetQuietReporters(reportTimes: Map<string, number[]>, now: number): void {
+  const quiet = [...reportTimes].filter(([, times]) => recentReports(times, now).length === 0)
+  quiet.forEach(([visitorHash]) => reportTimes.delete(visitorHash))
+}
+
+/**
+ * The report targets an owner's change leaves without the admin's keep: it covered the name or appearance they saw,
+ * so a new one, or a record put back on the board, is hidden by the next report again.
+ */
+export function supersededKeeps(before: LeaderboardEntry, after: LeaderboardEntry): ReportTarget[] {
+  const relisted = after.listed && !before.listed
+  const changed: Record<ReportTarget, boolean> = {
+    name: relisted || after.authorName !== before.authorName,
+    character: relisted || !isDeepStrictEqual(after.appearance, before.appearance),
+    link: false,
+  }
+  return reportTargets.filter((target) => changed[target])
+}
+
 /**
  * What a report hides at once: an approved name or the appearance, unless the admin kept it after an earlier report,
  * and a link whose profile's owner says it is theirs, which then needs a new code. `null` when it hides nothing.
@@ -586,6 +608,17 @@ export function hiddenLink(
 /** Until when a held run of `season` may be accepted. */
 export function acceptanceDeadline(season: string): number {
   return rankingMonthStart(nextRankingMonth(season)) + lateAcceptanceMs
+}
+
+/**
+ * Whether a past season's record still takes its visitor's listing like this month's: its best run, issued in the
+ * season, arrived or was accepted only after the season ended, so the visitor never had the chance. Only until the
+ * season's held runs can no longer be accepted; then that board is final.
+ */
+export function listableAfterSeason(bestRun: GameRun | null, now: number): boolean {
+  const settledAt = bestRun?.reviewedAt ?? bestRun?.submittedAt
+  if (!bestRun || !settledAt || now >= acceptanceDeadline(bestRun.season)) return false
+  return Date.parse(settledAt) >= rankingMonthStart(nextRankingMonth(bestRun.season))
 }
 
 export function previousRankingMonth(month: string): string {

@@ -96,6 +96,8 @@ export interface Store extends AuthStore {
   listReports(board: BoardKey): Promise<EntryReport[]>
   /** Resolves the record's open reports on `target`. */
   resolveReports(entryId: string, target: ReportTarget, resolution: ReportResolution, resolvedAt: string): Promise<void>
+  /** Deletes the record's reports on `targets` that the admin resolved as kept, once what they kept is gone. */
+  forgetKeptReports(entryId: string, targets: readonly ReportTarget[]): Promise<void>
   isLinkBlocked(profileHash: string): Promise<boolean>
   /** Blocks the profile once; blocking it again changes nothing. */
   blockLink(profileHash: string, createdAt: string): Promise<void>
@@ -416,6 +418,13 @@ export class MemoryStore implements Store {
       (report) => report.entryId === entryId && report.target === target && report.resolvedAt === null,
     )
     open.forEach((report) => this.entryReports.set(report.id, { ...report, resolvedAt, resolution }))
+  }
+
+  async forgetKeptReports(entryId: string, targets: readonly ReportTarget[]): Promise<void> {
+    const kept = [...this.entryReports.values()].filter(
+      (report) => report.entryId === entryId && targets.includes(report.target) && report.resolution === 'kept',
+    )
+    kept.forEach((report) => this.entryReports.delete(report.id))
   }
 
   async isLinkBlocked(profileHash: string): Promise<boolean> {

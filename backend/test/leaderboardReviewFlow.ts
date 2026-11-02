@@ -1,5 +1,6 @@
 import {
   DomainError,
+  forgetQuietReporters,
   hashToken,
   leaderboardLinkedInUrl,
   leaderboardNameStatus,
@@ -110,6 +111,7 @@ async function signedIn(store: MemoryStore, subject: string): Promise<string> {
  */
 export async function checkLeaderboardReviewFlow(assert: Assert): Promise<void> {
   checkIdentityRules(assert)
+  checkReportCounter(assert)
   await checkReviewActions(assert)
   await checkTakedownAndErasure(assert)
   await checkPastSeason(assert)
@@ -150,6 +152,20 @@ function checkIdentityRules(assert: Assert): void {
     encoded.profileId === '새싹-sample' &&
       encoded.profileUrl === 'https://www.linkedin.com/in/%EC%83%88%EC%8B%B9-sample',
     'a link is stored canonical, its id decoded once and percent-encoded again',
+  )
+}
+
+/** The in-memory report counter forgets visitors whose reports are all over an hour old, and no one else. */
+function checkReportCounter(assert: Assert): void {
+  const now = Date.now()
+  const reportTimes = new Map([
+    ['quiet-reporter', [now - 61 * minute]],
+    ['recent-reporter', [now - 61 * minute, now - 59 * minute]],
+  ])
+  forgetQuietReporters(reportTimes, now)
+  assert(
+    [...reportTimes.keys()].join() === 'recent-reporter',
+    'the report counter drops only visitors with no report in the last hour',
   )
 }
 
@@ -302,6 +318,21 @@ async function checkReviewActions(assert: Assert): Promise<void> {
     (await podium())[0]?.name === 'Sprout' &&
       [...store.entryReports.values()].filter((entry) => entry.target === 'name' && !entry.resolvedAt).length === 1,
     'a name the admin kept is not hidden by the next report, which still waits in the queue',
+  )
+  await play('review-critic', [12, null, null, null, null])
+  await report('review-critic', { target: 'character' })
+  const pictured = await entryOf('review-four')
+  await act(`entries/${pictured?.id}/report-resolution`, {
+    updatedAt: pictured?.updatedAt,
+    target: 'character',
+    resolution: 'kept',
+  })
+  await own('review-four', { profile: { ...profile, name: 'Sprout', hat: 'crown' } })
+  const recostumed = (await podium())[0]?.profile.hat
+  await report('review-critic', { target: 'character' })
+  assert(
+    recostumed === 'crown' && (await podium())[0]?.profile.kind === 'default',
+    'a kept character covers only the appearance the admin saw: a report on a new one hides it at once',
   )
 
   const heldEntry = await entryOf('review-held')
@@ -479,11 +510,30 @@ async function checkPastSeason(assert: Assert): Promise<void> {
     pastTime,
   )
   const seasonEnd = rankingMonthStart('2026-03')
+  const day = 24 * 60 * minute
   const late = await rejection(() =>
-    service.acceptHeldRun(adminActor, game, heldOutcome.run.id, { updatedAt: null }, seasonEnd + 8 * 24 * 60 * minute),
+    service.acceptHeldRun(adminActor, game, heldOutcome.run.id, { updatedAt: null }, seasonEnd + 8 * day),
   )
   assert(
     heldOutcome.standing.kind === 'reviewing' && late instanceof DomainError && late.code === 'CONFLICT',
     "a past season's held run cannot be accepted more than a week after the season ended",
+  )
+  const accepted = await service.acceptHeldRun(adminActor, game, heldOutcome.run.id, { updatedAt: null }, seasonEnd)
+  const listedLate = await service.updateOwnEntry(
+    game,
+    heldHash,
+    { listed: true, profile: { ...profile, name: 'Juniper' } },
+    pastMonth,
+    seasonEnd + 3 * day,
+  )
+  const unlistedFinal = await rejection(() =>
+    service.updateOwnEntry(game, heldHash, { listed: false }, pastMonth, seasonEnd + 7 * day),
+  )
+  assert(
+    !accepted.entry.listed &&
+      listedLate.entry.listed &&
+      unlistedFinal instanceof DomainError &&
+      unlistedFinal.code === 'INVALID_INPUT',
+    "a held run accepted after its season ended may be listed by its visitor until that season's board is final",
   )
 }

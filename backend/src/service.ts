@@ -47,16 +47,20 @@ import {
 import {
   acceptanceDeadline,
   entryReviewChanges,
+  forgetQuietReporters,
   fromVersion,
   heldRunCandidate,
   isNewVisitor,
+  listableAfterSeason,
   parseEntryReport,
   parseReportResolution,
   previousRankingMonth,
   recentReports,
   reportedChanges,
   reportsPerHour,
+  reportSweepIntervalMs,
   reviewQueue,
+  supersededKeeps,
   versionInput,
   type EntryReviewAction,
   type ReviewBoard,
@@ -101,6 +105,8 @@ export interface RankedRecord {
 export class BackendService {
   /** When each visitor's recent reports came, in this process only: never written anywhere, gone on restart. */
   private readonly reportTimes = new Map<string, number[]>()
+  /** When `reportTimes` last forgot its quiet visitors. */
+  private reportTimesSweptAt = 0
 
   constructor(
     private readonly store: Store,
@@ -406,7 +412,8 @@ export class BackendService {
 
   /**
    * The visitor lists or unlists this month's record, changes the character and name it shows, or turns its link on or
-   * off. A past season's record (`season`) may only be anonymised or have its link turned off.
+   * off. A past season's record (`season`) may only be anonymised or have its link turned off, unless its best run
+   * came in after the season ended (`listableAfterSeason`): then it takes the same changes as this month's.
    */
   async updateOwnEntry(
     game: string,
@@ -419,13 +426,11 @@ export class BackendService {
     const currentSeason = rankingMonth(now)
     const board = { game, season: boardSeason(requestedSeason, currentSeason) }
     const at = new Date(now).toISOString()
-    if (board.season < currentSeason) {
-      const update = parsePastEntryUpdate(input)
-      const entry = await this.ownEntryOn(board, visitorHash)
-      return this.saveOwnChanges(entry, pastEntryChanges(entry, update, at))
+    const entry = await this.ownEntryOn(board, visitorHash)
+    if (board.season < currentSeason && !(await this.isListableLate(entry, now))) {
+      return this.saveOwnChanges(entry, pastEntryChanges(entry, parsePastEntryUpdate(input), at))
     }
     const update = parseOwnEntryUpdate(input)
-    const entry = await this.ownEntryOn(board, visitorHash)
     const listed = update.listed ?? entry.listed
     if (update.linkedIn && (!listed || entry.takedown)) {
       throw new DomainError('CONFLICT', 'Only a listed record that was not taken down shows a link')
@@ -443,9 +448,17 @@ export class BackendService {
     return entry
   }
 
+  /** Whether a past season's record still takes its visitor's listing, from its best run. */
+  async isListableLate(entry: LeaderboardEntry, now: number): Promise<boolean> {
+    const bestRun = entry.bestRunId === null ? null : await this.store.getRun(entry.bestRunId)
+    return listableAfterSeason(bestRun, now)
+  }
+
   async saveOwnChanges(entry: LeaderboardEntry, changes: EntryChanges): Promise<RankedRecord> {
     const updated = await this.store.updateEntry(entry.id, entry.updatedAt, changes)
     if (!updated) throw new DomainError('CONFLICT', 'The record changed while it was being updated')
+    const superseded = supersededKeeps(entry, updated)
+    if (superseded.length > 0) await this.store.forgetKeptReports(entry.id, superseded)
     return { entry: updated, rank: await this.store.rankOf(updated) }
   }
 
@@ -505,6 +518,7 @@ export class BackendService {
   ): Promise<void> {
     assertRankedGame(game)
     const report = parseEntryReport(input)
+    this.sweepReportTimes(now)
     const recent = visitorHash ? recentReports(this.reportTimes.get(visitorHash) ?? [], now) : []
     if (!visitorHash || recent.length >= reportsPerHour) return
     const entry = await this.store.getEntry(entryId)
@@ -527,6 +541,13 @@ export class BackendService {
     const hidden = reportedChanges(entry, report, kept, ownershipCode(), at)
     // A record that changed meanwhile keeps its new version; the report still waits in the queue.
     if (hidden) await this.store.updateEntry(entry.id, entry.updatedAt, hidden)
+  }
+
+  /** Forgets the visitors with no report in the last hour, at most once a minute, so the counter cannot keep growing. */
+  sweepReportTimes(now: number): void {
+    if (now - this.reportTimesSweptAt < reportSweepIntervalMs) return
+    forgetQuietReporters(this.reportTimes, now)
+    this.reportTimesSweptAt = now
   }
 
   /** The review queue of one season, or of this season and the last by default (`leaderboardReview.ts`). */

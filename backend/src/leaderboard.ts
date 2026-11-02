@@ -373,7 +373,7 @@ export function parseOwnEntryUpdate(input: Record<string, unknown>): OwnEntryUpd
   return { listed, profile, linkedIn }
 }
 
-/** A past season's board is final: its record only takes `{ anonymize: true }` and `{ linkedIn: null }`. */
+/** A final record of a past season only takes `{ anonymize: true }` and `{ linkedIn: null }`. */
 export function parsePastEntryUpdate(input: Record<string, unknown>): PastEntryUpdate {
   const anonymize = input.anonymize ?? false
   if (anonymize !== true && anonymize !== false) throw invalidInput('anonymize must be true')

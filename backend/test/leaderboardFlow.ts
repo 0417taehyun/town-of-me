@@ -623,6 +623,19 @@ async function checkMonthBoundary(
     lateOutcome.run.status === 'scored' && lateOutcome.entry?.season === '2026-10',
     'a result arriving after midnight still counts in the month the run was issued in',
   )
+  const listing = { listed: true, profile }
+  const listedLate = await service.updateOwnEntry(game, visitorHash, listing, '2026-10', midnight + minute)
+  const earlierHash = await hashToken('month-boundary-earlier')
+  const before = await service.issueRun(game, earlierHash, midnight - 3 * minute, 77)
+  const beforeBody = resultBody(fiveNormal, 77, [12, null, -15, 30, null])
+  await service.submitRunResult(game, earlierHash, before.id, beforeBody, midnight - minute)
+  const finalRecord = await rejection(() =>
+    service.updateOwnEntry(game, earlierHash, listing, '2026-10', midnight + minute),
+  )
+  assert(
+    listedLate.entry.listed && finalRecord instanceof DomainError && finalRecord.code === 'INVALID_INPUT',
+    "a record whose run arrived after midnight may still be listed on its month's board, unlike one there before",
+  )
   const early = await service.issueRun(game, visitorHash, midnight, 77)
   assert(
     early.season === '2026-11' && isDeepStrictEqual(early.rules, sevenHard),

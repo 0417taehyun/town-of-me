@@ -153,7 +153,9 @@ the same results).
   view (`listed`, `name`, `nameStatus`, `disqualified`, `profile`, `appearancePublic`, `takedown`, `linkedIn`,
   `homeRuns`, `totalDistanceDm`, `achievedAt`, and `rank`, the place it holds or would hold).
   - `?season=YYYY-MM` names a past season, whose record only takes `{ anonymize: true }` (no name or link from then
-    on; the score keeps its place) or `{ linkedIn: null }`; anything else is `400`.
+    on; the score keeps its place) or `{ linkedIn: null }`; anything else is `400`. A record whose best run arrived
+    after midnight, or was accepted after the season ended, takes the changes above instead until a week after it
+    ended, when held runs can no longer be accepted either.
   - A name is NFKC, one line of 1–24 characters (`400` otherwise). It is `rejected`, and the record shows as an
     anonymous batter while keeping its place, when it has a format or zero-width character or a Hangul filler, stacks
     combining marks, has no letter, digit, or symbol, looks like a web address, domain, handle, or phone number, or its
@@ -177,8 +179,9 @@ the same results).
   malformed body is `400`), so it reveals nothing. It counts only
   from a visitor cookie that has sent a result, about someone else's record, at most five an hour (counted in the
   process's memory only); a report keeps no reporter. A report on an approved name puts it back under review and one on
-  the character shows the default batter, unless the admin kept that name or character after an earlier report; a
-  `mine` report hides the link (`reported`) with a new code, which only the admin's check of that code restores.
+  the character shows the default batter, unless the admin kept that name or character after an earlier report and the
+  owner has not changed it or put the record back on the board since; a `mine` report hides the link (`reported`) with
+  a new code, which only the admin's check of that code restores.
 - `GET /v1/games/home-run-derby/leaderboard?season=YYYY-MM` (this month by default; a malformed season is `400`, a
   season still to come `404`) returns `{ season: { id, startsAt, endsAt, final }, podium, ranks, own }`. The public
   order is listed, not disqualified records by home runs, then their distance, then the earlier record; `podium` is
