@@ -235,6 +235,30 @@ export function parseBoard(value: unknown): Board {
   }
 }
 
+/** This month's statues as the town stands them: the KST month they belong to, and one row for each place held. */
+export type Podium = { season: string; rows: BoardRow[] }
+
+/**
+ * The town's statues, read like the board's: a malformed row is dropped, and a place the server sent twice keeps its
+ * first row, so two statues never stand on one pedestal. A malformed answer throws, and the town keeps what it had.
+ */
+export function parsePodium(value: unknown): Podium {
+  const input = requireRecord(value, 'podium')
+  const season = requireText(requireRecord(input.season, 'podium.season').id, 'podium.season.id')
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/u.test(season)) throw new Error('podium.season is malformed')
+  const rows = boardRows(input.podium, STATUE_PLACES, true)
+  return { season, rows: rows.filter((row, index) => rows.findIndex(({ rank }) => rank === row.rank) === index) }
+}
+
+/**
+ * This month's statues, without the visitor cookie: the answer belongs to no one, so every cache may share it for the
+ * minute the server allows. `fresh` skips this browser's copy, as a new month starts.
+ */
+export async function fetchPodium(fresh: boolean, request: typeof fetch = fetch): Promise<Podium> {
+  const init: RequestInit = { credentials: 'omit', cache: fresh ? 'reload' : 'default' }
+  return parsePodium(await responseRecord(await sendToBoard('/podium', init, request)))
+}
+
 /**
  * The name as the board keeps it (NFKC, one line, spaces collapsed), or `null` when the board would refuse its format,
  * so a name the board cannot take never costs the run its result.

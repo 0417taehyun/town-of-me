@@ -1,7 +1,7 @@
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { MutableRefObject } from 'react'
-import { DoubleSide, Group, type InstancedMesh, type Mesh, type MeshStandardMaterial, Object3D } from 'three'
+import { DoubleSide, type InstancedMesh, type Mesh, type MeshStandardMaterial, Object3D } from 'three'
 import type { TownObject } from '../../../data/models'
 import { useWebFontGlyphs } from '../../../hooks/useWebFontGlyphs'
 import { type AppLanguage, languageCopy } from '../../../i18n/language'
@@ -13,7 +13,8 @@ import { GroundGlow } from '../../objects/GroundGlow'
 import { GuestbookSign } from '../../objects/guestbook/GuestbookLayer'
 import { RoofSnow } from '../../objects/houses/RoofSnow'
 import { Lamp } from '../../objects/lamps/LampsLayer'
-import { createWaitingStatue, mergeByMaterial } from '../../statues/paintedStatue'
+import { usePodium } from '../../../hooks/usePodium'
+import { placeSparkle } from '../../statues/paintedStatue'
 import { PEDESTAL } from '../../statues/statueFinishes'
 import { createStatueTextures, disposeStatueTextures, PLAQUE_FONT } from '../../statues/statueTextures'
 import {
@@ -24,12 +25,19 @@ import {
   BLOOMS_PER_PLANT,
   createGardenGeometries,
   createPlaques,
+  createPodiumStatues,
+  createTwinkles,
   disposeMerged,
   disposePlaques,
+  disposeTwinkles,
   fadeBedColors,
+  paintPlaques,
   pedestalSnow,
   pennantPositions,
+  type PodiumPlace,
+  podiumPlaces,
   poseBeds,
+  washInLampLight,
 } from './ballparkStatueParts'
 import { BALLPARK_GARDEN, STATUE_SCALE } from './ballparkStatueLayout'
 
@@ -40,17 +48,23 @@ export type GardenProps = {
   seasonChange: MutableRefObject<SeasonChange>
   lampsOn: boolean
   language: AppLanguage
+  /** Holds the statues' twinkles. */
+  still: boolean
 }
 
 /**
  * The podium garden beside the north road (ballparkStatueLayout.ts), drawn in the ballpark's slot frame while the
- * ballpark is shown: the stage with its three pedestals, read 2-1-3, before an arc of hedge in the town's
- * season with bunting and flower beds, two of the town's lamps, which light at night, and a sign. An empty pedestal
- * holds a baseball on a cushion and says it waits for a challenger. Snow settles on the pedestals and the beds in
- * winter as on the town's roofs.
+ * ballpark is shown: this month's top three as painted statues, read 2-1-3 on the stage, before an arc of hedge in
+ * the town's season with bunting and flower beds, two of the town's lamps, which light at night, and a sign. A place
+ * no one holds yet, or every place while the month's statues cannot be read, keeps a baseball on a cushion and says it
+ * waits for a challenger. Snow settles on the pedestals and the beds in winter as on the town's roofs.
  */
-export function BallparkStatues({ seasonChange, lampsOn, language }: GardenProps) {
+export function BallparkStatues({ seasonChange, lampsOn, language, still }: GardenProps) {
   const copy = languageCopy[language].venues.ballpark.statues
+  const podium = usePodium()
+  // Read again every few minutes as a new but often equal answer; the statues are built again only when it differs.
+  const placesKey = JSON.stringify(podiumPlaces(podium?.rows ?? [], language))
+  const places = useMemo(() => JSON.parse(placesKey) as PodiumPlace[], [placesKey])
   const geometries = useMemo(() => createGardenGeometries(garden), [])
   useEffect(() => () => Object.values(geometries).forEach((geometry) => geometry.dispose()), [geometries])
   const hedge = useRef<MeshStandardMaterial>(null)
@@ -82,7 +96,7 @@ export function BallparkStatues({ seasonChange, lampsOn, language }: GardenProps
       </mesh>
       <Pennants geometry={geometries.pennant} />
       <FlowerBeds plant={geometries.bedPlant} seasonChange={seasonChange} />
-      <WaitingPedestals text={copy.waiting} seasonChange={seasonChange} />
+      <PodiumStatues places={places} seasonChange={seasonChange} lampsOn={lampsOn} still={still} />
       {lamps.map((lamp) => (
         <Lamp key={lamp.id} object={lamp} lampsOn={lampsOn} />
       ))}
@@ -165,40 +179,48 @@ export function FlowerBeds({
 }
 
 /**
- * The three empty pedestals at the town's scale, merged into one mesh per material across all three, with their snow.
+ * This month's top three on their pedestals at the town's scale, merged into one mesh per material across all three,
+ * with their snow, their twinkles, and at night the lamps' light on them; an empty place keeps its waiting baseball.
+ * The twinkles hold still while `still`, and nothing else moves: the town's statues never sway.
  */
-export function WaitingPedestals({
-  text,
+export function PodiumStatues({
+  places,
   seasonChange,
+  lampsOn,
+  still,
 }: {
-  text: string
+  places: readonly PodiumPlace[]
   seasonChange: MutableRefObject<SeasonChange>
+  lampsOn: boolean
+  still: boolean
 }) {
   const [textures] = useState(createStatueTextures)
   useEffect(() => () => disposeStatueTextures(textures), [textures])
-  const webFontReady = useWebFontGlyphs(PLAQUE_FONT, text)
-  const plaques = useMemo(() => createPlaques(text, webFontReady), [text, webFontReady])
+  const [plaques] = useState(createPlaques)
   useEffect(() => () => disposePlaques(plaques), [plaques])
-  const merged = useMemo(() => {
-    const root = new Group()
-    garden.spots.forEach((spot) => {
-      const statue = createWaitingStatue(spot.rank, textures, plaques[spot.rank])
-      statue.position.set(spot.x, garden.stage.height, spot.z)
-      statue.rotation.y = spot.turn
-      statue.scale.setScalar(STATUE_SCALE)
-      root.add(statue)
-    })
-    return mergeByMaterial(root)
-  }, [plaques, textures])
+  const webFontReady = useWebFontGlyphs(PLAQUE_FONT, places.map(({ text }) => text).join(''))
+  useLayoutEffect(() => paintPlaques(plaques, places, webFontReady), [places, plaques, webFontReady])
+  const merged = useMemo(() => createPodiumStatues(garden, places, textures, plaques), [places, plaques, textures])
   useEffect(() => () => disposeMerged(merged), [merged])
-  const snow = useMemo(() => garden.spots.map((spot) => ({ spot, ...pedestalSnow(spot.rank) })), [])
+  useLayoutEffect(() => washInLampLight(merged, lampsOn), [lampsOn, merged])
+  const twinkles = useMemo(() => createTwinkles(garden, places, textures), [places, textures])
+  useEffect(() => () => disposeTwinkles(twinkles), [twinkles])
+  const snow = useMemo(
+    () => garden.spots.map((spot) => ({ spot, ...pedestalSnow(spot.rank, places[spot.rank - 1].look === null) })),
+    [places],
+  )
   useEffect(
     () => () => snow.forEach(({ onTop, onPlinth }) => [onTop, onPlinth].forEach((geometry) => geometry.dispose())),
     [snow],
   )
+  useFrame(() => {
+    const seconds = performance.now() / 1000
+    twinkles.sprites.forEach((sprite) => placeSparkle(sprite, seconds, still ? 0 : 1))
+  })
   return (
     <>
       <primitive object={merged} />
+      <primitive object={twinkles.group} />
       {snow.map(({ spot, top, onTop, onPlinth }) => (
         <group
           key={spot.rank}
@@ -216,6 +238,13 @@ export function WaitingPedestals({
               <meshStandardMaterial color="#f4fbff" roughness={1} />
             </mesh>
           </RoofSnow>
+          {lampsOn && (
+            // Where a lamp's light lands on the pedestal's top, without a light.
+            <mesh rotation-x={-Math.PI / 2} position-y={top + 0.003} renderOrder={-1}>
+              <circleGeometry args={[PEDESTAL.radius - 0.04, 48]} />
+              <meshBasicMaterial map={textures.pool} transparent opacity={0.9} depthWrite={false} />
+            </mesh>
+          )}
         </group>
       ))}
     </>

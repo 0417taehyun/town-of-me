@@ -2,10 +2,12 @@ import { BASEBALL_PATH } from '../../baseball/baseballRoute'
 import type { TownObject, TownVenues } from '../../data/models'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import { getTownRoads, type TownRoad } from '../objects/roads/roadLayout'
+import type { StatueSpot } from '../playerInteraction'
 import type { TownCollision } from '../townCollision'
 import {
   BALLPARK_GARDEN,
   type PodiumGarden,
+  podiumCardSpots,
   podiumGardenBranch,
   podiumGardenCollision,
 } from './ballpark/ballparkStatueLayout'
@@ -50,6 +52,13 @@ export function getGroundRoads(roadObjects: TownObject[], venues: TownVenues): T
     podiumGardenBranch(VENUE_PLACEMENTS[id].garden, VENUE_SLOTS[VENUE_PLACEMENTS[id].slot], roads),
   )
   return [...roads, ...venueRoads]
+}
+
+/** Where the shown venues' statue cards open. */
+export function getStatueSpots(venues: TownVenues): StatueSpot[] {
+  return openVenueIds(venues).flatMap((id) =>
+    podiumCardSpots(VENUE_PLACEMENTS[id].garden, VENUE_SLOTS[VENUE_PLACEMENTS[id].slot]),
+  )
 }
 
 /** What the visitor cannot walk through in the shown venues' podium gardens. */

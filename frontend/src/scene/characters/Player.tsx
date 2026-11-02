@@ -11,11 +11,13 @@ import type { AppLanguage } from '../../i18n/language'
 import { languageCopy } from '../../i18n/language'
 import { Character, type CharacterAnimation } from './Characters'
 import {
+  framedStatue,
   getNearbyInteraction,
   isSameInteraction,
   type Interaction,
   type InteractionRequest,
   type DialogueMessage,
+  type StatueSpot,
 } from '../playerInteraction'
 import type { Control } from '../controls'
 import { movementHoldDuration, shouldSprint } from '../controls'
@@ -61,6 +63,8 @@ type Props = {
   guestbookPosition: Vec3 | null
   /** The gates of the venues the admin shows; empty while every venue is hidden. */
   venueEntrances: VenueEntrance[]
+  /** Where the shown venues' statue cards open; empty while every venue is hidden. */
+  statueSpots: StatueSpot[]
   occupiedSeatRef: MutableRefObject<string | null>
   interactionRequest: InteractionRequest
   onInteractionChange: (interaction: Interaction | null) => void
@@ -74,7 +78,10 @@ type Props = {
   onFootstep: (x: number, z: number, running: boolean) => void
   /** What the ground is at a point, so skids leave marks on paths and snow but not on grass. */
   surfaceAt: (x: number, z: number) => GroundSurface
-  /** Where the camera should frame a conversation: the actor talking with the player, if any. */
+  /**
+   * Where the camera should frame a conversation: the actor talking with the player, or else the statue the player
+   * stopped to read, if any.
+   */
   dialogueFocusRef: MutableRefObject<Vector3 | null>
   onGuideEvent: (event: TownGuideEvent) => void
   guideStep: TownGuideStep
@@ -124,6 +131,7 @@ export function Player({
   houses,
   guestbookPosition,
   venueEntrances,
+  statueSpots,
   occupiedSeatRef,
   interactionRequest,
   onInteractionChange,
@@ -155,6 +163,9 @@ export function Player({
   const interactionRef = useRef<Interaction | null>(null)
   const sittingSeat = useRef<BenchSeat | null>(null)
   const heldSeconds = useRef(0)
+  // How long the player has stood still, so the camera frames a statue only once they stop to read it.
+  const stillSeconds = useRef(0)
+  const statueFocus = useRef(new Vector3())
   // The body's ground velocity after its last move, less whatever walls and actors took away.
   const velocity = useRef({ x: 0, z: 0 })
   const movement = useRef(createPlayerMovement())
@@ -408,6 +419,7 @@ export function Player({
     moveThroughTown(collision, actors.current, body.current, velocity.current, moveSeconds)
     speedRef.current = Math.hypot(motion.velocity.x, motion.velocity.z)
     animationRef.current = getMovementAnimation(speedRef.current)
+    stillSeconds.current = speedRef.current < 0.3 ? stillSeconds.current + delta : 0
 
     movementDirection.current.lerp(wantedDirection, dampingAlpha(10, delta))
     if (wantedDirection.lengthSq() === 0 && movementDirection.current.lengthSq() < 0.0001)
@@ -445,13 +457,16 @@ export function Player({
         houses,
         guestbookPosition,
         venueEntrances,
+        statueSpots,
         labels: {
           guestbook: languageCopy[language].guestbook.boardPrompt,
           house: languageCopy[language].app.tryHouseDoor,
           pet: languageCopy[language].pet.petAction(petName),
+          statue: languageCopy[language].venues.ballpark.statues.sign,
         },
       }),
     )
+    dialogueFocusRef.current ??= framedStatue(interactionRef.current, stillSeconds.current, statueFocus.current)
   }, -3)
 
   return (

@@ -49,8 +49,9 @@ import type { StatueTextures } from './statueTextures'
 
 // A painted statue (leaderboard spec §6.5): the visitor's character in its own colors, glossy like a vinyl figure, on a
 // round trophy pedestal whose metal says the place. First lifts a cup and cheers, second rests a bat on the shoulder and
-// waves, third cheers with both arms. An empty pedestal holds a plaster figure and no props. The plaque carries only
-// its place's star: names and links are page text, which reads clearly, links for real, and reaches a screen reader.
+// waves, third cheers with both arms. An empty pedestal holds a plaster figure and no props. On the board the plaque
+// carries only its place's star: names and links are page text, which reads clearly, links for real, and reaches a
+// screen reader. The town's statues stand still with the name on the plaque, and an empty one holds a baseball instead.
 // Origin at the pedestal's floor centre, facing +z.
 
 export type PaintedStatue = {
@@ -596,13 +597,17 @@ export function collectPart(object: Object3D, parts: Map<string, MaterialParts>)
   parts.set(look, part)
 }
 
-/** A statue of `look` in `rank`'s place: a pedestal with a figure, or with plaster and no props while empty. */
-export function createPaintedStatue(look: StatueLook, rank: StatueRank, textures: StatueTextures): PaintedStatue {
+/**
+ * What a statue of `look` in `rank`'s place is made of, still: its pedestal with `plaque` in front, and on it the
+ * figure in its place's pose with its prop and rosette, or plaster and no props while empty. Returns it with the
+ * figure, the town's shared geometry the figure draws with, the pedestal top's height, and the waving arm's rest.
+ */
+export function createStatueBody(look: StatueLook, rank: StatueRank, textures: StatueTextures, plaque: Texture) {
   const standing = look !== null
   const finish = RANK_FINISHES[rank]
   const group = new Group()
   const metal = createPlaceMetal(finish, textures)
-  const { pedestal, top } = createPedestal(finish, metal, textures, textures.plaques[rank])
+  const { pedestal, top } = createPedestal(finish, metal, textures, plaque)
   const figure = createStatueFigure(lookProfile(look), statuePaint(look, textures))
   // Collected before any prop goes on, so the props are freed with the statue and the town's geometry never is.
   const shared = figureGeometries(figure)
@@ -616,10 +621,18 @@ export function createPaintedStatue(look: StatueLook, rank: StatueRank, textures
     rosette.position.set(0.16, 1.12, 0.2)
     figure.body.add(rosette)
   })
+  group.add(pedestal, figure.root)
+  return { group, figure, shared, top, waveRest }
+}
+
+/** A statue of `look` in `rank`'s place: a pedestal with a figure, or with plaster and no props while empty. */
+export function createPaintedStatue(look: StatueLook, rank: StatueRank, textures: StatueTextures): PaintedStatue {
+  const finish = RANK_FINISHES[rank]
+  const { group, figure, shared, top, waveRest } = createStatueBody(look, rank, textures, textures.plaques[rank])
   const { spotlight, beamMaterial } = createSpotlight(top, textures)
-  const spots = standing ? SPARKLE_SPOTS[rank] : []
+  const spots = look !== null ? SPARKLE_SPOTS[rank] : []
   const sparkles = spots.map((spot, index) => createSparkle(spot, index, rank, top, textures))
-  group.add(pedestal, figure.root, spotlight, ...sparkles)
+  group.add(spotlight, ...sparkles)
   const sway = MathUtils.degToRad(finish.swayDegrees)
 
   const update = (seconds: number, motion: number) => {

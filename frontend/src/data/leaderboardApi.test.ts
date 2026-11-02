@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { DerbyInputLog } from '../baseball/game/derbyScore'
-import { fetchBoard, rankedRunBody, submitRankedRun, updateOwnRecord } from './leaderboardApi'
+import { fetchBoard, fetchPodium, rankedRunBody, submitRankedRun, updateOwnRecord } from './leaderboardApi'
 import { appearanceFields, DEFAULT_PLAYER_PROFILE, type PlayerProfile } from './playerProfile'
 
 const visitor: PlayerProfile = {
@@ -131,5 +131,39 @@ describe('leaderboard API boundary', () => {
     expect(board.ranks.map(({ id }) => id)).toEqual(['entry-4', 'entry-5', 'entry-7'])
     expect(board.ranks[0].profile).toBe(null)
     expect(board.ranks[2].linkedInProfileUrl).toBe(null)
+  })
+
+  it('reads the town’s statues without the visitor cookie, one per place, and refuses an answer it cannot place', async () => {
+    const row = (rank: number, fields: Record<string, unknown> = {}) => ({
+      id: `entry-${rank}`,
+      rank,
+      name: null,
+      nameState: 'anonymous',
+      profile: { kind: 'default' },
+      homeRuns: 3,
+      totalDistanceDm: 3601,
+      achievedOn: '2026-11-02',
+      ...fields,
+    })
+    const podium = [
+      row(1, { name: 'Momo', nameState: 'approved', linkedInProfileUrl: 'https://www.linkedin.com/in/example-momo' }),
+      row(1, { id: 'entry-again', name: 'Twice', nameState: 'approved' }),
+      row(2, { linkedInProfileUrl: 'https://www.linkedin.com.example/in/example-pip' }),
+      row(3, { profile: null }),
+      row(4),
+    ]
+    const request = vi.fn<typeof fetch>(async () => Response.json({ season: { id: '2026-11' }, podium }))
+    const read = await fetchPodium(false, request)
+    expect(request.mock.calls[0][0]).toBe('/v1/games/home-run-derby/podium')
+    expect(request.mock.calls[0][1]).toMatchObject({ credentials: 'omit' })
+    expect(read.season).toBe('2026-11')
+    expect(read.rows.map(({ id }) => id)).toEqual(['entry-1', 'entry-2'])
+    expect(read.rows.map(({ linkedInProfileUrl }) => linkedInProfileUrl)).toEqual([
+      'https://www.linkedin.com/in/example-momo',
+      null,
+    ])
+
+    const unplaced = vi.fn<typeof fetch>(async () => Response.json({ season: { id: 'November' }, podium }))
+    await expect(fetchPodium(true, unplaced)).rejects.toThrow()
   })
 })

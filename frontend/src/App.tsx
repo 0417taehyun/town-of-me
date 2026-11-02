@@ -40,6 +40,7 @@ const CharacterCreator = lazy(() =>
   import('./ui/CharacterCreator').then((module) => ({ default: module.CharacterCreator })),
 )
 const GuestbookBoard = lazy(() => import('./ui/GuestbookPanel').then((module) => ({ default: module.GuestbookBoard })))
+const StatueCard = lazy(() => import('./ui/StatueCard').then((module) => ({ default: module.StatueCard })))
 const AdminGate = lazy(() => import('./editor/AdminGate').then((module) => ({ default: module.AdminGate })))
 const TownEditorPanel = lazy(() =>
   import('./editor/TownEditorPanel').then((module) => ({ default: module.TownEditorPanel })),
@@ -525,6 +526,14 @@ export function TownApp() {
             onInteract={() => requestInteraction('interact')}
             onGreet={() => requestInteraction('greet')}
           />
+          {/* Stays mounted, so a card that opens as the visitor walks up to a statue is read out too. */}
+          <div className="statue-card-region" aria-live="polite">
+            {interaction?.statue && (
+              <Suspense fallback={null}>
+                <StatueCard rank={interaction.statue.rank} language={language} onLeave={enterVenue} />
+              </Suspense>
+            )}
+          </div>
           <Dialogue
             message={dialogue}
             revealTimes={dialogueReveal.revealTimes}

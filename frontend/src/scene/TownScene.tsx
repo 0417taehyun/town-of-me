@@ -37,7 +37,7 @@ import { TownGuideMarker } from './TownGuideMarker'
 import { groupTownObjects } from './townObjectGroups'
 import type { TownLayerProps } from './objects/townObjectKind'
 import { installWorldCurve } from './worldCurve'
-import { getGroundRoads, getVenueCollision, getVenueEntrances } from './venues/venuePlacements'
+import { getGroundRoads, getStatueSpots, getVenueCollision, getVenueEntrances } from './venues/venuePlacements'
 
 // Before any town material compiles; the editor's scene renders inside this one, so `/admin` bends too.
 installWorldCurve()
@@ -162,6 +162,7 @@ export function TownScene({
   const petName = town.pet.name[language]
   const ownerName = town.owner.name[language]
   const venueEntrances = useMemo(() => getVenueEntrances(town.venues, language), [language, town.venues])
+  const statueSpots = useMemo(() => getStatueSpots(town.venues), [town.venues])
   const petRoute = useMemo(() => getPetRoute(town.pet, fountain?.position), [fountain, town.pet])
   const layerProps = useMemo<TownLayerProps>(
     () => ({
@@ -249,6 +250,7 @@ export function TownScene({
             houses={groups.houses}
             guestbookPosition={groups.guestbook?.position ?? null}
             venueEntrances={venueEntrances}
+            statueSpots={statueSpots}
             occupiedSeatRef={occupiedSeat}
             interactionRequest={interactionRequest}
             onInteractionChange={onInteractionChange}

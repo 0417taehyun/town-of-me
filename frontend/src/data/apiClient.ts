@@ -3,10 +3,13 @@
 
 const acceptJson = { Accept: 'application/json' }
 
-/** The API shares this page's origin, so the session cookie is never offered to any other origin. */
+/**
+ * The API shares this page's origin, so the session cookie is never offered to any other origin; a public read may
+ * leave it off altogether (`credentials: 'omit'`).
+ */
 export function requestJson(path: string, init: RequestInit = {}, request: typeof fetch = fetch) {
   const headers = init.body === undefined ? acceptJson : { ...acceptJson, 'Content-Type': 'application/json' }
-  return request(path, { ...init, credentials: 'same-origin', headers })
+  return request(path, { credentials: 'same-origin', ...init, headers })
 }
 
 export async function responseRecord(response: Response) {

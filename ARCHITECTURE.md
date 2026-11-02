@@ -51,7 +51,7 @@ skids, ballpark themes, and color roles need no backend change.
 | `camera/`          | Camera defaults and pure camera math.                                                               |
 | `audio/`           | Procedural music, voices, footsteps, skid squeal, derby sounds, and the bark sample.                |
 | `i18n/language.ts` | All copy, in Korean and English.                                                                    |
-| `hooks/`           | Session, page language, local time and season, reduced motion, and retryable loading hooks.         |
+| `hooks/`           | Session, page language, local time and season, reduced motion, retryable loading, monthly statues.  |
 | `motionMath.ts`    | Shared damping and interpolation helpers; reuse them instead of redefining them.                    |
 | `testing/`         | The sample town as a test fixture. It never reaches the production bundle.                          |
 
@@ -79,7 +79,7 @@ none of the town.
 | `animals/`     | The pet corgi: model, trot, and petting responses.                                                                                                                                                                                                       |
 | `environment/` | Time of day, seasons and their transitions, sun, sky, night lights, weather particles, ground, distant land.                                                                                                                                             |
 | `venues/`      | The venues past the hedge: edge slots and their approaches (`venueSlots.ts`), placements and gates (`venuePlacements.ts`), exteriors (`VenueExteriors.tsx`), theme palettes, a material per color role, the ballpark's parts and podium garden.          |
-| `statues/`     | The painted statue of a board's top three (`paintedStatue.ts`): the character as plain Three.js (`statueFigure.ts`), the place finishes, and canvas-painted textures. The board draws it; the town's statues are to reuse it.                            |
+| `statues/`     | The painted statue of a board's top three (`paintedStatue.ts`): the character as plain Three.js (`statueFigure.ts`), the place finishes, and canvas-painted textures. The board and the town's podium garden both draw it.                               |
 
 ### Object kinds
 
@@ -179,8 +179,12 @@ coming-soon card, and neither the derby's chunk nor the camera loads. The town r
 the hedge opens at the end of the north road onto the ballpark's exterior and gate, whose prompt saves the visit and
 leaves by a full page load (`window.location.assign`), so `/baseball` gets its own CSP and camera permission and the
 visitor comes back to the gate, and a branch of that road, painted into the ground with it, leads to the podium garden
-beside it, whose approach the editor keeps clear; while it is hidden, nothing in the town hints at it. The board at
-`/baseball/ranking` opens behind the same gate with no preview, so nothing ranked shows while the ballpark is hidden.
+beside it, whose approach the editor keeps clear. There this KST month's top three stand as painted statues, still but
+for a twinkle, read from the public `/podium` (`hooks/usePodium.ts`, again every few minutes and as the month turns;
+a failed read leaves the pedestals waiting), and walking up to one opens its card (`ui/StatueCard.tsx`) through the
+player's nearby interaction, after a resident. While it is hidden, nothing in the town hints at it, nor reads
+`/podium`. The board at `/baseball/ranking` opens behind the same gate with no preview, so nothing ranked shows while
+the ballpark is hidden.
 
 `BaseballApp.tsx` then checks the device (a phone or tablet, then WebGL 2, later a computer too slow to track), the
 character, and plays the derby. Each run asks the monthly board for a ranked run as it starts and plays the rules and

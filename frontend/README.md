@@ -43,7 +43,10 @@ npm run build
   with two soft woofs.
 - **Houses:** approaching one shows its owner's name, linked to their LinkedIn profile when the town has one.
 - **The ballpark:** once the admin shows it, the hedge opens at the end of the north road onto the garden ballpark's
-  gate, and `E` there opens `/baseball`; coming back starts you at the gate. While it is hidden the hedge stays closed.
+  gate, and `E` there opens `/baseball`; coming back starts you at the gate. A branch of the road leads to a podium
+  garden where this month's home-run leaders stand as statues; walking up to one opens a card with their record, their
+  LinkedIn link once the admin approved it, and the board, and an empty pedestal invites you to swing. While it is
+  hidden the hedge stays closed and none of it shows.
 - **Guestbook:** anyone may write one note a day per browser and edit it that day. Notes appear after an admin approves
   them, and only the character's name and look are sent with a note.
 - **Time and seasons:** lighting, sky, lamps, music, birds, and clouds follow local time; the season follows the

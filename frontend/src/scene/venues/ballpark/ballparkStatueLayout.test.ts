@@ -9,6 +9,7 @@ import { gateRoad, isInsideVenueApproach, slotPointToWorld, venueEntrance, VENUE
 import {
   BALLPARK_GARDEN,
   gardenPointToSlot,
+  podiumCardSpots,
   podiumGardenBranch,
   podiumGardenCollision,
   STATUE_SCALE,
@@ -60,11 +61,12 @@ describe('the ballpark’s podium garden', () => {
       ...solids.circles.flatMap(({ x, z, radius }) => reach(x, z, radius)),
       ...boxCorners,
       ...reach(endX, endZ, branch.width * 0.76),
+      ...podiumCardSpots(garden, slot).map(({ x, z }): TownPoint => [x, z]),
     ]
     expect(points.filter((point) => !isInsideVenueApproach(slot, point))).toEqual([])
   })
 
-  it('leaves the north road open up to the gate and the branch open to the stage once the garden stands', () => {
+  it('leaves the north road open up to the gate, and the branch open to the stage and every statue’s card', () => {
     const roads = getTownRoads(SAMPLE_TOWN.objects)
     const northRoad = paintedRoadPath(gateRoad(roads, slot)!.points)
     const [, entranceZ] = venueEntrance(slot)
@@ -73,5 +75,16 @@ describe('the ballpark’s podium garden', () => {
     expect(toGate.length).toBeGreaterThan(10)
     expect(walkTouches(toGate, shown)).toEqual([])
     expect(walkTouches(branch, shown)).toEqual([])
+    const [endX, endZ] = branch[branch.length - 1]
+    const toCards = podiumCardSpots(garden, slot).map(({ x, z }) =>
+      walkTouches(
+        [
+          [endX, endZ],
+          [x, z],
+        ],
+        shown,
+      ),
+    )
+    expect(toCards).toEqual([[], [], []])
   })
 })

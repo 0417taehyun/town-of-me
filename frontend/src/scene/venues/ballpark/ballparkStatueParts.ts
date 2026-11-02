@@ -1,20 +1,28 @@
 import {
+  type CanvasTexture,
   CatmullRomCurve3,
+  Color,
   CylinderGeometry,
-  type Group,
+  Group,
   type InstancedMesh,
   LatheGeometry,
   type Material,
   type Mesh,
+  MeshStandardMaterial,
   type Object3D,
   Shape,
   ShapeGeometry,
   SphereGeometry,
+  type Sprite,
+  type Texture,
   TorusGeometry,
   TubeGeometry,
   Vector2,
   Vector3,
 } from 'three'
+import { rowName } from '../../../data/boardRecord'
+import type { BoardRow } from '../../../data/leaderboardApi'
+import { type AppLanguage, languageCopy } from '../../../i18n/language'
 import { seededFraction } from '../../../motionMath'
 import type { Season } from '../../environment/season'
 import {
@@ -27,14 +35,30 @@ import {
   getWindowProgress,
 } from '../../environment/seasonTransition'
 import { fadeInstanceColors, writeInstanceMatrices } from '../../instancedMeshes'
-import { createPodiumStageGeometry, pedestalTop } from '../../statues/paintedStatue'
-import { PEDESTAL, PEDESTAL_COLORS, RANK_FINISHES, STATUE_RANKS, type StatueRank } from '../../statues/statueFinishes'
-import { canvasTexture, paintNamePlaque } from '../../statues/statueTextures'
+import {
+  createPodiumStageGeometry,
+  createSparkle,
+  createStatueBody,
+  createWaitingStatue,
+  mergeByMaterial,
+  pedestalTop,
+  type StatueLook,
+} from '../../statues/paintedStatue'
+import {
+  PEDESTAL,
+  PEDESTAL_COLORS,
+  RANK_FINISHES,
+  SPARKLE_SPOTS,
+  STATUE_RANKS,
+  type StatueRank,
+} from '../../statues/statueFinishes'
+import { canvasTexture, paintNamePlaque, type StatueTextures } from '../../statues/statueTextures'
 import { mergeParts, partMatrix, type PlacedPart, placeInFrame, type Triple } from './ballparkParts'
-import { arcPoint, type PodiumGarden } from './ballparkStatueLayout'
+import { arcPoint, type PodiumGarden, STATUE_SCALE } from './ballparkStatueLayout'
 
-// The podium garden's shapes in its own frame (ballparkStatueLayout.ts), merged into one geometry per material, and
-// its flower beds, which bloom in the season's colors and close into buds under the snow.
+// The podium garden's shapes in its own frame (ballparkStatueLayout.ts), merged into one geometry per material; its
+// flower beds, which bloom in the season's colors and close into buds under the snow; and its statues, this month's
+// top three as the board paints them, standing still, their names on the plaques, twinkling in their places' colors.
 
 /** The bunting's pennants, in the board's colors. */
 export const BUNTING_COLORS = ['#ca7765', '#ece3cc', '#6f987c', '#d8b879', '#638fab', '#79647c']
@@ -223,32 +247,139 @@ export function snowRing(inner: number, outer: number, y: number, depth: number)
 }
 
 /**
- * The snow on an empty pedestal in winter, in statue units: on the top round the waiting ball, with a cap on the ball,
- * and on the plinth's ledge. Each rests at its own height, where `RoofSnow` grows it from.
+ * The snow on a pedestal in winter, in statue units: on the top round the figure's feet or the waiting ball, with a
+ * cap on the ball, and on the plinth's ledge. Each rests at its own height, where `RoofSnow` grows it from.
  */
-export function pedestalSnow(rank: StatueRank) {
+export function pedestalSnow(rank: StatueRank, waiting: boolean) {
   const top = pedestalTop(rank)
-  const cap: PlacedPart = {
-    geometry: new SphereGeometry(0.17, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-    at: [0, top + 0.47, 0] as Triple,
-    size: [1, 0.45, 1],
-  }
+  const caps: PlacedPart[] = waiting
+    ? [
+        {
+          geometry: new SphereGeometry(0.17, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+          at: [0, top + 0.47, 0] as Triple,
+          size: [1, 0.45, 1],
+        },
+      ]
+    : []
   return {
     top,
-    onTop: mergeParts([{ geometry: snowRing(0.36, 0.66, top, 0.05) }, cap]),
+    onTop: mergeParts([{ geometry: snowRing(0.36, 0.66, top, 0.05) }, ...caps]),
     onPlinth: snowRing(PEDESTAL.radius + 0.01, PEDESTAL.plinthRadius + 0.005, PEDESTAL.plinthHeight, 0.035),
   }
 }
 
-/** Each place's plaque saying `text`, in its own star's metal. */
-export function createPlaques(text: string, webFontReady: boolean) {
-  const plaque = (rank: StatueRank) =>
-    canvasTexture(512, 116, paintNamePlaque(PEDESTAL_COLORS.plaque, RANK_FINISHES[rank].emblem, text, webFontReady))
-  return { 1: plaque(1), 2: plaque(2), 3: plaque(3) }
+/** What stands in a place: a record's character and its name as the board shows it, or a waiting baseball. */
+export type PodiumPlace = { rank: StatueRank; look: StatueLook; text: string }
+
+/** First, second, and third place as the garden stands them from this month's rows; a place no row holds waits. */
+export function podiumPlaces(rows: readonly BoardRow[], language: AppLanguage): PodiumPlace[] {
+  const waiting = languageCopy[language].venues.ballpark.statues.waiting
+  return STATUE_RANKS.map((rank) => {
+    const row = rows.find((candidate) => candidate.rank === rank)
+    return row
+      ? { rank, look: row.profile ?? 'defaultBatter', text: rowName(row, language) }
+      : { rank, look: null, text: waiting }
+  })
 }
 
-export function disposePlaques(plaques: ReturnType<typeof createPlaques>) {
+/** A plaque canvas for each place, painted by `paintPlaques`. */
+export function createPlaques(): Record<StatueRank, CanvasTexture> {
+  const plaque = () => canvasTexture(512, 116, () => undefined)
+  return { 1: plaque(), 2: plaque(), 3: plaque() }
+}
+
+/** Paints each place's plaque with what stands there, in its own star's metal; a name changes no geometry. */
+export function paintPlaques(
+  plaques: Record<StatueRank, CanvasTexture>,
+  places: readonly PodiumPlace[],
+  webFontReady: boolean,
+) {
+  places.forEach(({ rank, text }) => paintPlaque(plaques[rank], RANK_FINISHES[rank].emblem, text, webFontReady))
+}
+
+/** Paints a plaque's canvas again with `text` beside a star in `metal`, so its texture uploads anew. */
+export function paintPlaque(plaque: CanvasTexture, metal: string, text: string, webFontReady: boolean) {
+  const canvas = plaque.image as HTMLCanvasElement
+  const context = canvas.getContext('2d')
+  plaque.needsUpdate = true
+  if (!context) return
+  context.clearRect(0, 0, canvas.width, canvas.height)
+  paintNamePlaque(PEDESTAL_COLORS.plaque, metal, text, webFontReady)(context, canvas.width, canvas.height)
+}
+
+export function disposePlaques(plaques: Record<StatueRank, CanvasTexture>) {
   STATUE_RANKS.forEach((rank) => plaques[rank].dispose())
+}
+
+/** A place's statue, origin at its pedestal's floor: the record's figure, or the waiting baseball on its cushion. */
+export function placeStatue(place: PodiumPlace, textures: StatueTextures, plaque: Texture) {
+  if (place.look === null) return createWaitingStatue(place.rank, textures, plaque)
+  return createStatueBody(place.look, place.rank, textures, plaque).group
+}
+
+/**
+ * The three statues where they stand on the stage, at the town's scale, merged into one mesh per material look across
+ * all three: they never move, so a figure costs a few draw calls rather than one per part.
+ */
+export function createPodiumStatues(
+  garden: PodiumGarden,
+  places: readonly PodiumPlace[],
+  textures: StatueTextures,
+  plaques: Record<StatueRank, Texture>,
+) {
+  const root = new Group()
+  garden.spots.forEach((spot) => {
+    const statue = placeStatue(places[spot.rank - 1], textures, plaques[spot.rank])
+    statue.position.set(spot.x, garden.stage.height, spot.z)
+    statue.rotation.y = spot.turn
+    statue.scale.setScalar(STATUE_SCALE)
+    root.add(statue)
+  })
+  return mergeByMaterial(root)
+}
+
+/** The lamps' warm light on the statues' paint and stone at night; the metal keeps the studio's shine. */
+const LAMP_WASH = new Color('#ffcf9a')
+
+export function isPaint(material: Material): material is MeshStandardMaterial {
+  return material instanceof MeshStandardMaterial && material.metalness < 0.5
+}
+
+/** Washes the statues' paint and stone in the lamps' light while they are on, as the town paints its night light. */
+export function washInLampLight(merged: Group, lampsOn: boolean) {
+  merged.children
+    .map((child) => (child as Mesh).material as Material)
+    .filter(isPaint)
+    .forEach((material) =>
+      material.emissive
+        .copy(material.color)
+        .multiply(LAMP_WASH)
+        .multiplyScalar(lampsOn ? 0.3 : 0),
+    )
+}
+
+/** The standing statues' twinkles round each figure, in the garden's frame, and the sprites that twinkle. */
+export function createTwinkles(garden: PodiumGarden, places: readonly PodiumPlace[], textures: StatueTextures) {
+  const group = new Group()
+  const standing = garden.spots.filter((spot) => places[spot.rank - 1].look !== null)
+  const sprites = standing.flatMap((spot) => {
+    const frame = new Group()
+    frame.position.set(spot.x, garden.stage.height, spot.z)
+    frame.rotation.y = spot.turn
+    frame.scale.setScalar(STATUE_SCALE)
+    const top = pedestalTop(spot.rank)
+    const twinkles = SPARKLE_SPOTS[spot.rank].map((point, index) =>
+      createSparkle(point, index, spot.rank, top, textures),
+    )
+    frame.add(...twinkles)
+    group.add(frame)
+    return twinkles
+  })
+  return { group, sprites }
+}
+
+export function disposeTwinkles({ sprites }: { sprites: Sprite[] }) {
+  sprites.forEach((sprite) => sprite.material.dispose())
 }
 
 /** Frees the merged statues' geometry and the materials they draw with; the shared textures stay. */

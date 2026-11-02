@@ -14,6 +14,8 @@ export type VenueExteriorProps<Id extends VenueId> = {
   seasonChange: MutableRefObject<SeasonChange>
   lampsOn: boolean
   language: AppLanguage
+  /** Holds what moves on its own, such as the statues' twinkles: reduced motion, or the town's motion turned off. */
+  still: boolean
   /** The color of the town road that runs up to the gate, which the venue's approach carries on. */
   approachColor: string
 }
@@ -45,6 +47,7 @@ export function VenueExteriors({
             seasonChange={scene.seasonChange}
             lampsOn={scene.lampsOn}
             language={scene.language}
+            still={scene.reducedMotion || !scene.motionEnabled}
             approachColor={gateRoadColor(townRoads, slot)}
           />
         </Suspense>

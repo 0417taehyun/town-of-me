@@ -1,5 +1,6 @@
 import type { TownPoint } from '../../../data/models'
 import { nearestPointOnRoad, type TownRoad } from '../../objects/roads/roadLayout'
+import type { StatueSpot } from '../../playerInteraction'
 import type { StatueRank } from '../../statues/statueFinishes'
 import type { CollisionBox, CollisionCircle, TownCollision } from '../../townCollision'
 import { gateRoad, gateRoadColor, slotPointToWorld, type VenueSlot } from '../venueSlots'
@@ -37,6 +38,11 @@ export type PodiumGarden = {
   lamps: readonly TownPoint[]
   sign: { x: number; z: number; turn: number; height: number }
   /**
+   * Where a visitor stands to read a statue's card: `z` in front of the centre, on the branch's pad, and `spread` of the
+   * way out toward the statue, so the nearest card is the statue straight ahead.
+   */
+  card: { z: number; spread: number }
+  /**
    * The branch path, a town road in the north road's color: it leaves that road at `start` (slot frame, moved onto
    * the road's middle), bends at `bend` (slot frame), and ends at `end` (garden frame), whose round pad is the
    * stage's forecourt. Its inner corners round to `rounding`.
@@ -63,6 +69,7 @@ export const BALLPARK_GARDEN: PodiumGarden = {
     [4.7, -0.6],
   ],
   sign: { x: 5.1, z: 1.7, turn: -0.25, height: 1.3 },
+  card: { z: 2.9, spread: 0.8 },
   // Forks forward, the way a visitor walking to the gate veers right, then bends into the pad before the stage.
   branch: { width: 3.8, rounding: 2.6, start: [-0.55, 19.5], bend: [1.63, 16.4], end: [0, 3] },
 }
@@ -143,6 +150,16 @@ export function podiumGardenCollision(garden: PodiumGarden, slot: VenueSlot): To
       sine: box.sine * slotCosine + box.cosine * slotSine,
     })),
   }
+}
+
+/** Where each statue's card opens in the town, and the statue the camera frames with the visitor there. */
+export function podiumCardSpots(garden: PodiumGarden, slot: VenueSlot): StatueSpot[] {
+  const toWorld = (point: TownPoint) => slotPointToWorld(slot, gardenPointToSlot(garden, point))
+  return garden.spots.map((spot) => {
+    const [x, z] = toWorld([spot.x * garden.card.spread, garden.card.z])
+    const [statueX, statueZ] = toWorld([spot.x, spot.z])
+    return { rank: spot.rank, x, z, statue: { x: statueX, z: statueZ } }
+  })
 }
 
 /** The branch path in the town, leaving the middle of the road that reaches the gate, in that road's color. */

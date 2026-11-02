@@ -46,6 +46,7 @@ export function BallparkExterior({
   seasonChange,
   lampsOn,
   language,
+  still,
   approachColor,
 }: VenueExteriorProps<'ballpark'>) {
   const palette = useMemo(() => resolveBallparkPalette(settings), [settings])
@@ -176,7 +177,7 @@ export function BallparkExterior({
         <meshStandardMaterial color={approachColor} roughness={1} />
       </mesh>
       <GuestbookSign title={sign} height={EXTERIOR_SIGN.height} position={EXTERIOR_SIGN.at} />
-      <BallparkStatues seasonChange={seasonChange} lampsOn={lampsOn} language={language} />
+      <BallparkStatues seasonChange={seasonChange} lampsOn={lampsOn} language={language} still={still} />
       {lampsOn && (
         <>
           <Halos positions={glows.towers} size={11} />

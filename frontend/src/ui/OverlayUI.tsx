@@ -22,7 +22,8 @@ export function InteractionPrompt({
   onInteract: () => void
   onGreet: () => void
 }) {
-  if (!interaction) return null
+  // A statue's card opens on its own as the visitor comes near (StatueCard.tsx); there is nothing to press.
+  if (!interaction || interaction.kind === 'statue') return null
   return (
     <div className="interaction-prompt">
       <button type="button" onClick={onInteract} aria-label={interaction.label}>

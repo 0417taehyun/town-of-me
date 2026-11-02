@@ -7,7 +7,7 @@ import { BASEBALL_PATH } from '../baseball/baseballRoute'
 import { DEFAULT_TOWN_VENUES, type TownObject } from '../data/models'
 import { getHouseApproachPosition } from './objects/houses/houseLayout'
 import { createTownCollision, moveThroughTown } from './townCollision'
-import { getVenueEntrances } from './venues/venuePlacements'
+import { getStatueSpots, getVenueEntrances } from './venues/venuePlacements'
 
 function actor(id: string, x: number, z: number, seatId?: string): WorldActor {
   return {
@@ -27,7 +27,7 @@ const seats: BenchSeat[] = [
   { id: 'near', x: 1, z: 0, rotation: 0 },
   { id: 'far', x: 8, z: 0, rotation: 0 },
 ]
-const labels = { guestbook: '방명록 보기', house: '문 열어보기', pet: 'Pet Robin' }
+const labels = { guestbook: '방명록 보기', house: '문 열어보기', pet: 'Pet Robin', statue: 'Home run champions' }
 
 describe('nearby player interaction', () => {
   it('prioritizes the nearest actor over a bench', () => {
@@ -90,5 +90,21 @@ describe('nearby player interaction', () => {
     const resident = actor('maple', walker.x + 1, walker.z)
     expect(getNearbyInteraction(walker, { ...options, actors: [resident] })).toMatchObject({ kind: 'actor' })
     expect(getNearbyInteraction(new Vector3(0, 0, -46), options)).toBeNull()
+  })
+
+  it('opens the card of the statue a visitor walks up to, after a nearby resident, and none while the ballpark is hidden', () => {
+    const statueSpots = getStatueSpots({ ballpark: { ...DEFAULT_TOWN_VENUES.ballpark, visible: true } })
+    const options = { actors: [], seats: [], statueSpots, labels }
+    const opened = statueSpots.map(({ x, z }) => getNearbyInteraction(new Vector3(x, 0, z), options)?.statue?.rank)
+    expect(opened).toEqual(statueSpots.map(({ rank }) => rank))
+
+    const [first] = statueSpots
+    const reader = new Vector3(first.x, 0, first.z)
+    expect(
+      getNearbyInteraction(reader, { ...options, actors: [actor('maple', reader.x + 1, reader.z)] }),
+    ).toMatchObject({
+      kind: 'actor',
+    })
+    expect(getStatueSpots(DEFAULT_TOWN_VENUES)).toEqual([])
   })
 })
