@@ -3,7 +3,8 @@ import { type AppLanguage, languageCopy } from '../../i18n/language'
 import { type BaseballExit, BOARD_PATH, EXIT_PATHS } from '../baseballRoute'
 import type { BoardLine } from '../flow/rankedRun'
 import type { DerbyResult } from '../game/derbyScore'
-import { boardLineText, homeRunDistanceText, resultRow } from './derbyCues'
+import { homeRunDistanceText } from '../../data/boardRecord'
+import { boardLineText, resultRow } from './derbyCues'
 import { StanceGauge } from './StanceGauge'
 
 /**

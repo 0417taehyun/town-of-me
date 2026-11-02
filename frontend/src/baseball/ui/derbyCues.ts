@@ -1,4 +1,5 @@
 import type { DerbySound } from '../../audio/derbySounds'
+import { distanceText, recordText } from '../../data/boardRecord'
 import type { LinkedInStatus } from '../../data/leaderboardApi'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import type { CameraStateId } from '../cameraTracking'
@@ -163,25 +164,6 @@ export function practiceCaptionId(hud: DerbyHudState, feedback: PracticeFeedback
   return hud.phase === 'result' ? 'letGo' : 'coming'
 }
 
-/**
- * A distance as each language writes it, in whole meters unless `fractionDigits` asks for that many decimals, kept
- * even when zero so a column of them lines up: "132 m" in English, "132m" in Korean.
- */
-export function distanceText(decimetres: number, language: AppLanguage, fractionDigits = 0) {
-  const format = new Intl.NumberFormat(language, {
-    style: 'unit',
-    unit: 'meter',
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-  })
-  return format.format(decimetres / 10)
-}
-
-/** A home run distance, or a dash before there is one. */
-export function homeRunDistanceText(decimetres: number, language: AppLanguage, fractionDigits = 0) {
-  return decimetres > 0 ? distanceText(decimetres, language, fractionDigits) : '—'
-}
-
 /** How far a ball in play went, to `fractionDigits` of a meter; a foul's, a strike's, or a miss's distance says nothing. */
 export function inPlayDistance(result: PitchResult, language: AppLanguage, fractionDigits = 0) {
   const inPlay = result.outcome === 'homeRun' || result.outcome === 'hit'
@@ -195,11 +177,6 @@ export function inPlayDistance(result: PitchResult, language: AppLanguage, fract
  */
 export function resultRow(result: PitchResult, language: AppLanguage) {
   return { outcome: pitchOutcome(result), distance: inPlayDistance(result, language, 1) }
-}
-
-/** A record on the board as its places read: home runs and their total distance, to the decimeter it ranks by. */
-export function recordText(homeRuns: number, totalDistanceDm: number, language: AppLanguage) {
-  return languageCopy[language].baseball.board.record(homeRuns, homeRunDistanceText(totalDistanceDm, language, 1))
 }
 
 /** The result card's line about the monthly board (flow/rankedRun.ts boardLine). */

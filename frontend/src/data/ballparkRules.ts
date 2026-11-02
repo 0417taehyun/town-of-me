@@ -17,6 +17,11 @@ export function nextRankingMonth(month: string) {
   return new Date(Date.UTC(year, monthNumber, 1)).toISOString().slice(0, 7)
 }
 
+/** When the ranking month `month` ends: midnight KST as the next month starts. */
+export function seasonEndsAt(month: string) {
+  return Date.parse(`${nextRankingMonth(month)}-01T00:00:00.000Z`) - kstOffsetMilliseconds
+}
+
 /** The ranking month before a `YYYY-MM` month. */
 export function previousRankingMonth(month: string) {
   const [year, monthNumber] = month.split('-').map(Number)

@@ -1,6 +1,5 @@
 import { kstOffsetMilliseconds } from '../../data/ballparkRules'
 import type { BoardOwnEntry, BoardRow } from '../../data/leaderboardApi'
-import { linkedInAddressText } from '../../data/linkedInProfile'
 import { normalizePlayerProfile, type PlayerProfile } from '../../data/playerProfile'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import type { StatueLook } from '../../scene/statues/paintedStatue'
@@ -76,13 +75,6 @@ export function seasonResetText(endsAt: number, language: AppLanguage) {
   )
 }
 
-/** A record's name as the board shows it: approved, under review, or an anonymous batter. */
-export function rowName(row: BoardRow, language: AppLanguage) {
-  const copy = languageCopy[language].baseball.leaderboard
-  if (row.nameState === 'approved' && row.name) return row.name
-  return row.nameState === 'reviewing' ? copy.nameReviewing : copy.nameAnonymous
-}
-
 /**
  * The character a listing posts from the board: the look the record already has, so posting does not send it back to
  * review, and the LinkedIn link of the character this tab plays as, which is the only link the visitor can offer.
@@ -102,9 +94,4 @@ export function ownHeadline(own: BoardOwnEntry, final: boolean, month: string, l
   if (!own.listed) return copy.board.offBoard(own.rank)
   if (final) return copy.leaderboard.ownFinalRank(month, own.rank)
   return own.rank <= STATUE_RANKS.length ? copy.board.statue(own.rank) : copy.leaderboard.ownRank(own.rank)
-}
-
-/** A statue's chip reads `in/<id>` beside the LinkedIn mark, decoded when it can be, so it says where it leads. */
-export function linkedInChipText(profileUrl: string) {
-  return linkedInAddressText(profileUrl).replace(/^linkedin\.com\//u, '')
 }

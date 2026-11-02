@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import { homeRunDistanceText } from '../../data/boardRecord'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import {
   bannerResult,
@@ -6,7 +7,6 @@ import {
   captionId,
   captionShown,
   type DerbyHudState,
-  homeRunDistanceText,
   outcomeTitle,
   pitchDots,
   scoreboardEms,

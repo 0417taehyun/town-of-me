@@ -4,8 +4,10 @@ import {
   nextRankingMonth,
   previousRankingMonth,
   rankingMonth,
+  seasonEndsAt,
   upcomingBallparkRules,
 } from '../../data/ballparkRules'
+import { homeRunDistanceText, linkedInChipText, recordText, rowName } from '../../data/boardRecord'
 import { getBrowserSessionStore, readStoredSession } from '../../data/InMemoryDemoRepository'
 import {
   type Board,
@@ -28,19 +30,17 @@ import { copyText } from '../../scene/webglSupport'
 import { STATUE_RANKS, type StatueRank } from '../../scene/statues/statueFinishes'
 import { LanguageSelect } from '../../ui/LanguageSelect'
 import { BASEBALL_PATH, BOARD_PATH } from '../baseballRoute'
-import { homeRunDistanceText, linkedInStatusText, recordText } from '../ui/derbyCues'
+import { linkedInStatusText } from '../ui/derbyCues'
 import { DeleteOwnRecords, ListingView } from '../ui/ListingView'
 import { BoardPodium } from './BoardPodium'
-import { daysUntilSeasonEnds, oldestShownSeason, requestedSeason, seasonEndsAt, seasonSearch } from './boardSeason'
+import { daysUntilSeasonEnds, oldestShownSeason, requestedSeason, seasonSearch } from './boardSeason'
 import {
   hasSeenReveal,
   isOwnRow,
-  linkedInChipText,
   listingBatter,
   noteRevealSeen,
   ownHeadline,
   recordNumber,
-  rowName,
   seasonResetText,
   statueLooks,
   takedownHref,

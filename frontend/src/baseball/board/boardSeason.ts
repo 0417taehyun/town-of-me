@@ -1,4 +1,4 @@
-import { kstOffsetMilliseconds, nextRankingMonth, previousRankingMonth } from '../../data/ballparkRules'
+import { kstOffsetMilliseconds, previousRankingMonth } from '../../data/ballparkRules'
 
 // The board's seasons, KST calendar months written `YYYY-MM`, as the page shows and moves between them.
 
@@ -28,11 +28,6 @@ export function oldestShownSeason(currentSeason: string) {
 export function daysUntilSeasonEnds(endsAt: number, now: number) {
   const kstDay = (time: number) => Math.floor((time + kstOffsetMilliseconds) / dayMilliseconds)
   return Math.max(0, kstDay(endsAt) - kstDay(now))
-}
-
-/** When `season` ends: midnight KST as the next month starts. */
-export function seasonEndsAt(season: string) {
-  return Date.parse(`${nextRankingMonth(season)}-01T00:00:00.000Z`) - kstOffsetMilliseconds
 }
 
 /** The board's address for `season`, or for this month's board. */

@@ -5,7 +5,8 @@ import type { PlayerProfile } from '../../data/playerProfile'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import { copyText } from '../../scene/webglSupport'
 import { type ListingFailure, listingChoice, type ListingForm, listingProblem, saveFailure } from '../flow/rankedRun'
-import { linkedInStatusText, recordText } from './derbyCues'
+import { recordText } from '../../data/boardRecord'
+import { linkedInStatusText } from './derbyCues'
 
 /**
  * The visitor's own record on this month's board, read at the computer rather than from the plate: off the board, it
