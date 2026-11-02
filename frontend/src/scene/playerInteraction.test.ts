@@ -3,8 +3,11 @@ import { Vector3 } from 'three'
 import type { BenchSeat } from './motion/characterPose'
 import type { WorldActor } from './motion/npcMotion'
 import { getNearbyInteraction } from './playerInteraction'
-import type { TownObject } from '../data/models'
+import { BASEBALL_PATH } from '../baseball/baseballRoute'
+import { DEFAULT_TOWN_VENUES, type TownObject } from '../data/models'
 import { getHouseApproachPosition } from './objects/houses/houseLayout'
+import { createTownCollision, moveThroughTown } from './townCollision'
+import { getVenueEntrances } from './venues/venuePlacements'
 
 function actor(id: string, x: number, z: number, seatId?: string): WorldActor {
   return {
@@ -74,5 +77,18 @@ describe('nearby player interaction', () => {
       kind: 'house',
       label: '문 열어보기',
     })
+  })
+
+  it("offers a shown venue's gate to a visitor who walks up the north road into the fence, after a nearby resident", () => {
+    const venueEntrances = getVenueEntrances({ ballpark: { ...DEFAULT_TOWN_VENUES.ballpark, visible: true } }, 'en')
+    const options = { actors: [], seats: [], venueEntrances, labels }
+    const walker = new Vector3(0, 0, -40)
+    moveThroughTown(createTownCollision([]), [], walker, { x: 0, z: -6 }, 5)
+    expect(walker.z).toBeGreaterThan(-53)
+
+    expect(getNearbyInteraction(walker, options)).toMatchObject({ kind: 'venue', href: BASEBALL_PATH })
+    const resident = actor('maple', walker.x + 1, walker.z)
+    expect(getNearbyInteraction(walker, { ...options, actors: [resident] })).toMatchObject({ kind: 'actor' })
+    expect(getNearbyInteraction(new Vector3(0, 0, -46), options)).toBeNull()
   })
 })

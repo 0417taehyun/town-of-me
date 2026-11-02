@@ -42,6 +42,8 @@ npm run build
 - **The pet:** a corgi that walks a loop around the fountain, or the walk the admin drew. `E` pets it and `G` greets it
   with two soft woofs.
 - **Houses:** approaching one shows its owner's name, linked to their LinkedIn profile when the town has one.
+- **The ballpark:** once the admin shows it, the hedge opens at the end of the north road onto the garden ballpark's
+  gate, and `E` there opens `/baseball`; coming back starts you at the gate. While it is hidden the hedge stays closed.
 - **Guestbook:** anyone may write one note a day per browser and edit it that day. Notes appear after an admin approves
   them, and only the character's name and look are sent with a note.
 - **Time and seasons:** lighting, sky, lamps, music, birds, and clouds follow local time; the season follows the
@@ -73,7 +75,8 @@ clouds, birds, and water; the system's reduced-motion setting slows them instead
 ## Home-run derby
 
 `/baseball` is a home-run derby in a garden ballpark, batting as your town character, once the admin shows the
-ballpark; until then it says it is coming soon and loads nothing else.
+ballpark; until then it says it is coming soon and loads nothing else. In the town, its gate is at the end of the
+north road.
 
 - **Rules:** the pitch count (3–10) and difficulty set for this month in Korean time; a change starts next month.
 - **What counts:** home runs and their total distance. A ball in play is a home run, a hit, or a foul; a pitch let go is

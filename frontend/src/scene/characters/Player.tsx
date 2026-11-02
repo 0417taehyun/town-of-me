@@ -44,6 +44,7 @@ import { TownGuide } from '../../ui/TownGuide'
 import { clamp, dampAngle, dampingAlpha } from '../../motionMath'
 import { moveThroughTown, type TownCollision } from '../townCollision'
 import { placeCurvedLabel } from '../worldLabels'
+import type { VenueEntrance } from '../venues/venuePlacements'
 
 type Props = {
   profile: PlayerProfile
@@ -58,6 +59,8 @@ type Props = {
   seats: BenchSeat[]
   houses: TownObject[]
   guestbookPosition: Vec3 | null
+  /** The gates of the venues the admin shows; empty while every venue is hidden. */
+  venueEntrances: VenueEntrance[]
   occupiedSeatRef: MutableRefObject<string | null>
   interactionRequest: InteractionRequest
   onInteractionChange: (interaction: Interaction | null) => void
@@ -83,6 +86,8 @@ type Props = {
   ownerResidentId: string | null
   onGuestbookOpen: () => void
   onHouseUnavailable: () => void
+  /** Leaves the town for a venue's page through its gate. */
+  onVenueEnter: (href: string) => void
   /** Drops the hop as an interaction starts and the dust kicked up by running. */
   reducedMotion: boolean
 }
@@ -118,6 +123,7 @@ export function Player({
   seats,
   houses,
   guestbookPosition,
+  venueEntrances,
   occupiedSeatRef,
   interactionRequest,
   onInteractionChange,
@@ -137,6 +143,7 @@ export function Player({
   ownerResidentId,
   onGuestbookOpen,
   onHouseUnavailable,
+  onVenueEnter,
   reducedMotion,
 }: Props) {
   const body = useRef(new Vector3(spawn.x, FEET_BELOW_CENTER, spawn.z))
@@ -312,6 +319,10 @@ export function Player({
       onHouseUnavailable()
       return
     }
+    if (interaction.kind === 'venue' && interaction.href) {
+      onVenueEnter(interaction.href)
+      return
+    }
     if (interaction.kind === 'bench' && interaction.seat) {
       sit(interaction.seat)
       return
@@ -433,6 +444,7 @@ export function Player({
         seats,
         houses,
         guestbookPosition,
+        venueEntrances,
         labels: {
           guestbook: languageCopy[language].guestbook.boardPrompt,
           house: languageCopy[language].app.tryHouseDoor,

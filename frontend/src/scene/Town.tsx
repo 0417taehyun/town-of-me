@@ -15,6 +15,8 @@ import { getContactShadowLayout, getTownLayers } from './objects/kinds'
 import { getTownRoads } from './objects/roads/roadLayout'
 import type { TownLayerProps } from './objects/townObjectKind'
 import { groupTownObjects } from './townObjectGroups'
+import { openVenueSlots } from './venues/venuePlacements'
+import { VenueExteriors } from './venues/VenueExteriors'
 
 const groundColors = getSeasonColors('ground')
 
@@ -73,16 +75,21 @@ export function TownGround({
   )
 }
 
-/** The ground, then every kind's layer from the registry, then the contact shadows under them. */
+/**
+ * The ground, the land past the hedge with the venues the admin shows, then every kind's layer from the registry, then
+ * the contact shadows under them.
+ */
 export const Town = memo(function Town({ town, scene }: { town: TownSnapshot; scene: TownLayerProps }) {
   const groups = useMemo(() => groupTownObjects(town.objects), [town.objects])
   const layers = useMemo(() => getTownLayers(town.objects), [town.objects])
   const shadowPatches = useMemo(() => getContactShadowLayout(town.objects), [town.objects])
+  const openSlots = useMemo(() => openVenueSlots(town.venues), [town.venues])
   return (
     <>
       <TownGround seasonChange={scene.seasonChange} roads={groups.roads} fountain={groups.fountain} />
       <SnowFootprints playerPosition={scene.playerPosition} seasonChange={scene.seasonChange} />
-      <DistantWorld seasonChange={scene.seasonChange} />
+      <DistantWorld seasonChange={scene.seasonChange} openSlots={openSlots} />
+      <VenueExteriors venues={town.venues} roads={groups.roads} scene={scene} />
       {layers.map(({ Layer, objects }, index) => (
         <Layer key={index} objects={objects} scene={scene} />
       ))}

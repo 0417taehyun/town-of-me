@@ -38,6 +38,7 @@ import { TownGuideMarker } from './TownGuideMarker'
 import { groupTownObjects } from './townObjectGroups'
 import type { TownLayerProps } from './objects/townObjectKind'
 import { installWorldCurve } from './worldCurve'
+import { getVenueEntrances } from './venues/venuePlacements'
 
 // Before any town material compiles; the editor's scene renders inside this one, so `/admin` bends too.
 installWorldCurve()
@@ -70,6 +71,8 @@ type Props = {
   language: AppLanguage
   onGuestbookOpen: () => void
   onHouseUnavailable: () => void
+  /** Saves the visit and leaves for a venue's page; only a shown venue's gate offers it. */
+  onVenueEnter: (href: string) => void
   onFovChange: (fov: number) => void
   photoRequest: number
   onPhotoCapture: (saved: boolean) => void
@@ -118,6 +121,7 @@ export function TownScene({
   language,
   onGuestbookOpen,
   onHouseUnavailable,
+  onVenueEnter,
   onFovChange,
   photoRequest,
   onPhotoCapture,
@@ -155,6 +159,7 @@ export function TownScene({
     onFootstep({ x, z, running, snow: getSnowCover(seasonChange.current, seasonClock()) })
   const petName = town.pet.name[language]
   const ownerName = town.owner.name[language]
+  const venueEntrances = useMemo(() => getVenueEntrances(town.venues, language), [language, town.venues])
   const petRoute = useMemo(() => getPetRoute(town.pet, fountain?.position), [fountain, town.pet])
   const layerProps = useMemo<TownLayerProps>(
     () => ({
@@ -241,6 +246,7 @@ export function TownScene({
             seats={seats}
             houses={groups.houses}
             guestbookPosition={groups.guestbook?.position ?? null}
+            venueEntrances={venueEntrances}
             occupiedSeatRef={occupiedSeat}
             interactionRequest={interactionRequest}
             onInteractionChange={onInteractionChange}
@@ -260,6 +266,7 @@ export function TownScene({
             ownerResidentId={town.owner.residentId}
             onGuestbookOpen={onGuestbookOpen}
             onHouseUnavailable={onHouseUnavailable}
+            onVenueEnter={onVenueEnter}
             reducedMotion={reducedMotion}
           />
           {onAmbience && (

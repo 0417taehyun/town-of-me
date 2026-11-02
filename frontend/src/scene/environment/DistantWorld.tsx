@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useMemo, useRef } from 'react'
 import type { MutableRefObject } from 'react'
 import { InstancedMesh, MeshStandardMaterial, Object3D } from 'three'
 import {
@@ -14,13 +14,21 @@ import { writeInstanceMatrices } from '../instancedMeshes'
 import { getSeasonColors } from './season'
 import type { SeasonChange } from './seasonTransition'
 import { useSeasonalColor } from './useSeasonChange'
+import { keptForestTreeIndices, keptHedgeBushIndices, type VenueSlot } from '../venues/venueSlots'
 
 const distantGroundColors = getSeasonColors('distantGround')
 const hillColors = getSeasonColors('hills')
 const distantCrownColors = getSeasonColors('distantCrown')
 const hedgeColors = getSeasonColors('hedge')
 
-export function DistantWorld({ seasonChange }: { seasonChange: MutableRefObject<SeasonChange> }) {
+/** The land past the town's hedge; the hedge opens and the forest clears where a shown venue stands (`openSlots`). */
+export function DistantWorld({
+  seasonChange,
+  openSlots,
+}: {
+  seasonChange: MutableRefObject<SeasonChange>
+  openSlots: readonly VenueSlot[]
+}) {
   const crowns = useRef<InstancedMesh>(null)
   const trunks = useRef<InstancedMesh>(null)
   const hills = useRef<InstancedMesh>(null)
@@ -33,17 +41,19 @@ export function DistantWorld({ seasonChange }: { seasonChange: MutableRefObject<
   useSeasonalColor(hillMaterial, seasonChange, hillColors, 'ground')
   useSeasonalColor(crownMaterial, seasonChange, distantCrownColors, 'foliage')
   useSeasonalColor(hedgeMaterial, seasonChange, hedgeColors, 'ground')
+  const trees = useMemo(() => keptForestTreeIndices(openSlots), [openSlots])
+  const bushes = useMemo(() => keptHedgeBushIndices(openSlots), [openSlots])
 
   useLayoutEffect(() => {
     const dummy = new Object3D()
-    writeInstanceMatrices(crowns.current, dummy, DISTANT_TREE_COUNT, setForestTree)
-    writeInstanceMatrices(trunks.current, dummy, DISTANT_TREE_COUNT, setForestTrunk)
+    writeInstanceMatrices(crowns.current, dummy, trees.length, (crown, index) => setForestTree(crown, trees[index]))
+    writeInstanceMatrices(trunks.current, dummy, trees.length, (trunk, index) => setForestTrunk(trunk, trees[index]))
     writeInstanceMatrices(hills.current, dummy, DISTANT_HILL_COUNT, setDistantHill)
-    writeInstanceMatrices(hedge.current, dummy, DISTANT_HEDGE_COUNT, setHedgeBush)
+    writeInstanceMatrices(hedge.current, dummy, bushes.length, (bush, index) => setHedgeBush(bush, bushes[index]))
     ;[crowns.current, trunks.current, hills.current, hedge.current]
       .filter((mesh) => mesh !== null)
       .forEach((mesh) => mesh.computeBoundingSphere())
-  }, [])
+  }, [bushes, trees])
 
   return (
     <group>
@@ -55,15 +65,15 @@ export function DistantWorld({ seasonChange }: { seasonChange: MutableRefObject<
         <sphereGeometry args={[1, 20, 10]} />
         <meshStandardMaterial ref={hillMaterial} roughness={1} />
       </instancedMesh>
-      <instancedMesh ref={trunks} args={[undefined, undefined, DISTANT_TREE_COUNT]}>
+      <instancedMesh ref={trunks} args={[undefined, undefined, DISTANT_TREE_COUNT]} count={trees.length}>
         <cylinderGeometry args={[1, 1.2, 1, 8]} />
         <meshStandardMaterial color="#726854" roughness={1} />
       </instancedMesh>
-      <instancedMesh ref={crowns} args={[undefined, undefined, DISTANT_TREE_COUNT]}>
+      <instancedMesh ref={crowns} args={[undefined, undefined, DISTANT_TREE_COUNT]} count={trees.length}>
         <coneGeometry args={[1, 1, 10]} />
         <meshStandardMaterial ref={crownMaterial} roughness={1} />
       </instancedMesh>
-      <instancedMesh ref={hedge} args={[undefined, undefined, DISTANT_HEDGE_COUNT]} receiveShadow>
+      <instancedMesh ref={hedge} args={[undefined, undefined, DISTANT_HEDGE_COUNT]} count={bushes.length} receiveShadow>
         <dodecahedronGeometry args={[1, 1]} />
         <meshStandardMaterial ref={hedgeMaterial} roughness={1} />
       </instancedMesh>

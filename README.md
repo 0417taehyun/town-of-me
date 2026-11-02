@@ -17,6 +17,8 @@ note in the guestbook. The owner arranges the whole town in a built-in editor.
 - **The owner:** an optional introduction before visitors make their character, and a button to reach the owner by
   email.
 - **Guestbook:** anyone can write; notes appear after an admin approves them.
+- **Ballpark:** once an admin shows it, a garden ballpark's gate opens at the town's north edge onto `/baseball`, a
+  home-run derby swung with the webcam, which never leaves the browser.
 - **Editor at `/admin`:** place, move, recolor, and remove every house, tree, road, and bench; register residents;
   edit the owner's introduction and the pet's walk; choose how everyone walks; moderate the guestbook; and manage who
   else may edit. Routes that cut through houses or trees are flagged. Admins sign in with LinkedIn.

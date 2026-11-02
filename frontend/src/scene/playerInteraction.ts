@@ -4,6 +4,7 @@ import type { ResidentQuestion, ResidentQuestionId } from '../data/residentDialo
 import type { BenchSeat } from './motion/characterPose'
 import { getHouseApproachPosition } from './objects/houses/houseLayout'
 import type { WorldActor } from './motion/npcMotion'
+import type { VenueEntrance } from './venues/venuePlacements'
 
 export type DialogueMessage = {
   speaker: string
@@ -21,10 +22,12 @@ export type InteractionRequest = { sequence: number; action: 'interact' | 'greet
 
 export type Interaction = {
   id: string
-  kind: 'actor' | 'bench' | 'guestbook' | 'house'
+  kind: 'actor' | 'bench' | 'guestbook' | 'house' | 'venue'
   label: string
   actorId?: string
   seat?: BenchSeat
+  /** The page a venue's gate leads to. */
+  href?: string
 }
 
 /** The item closest by `distanceSquared`, the earlier one on a tie; null when there are none. */
@@ -56,12 +59,13 @@ export type NearbyInteractionOptions = {
   seats: BenchSeat[]
   houses?: TownObject[]
   guestbookPosition?: Vec3 | null
+  venueEntrances?: VenueEntrance[]
   labels: { guestbook: string; house: string; pet: string }
 }
 
 export function getNearbyInteraction(
   position: Vector3,
-  { actors, seats, houses = [], guestbookPosition = null, labels }: NearbyInteractionOptions,
+  { actors, seats, houses = [], guestbookPosition = null, venueEntrances = [], labels }: NearbyInteractionOptions,
 ): Interaction | null {
   const actor = findNearest(actors, (candidate) => position.distanceToSquared(candidate.position))
   if (actor && actor.position.distanceToSquared(position) < 2.6 ** 2) {
@@ -79,6 +83,10 @@ export function getNearbyInteraction(
   const house = findNearest(houses, (candidate) => houseDoorDistanceSquared(position, candidate))
   if (house && houseDoorDistanceSquared(position, house) < 2.6 ** 2)
     return { id: `door-${house.id}`, kind: 'house', label: labels.house }
+
+  const entrance = findNearest(venueEntrances, (candidate) => groundDistanceSquared(position, candidate))
+  if (entrance && groundDistanceSquared(position, entrance) < 3 ** 2)
+    return { id: `venue-${entrance.id}`, kind: 'venue', label: entrance.label, href: entrance.href }
 
   const freeSeats = seats.filter((seat) => !actors.some((actor) => actor.seatId === seat.id))
   const seat = findNearest(freeSeats, (candidate) => groundDistanceSquared(position, candidate))

@@ -13,7 +13,8 @@ import {
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 // The garden ballpark's shared parts: shapes placed in a frame and merged into one geometry per material, the corgi
-// topiary, and the flower-stem light towers. baseball/stadium/landmarkLayout.ts places them round the field.
+// topiary, and the flower-stem light towers. baseball/stadium/landmarkLayout.ts places them round the field, and
+// ballparkExteriorLayout.ts past the town's hedge.
 
 export type Triple = readonly [number, number, number]
 

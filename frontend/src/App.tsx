@@ -240,6 +240,16 @@ export function TownApp() {
     () => showToast(copy.app.houseUnavailable),
     [copy.app.houseUnavailable, showToast],
   )
+  // Saves where the visitor stands, so coming back from the venue's page starts them at its gate as they were.
+  const enterVenue = useCallback(
+    (href: string) => {
+      if (!town) return
+      void save(createVisitorSession(town.id, playerPosition.current, settings, profile, guideStep)).finally(() =>
+        window.location.assign(href),
+      )
+    },
+    [guideStep, profile, save, settings, town],
+  )
   const closeGuestbook = useCallback(() => {
     setGuestbookOpen(false)
     if (guestbookOpen && guideStep === 'guestbook') handleGuideEvent('visited-guestbook')
@@ -379,6 +389,7 @@ export function TownApp() {
               setGuestbookOpen(true)
             }}
             onHouseUnavailable={showHouseUnavailable}
+            onVenueEnter={enterVenue}
             onFovChange={changeFov}
             photoRequest={photoRequest}
             onPhotoCapture={finishPhotoCapture}

@@ -77,7 +77,7 @@ none of the town.
 | `characters/`  | The procedural character (player and residents) and its merged head geometry.                                                                                                                                                                            |
 | `animals/`     | The pet corgi: model, trot, and petting responses.                                                                                                                                                                                                       |
 | `environment/` | Time of day, seasons and their transitions, sun, sky, night lights, weather particles, ground, distant land.                                                                                                                                             |
-| `venues/`      | The large venues' colors: theme palettes as data with the admin's building colors over them (`ballpark/ballparkThemes.ts`), one shared material per color role, recolored in place (`venueMaterials.ts`).                                                |
+| `venues/`      | The venues past the hedge: edge slots (`venueSlots.ts`), placements and gates (`venuePlacements.ts`), exteriors (`VenueExteriors.tsx`), theme palettes, a shared material per color role, the ballpark's shared parts.                                   |
 
 ### Object kinds
 
@@ -165,9 +165,11 @@ Keep these when changing the derby:
 
 `BaseballGate.tsx` reads the town first. While the admin hides the ballpark (`town.venues.ballpark.visible`, false until
 shown), only an admin's preview plays it (`ballparkOpens` asks `/v1/me` for the role only then); anyone else gets a
-coming-soon card, and neither the derby's chunk nor the camera loads. Nothing in the town links to `/baseball` yet; the
-town's ballpark exterior, its gate, and the statues, when they come, must read the same flag and stay out while it is
-hidden.
+coming-soon card, and neither the derby's chunk nor the camera loads. The town reads the same flag: while it is shown,
+the hedge opens at the end of the north road onto the ballpark's exterior and gate, whose prompt saves the visit and
+leaves by a full page load (`window.location.assign`), so `/baseball` gets its own CSP and camera permission and the
+visitor comes back to the gate; while it is hidden, nothing in the town hints at it. The statues, when they come, must
+read it too.
 
 `BaseballApp.tsx` then checks the device (a phone or tablet, then WebGL 2, later a computer too slow to track), the
 character, and plays the derby. Each run takes the rules of the KST month it starts in and a `crypto` seed
@@ -230,6 +232,17 @@ and draw it in the kind's layer through `resolveVariant`. Never rename or remove
 **A new walk:** implement `Gait` (`scene/motion/gait.ts`: `step(input, pose)` and `footfalls()`), add its id to
 `GAIT_STYLES`, register it in `scene/motion/createGait.ts`, and label it. A new skid is a timing entry in
 `SKID_STYLES`/`skidTimings` (`scene/motion/skidTurn.ts`).
+
+**A new venue** (a backend change first, then a frontend one; the backend drops venue ids it does not know):
+
+1. Backend: add its key to `TownVenues` and `parseTownVenues` in `backend/src/town.ts`, its look parsed by
+   `parseVenueLook` (which carries `visible`), and a case in the tests.
+2. Frontend: its key, default, and parser in `data/models.ts` and `data/townApi.ts` (`parseVenues`); an edge slot
+   measured in the town in `VENUE_SLOTS` (clear of the hills and the follow camera's side) and its entry in
+   `VENUE_PLACEMENTS`, with the path its gate leads to; an exterior drawn in the slot's frame in `VENUE_EXTERIORS`;
+   `venues.<id>` copy, which the type checker asks for; a path check and a lazy page in `App.tsx`; and, if the page
+   needs its own headers, an nginx location in `docker/nginx.conf`.
+3. The gate opens, the forest clears, and the prompt appears only while the venue's `visible` is true.
 
 **Another animal:** there is one pet today, so there is no animal interface yet. When a second animal arrives, extract
 the shared shape from `scene/animals/` the way `Gait` was extracted, rather than designing it up front.

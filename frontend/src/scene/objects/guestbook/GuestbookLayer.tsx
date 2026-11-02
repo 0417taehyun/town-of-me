@@ -20,22 +20,31 @@ export const SIGN_HEIGHT = 0.7
 
 /**
  * The board's name on a plaque standing on its top beam. It is part of the scene, so speech bubbles and the interface stay in
- * front of it and trees or characters can hide it, unlike an HTML label floating over everything.
+ * front of it and trees or characters can hide it, unlike an HTML label floating over everything. The ballpark's gate
+ * hangs one `height` m tall at its own `position`.
  */
-export function GuestbookSign({ title }: { title: string }) {
+export function GuestbookSign({
+  title,
+  height = SIGN_HEIGHT,
+  position = [0, 3.7 + SIGN_HEIGHT / 2 + 0.04, 0],
+}: {
+  title: string
+  height?: number
+  position?: [number, number, number]
+}) {
   const webFontReady = useWebFontGlyphs(SIGN_FONT, title)
   const sign = useMemo(() => drawSignTexture(title, webFontReady), [title, webFontReady])
   useEffect(() => () => sign.texture.dispose(), [sign])
-  const width = SIGN_HEIGHT * sign.aspect
+  const width = height * sign.aspect
   return (
-    <group position={[0, 3.7 + SIGN_HEIGHT / 2 + 0.04, 0]}>
+    <group position={position}>
       <mesh castShadow>
-        <primitive object={getRoundedBox(width + 0.18, SIGN_HEIGHT + 0.18, 0.14, 0.06)} attach="geometry" />
+        <primitive object={getRoundedBox(width + 0.18, height + 0.18, 0.14, 0.06)} attach="geometry" />
         <meshStandardMaterial color="#704b37" roughness={1} />
       </mesh>
       {/* A faint glow of its own keeps the lettering readable once the sun is down. */}
       <mesh position={[0, 0, 0.075]}>
-        <planeGeometry args={[width, SIGN_HEIGHT]} />
+        <planeGeometry args={[width, height]} />
         <meshStandardMaterial
           map={sign.texture}
           emissiveMap={sign.texture}
