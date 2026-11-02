@@ -41,7 +41,7 @@ import type { GroundSurface } from '../environment/groundSurface'
 import { seasonClock } from '../environment/seasonTransition'
 import type { SkidSound, SquealLength } from '../../audio/skidSqueal'
 import { TownGuide } from '../../ui/TownGuide'
-import { clamp, dampAngle } from '../../motionMath'
+import { clamp, dampAngle, dampingAlpha } from '../../motionMath'
 import { moveThroughTown, type TownCollision } from '../townCollision'
 import { placeCurvedLabel } from '../worldLabels'
 
@@ -398,7 +398,7 @@ export function Player({
     speedRef.current = Math.hypot(motion.velocity.x, motion.velocity.z)
     animationRef.current = getMovementAnimation(speedRef.current)
 
-    movementDirection.current.lerp(wantedDirection, 1 - Math.exp(-10 * delta))
+    movementDirection.current.lerp(wantedDirection, dampingAlpha(10, delta))
     if (wantedDirection.lengthSq() === 0 && movementDirection.current.lengthSq() < 0.0001)
       movementDirection.current.set(0, 0, 0)
 

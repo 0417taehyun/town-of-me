@@ -11,6 +11,7 @@ import {
   STAR_COUNT,
 } from './atmosphereMotion'
 import { createDayLighting, writeDayLighting, type DayChange } from './dayTransition'
+import { damp } from '../../motionMath'
 import { getGlowTexture } from '../glowTexture'
 import { seasonClock, type SeasonChange } from './seasonTransition'
 
@@ -84,7 +85,7 @@ export function Fireflies({
     if (!swarm || !material.current) return
     writeDayLighting(dayChange.current, seasonClock(), lighting)
     const target = lighting.night * Number(seasonChange.current.to === 'summer')
-    presence.current += (target - presence.current) * (1 - Math.exp(-Math.min(delta, 0.1) * 1.5))
+    presence.current = damp(presence.current, target, 1.5, Math.min(delta, 0.1))
     swarm.visible = presence.current > 0.01
     if (!swarm.visible) return
     material.current.opacity = presence.current

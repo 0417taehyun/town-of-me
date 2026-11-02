@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { adjustFovByInputDelta, cameraHeightForFov, cameraOffset, clampYaw, dampingAlpha } from './cameraMath'
+import { dampingAlpha } from '../motionMath'
+import { adjustFovByInputDelta, cameraHeightForFov, cameraOffset, clampYaw } from './cameraMath'
 
 describe('camera math', () => {
   it('returns a useful exponential damping alpha', () => {

@@ -8,6 +8,8 @@ import { addPart, type BallplayerRig, basis } from './ballplayerRig'
 export type GloveSize = { wide: number; long: number; thick: number }
 
 export const LEATHER = '#7a4a2a'
+/** The pitcher's and the fielders' glove: its half-sizes (rig units) and how far past the wrist its center sits. */
+export const FIELDER_GLOVE = { wide: 0.15, long: 0.19, thick: 0.08, ahead: 0.12 }
 const gloveGeometry = new SphereGeometry(1, 18, 12)
 
 /** A glove of `size` in leather, added to the rig's root; its own frame is a mitten's (mittenHands.ts). */

@@ -1,5 +1,5 @@
 import { useFrame } from '@react-three/fiber'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { MutableRefObject } from 'react'
 import {
   AdditiveBlending,
@@ -9,6 +9,7 @@ import {
   type MeshToonMaterial,
   Object3D,
 } from 'three'
+import { useWebFontGlyphs } from '../../hooks/useWebFontGlyphs'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import { getSeasonColors, type Season, seasonPalettes } from '../../scene/environment/season'
 import { getSnowCover, seasonClock, type SeasonChange } from '../../scene/environment/seasonTransition'
@@ -91,20 +92,9 @@ export function GardenLandmarks({
   const summary = scoreboardSummary(hud, pitchCount)
   const copy = languageCopy[language].baseball
   const { pitches, played, homeRuns, homeRunDistanceDecimetres } = summary
-  // The font's subsets load by unicode-range, and `document.fonts.ready` does not wait for glyphs only a canvas uses,
-  // so the board and the signs wait for every glyph they can show in this language and are drawn again once those are
-  // in (or the load fails and the fallback stays).
+  // The board and the signs wait for every glyph they can show in this language and are drawn again once those are in.
   const glyphs = `${copy.title}${copy.hud.homeRuns}${FENCE_SIGN_SPRAYS.map(fenceSignLabel).join('')}0123456789 m—`
-  const [fontGlyphs, setFontGlyphs] = useState<string>()
-  useEffect(() => {
-    let active = true
-    const redraw = () => active && setFontGlyphs(glyphs)
-    void document.fonts?.load(`900 64px ${SCOREBOARD_FONT}`, glyphs).then(redraw, redraw)
-    return () => {
-      active = false
-    }
-  }, [glyphs])
-  const webFontReady = fontGlyphs === glyphs
+  const webFontReady = useWebFontGlyphs(`900 64px ${SCOREBOARD_FONT}`, glyphs)
   useEffect(() => {
     if (webFontReady) redrawCanvasTexture(textures.labels, drawFenceLabels)
   }, [textures, webFontReady])

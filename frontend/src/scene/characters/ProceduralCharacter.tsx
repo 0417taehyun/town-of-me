@@ -17,9 +17,19 @@ import { addPettingPose, closeEyes, getBlinkAmount, getTalkingPose, PLAYER_WALK_
 import { addMovementPose, noteLeadingLeg, type PlayerMovement } from '../motion/skidTurn'
 import { createGait } from '../motion/createGait'
 import type { GaitStyle } from '../motion/gait'
-import { blendPose, createRestPose, setPoseOnGround, type CharacterPose } from '../motion/walkCycle'
-import { lerp } from '../../motionMath'
+import {
+  blendPose,
+  createRestPose,
+  HIP_HEIGHT,
+  HIP_WIDTH,
+  setPoseOnGround,
+  SHIN_LENGTH,
+  THIGH_LENGTH,
+  type CharacterPose,
+} from '../motion/walkCycle'
+import { dampingAlpha, lerp } from '../../motionMath'
 import { getRoundedBox } from '../roundedBox'
+import { CHARACTER_BODY, characterLegSolids } from './characterBody'
 import { characterGeometries, mergeAvatarParts } from './characterGeometries'
 
 const MOUTH_PART_IDS = new Set(['smile', 'grin', 'teeth', 'quiet'])
@@ -29,7 +39,7 @@ const facingAngles = new Euler()
 const EYE_PART_IDS = new Set(['eye--1', 'eye-1'])
 
 const seatedPose: CharacterPose = Object.assign(createRestPose(), {
-  bodyY: BENCH_SURFACE_HEIGHT + 0.11 - SEATED_ROOT_HEIGHT - 0.73 - CHARACTER_ORIGIN_OFFSET,
+  bodyY: BENCH_SURFACE_HEIGHT + 0.11 - SEATED_ROOT_HEIGHT - HIP_HEIGHT - CHARACTER_ORIGIN_OFFSET,
   leftArm: -0.4,
   rightArm: -0.4,
   leftLeg: -Math.PI / 2,
@@ -128,7 +138,7 @@ export function ProceduralCharacter({
     const movement = movementRef?.current
     const talking = Boolean(talkingRef?.current)
     const talkingPose = getTalkingPose(clock.elapsedTime + expressionPhase, talking)
-    const ease = 1 - Math.exp(-12 * Math.min(delta, 0.05))
+    const ease = dampingAlpha(12, Math.min(delta, 0.05))
     const weights = blends.current
     weights.seated = lerp(weights.seated, Number(seated), ease)
     weights.petting = lerp(weights.petting, Number(!seated && Boolean(pettingRef?.current)), ease)
@@ -167,22 +177,31 @@ export function ProceduralCharacter({
     talkingMouth.current.scale.y = lerp(talkingMouth.current.scale.y, talkingPose.mouthOpen, ease)
   })
 
+  const { torso, collar, armPivot } = CHARACTER_BODY
+  const legSolids = characterLegSolids(appearance)
   return (
     <>
       {animationRef && <ContactShadowBlob ref={shadow} width={1.15} depth={1.15} />}
       <group ref={body} position={[0, CHARACTER_ORIGIN_OFFSET, 0]}>
-        <mesh position={[0, 1.04, 0]} castShadow>
-          <primitive object={getRoundedBox(0.64, 0.64, 0.38, 0.14)} attach="geometry" />
+        <mesh position={[0, torso.centerY, 0]} castShadow>
+          <primitive object={getRoundedBox(torso.width, torso.height, torso.depth, torso.rounding)} attach="geometry" />
           <meshStandardMaterial color={appearance.top} roughness={1} />
         </mesh>
         {appearance.collar &&
           [-1, 1].map((side) => (
-            <mesh key={`collar-${side}`} position={[side * 0.09, 1.31, 0.21]} rotation={[0, 0, side * 0.35]}>
-              <primitive object={getRoundedBox(0.16, 0.12, 0.04, 0.015)} attach="geometry" />
-              <meshStandardMaterial color="#eee6d5" roughness={1} />
+            <mesh
+              key={`collar-${side}`}
+              position={[side * collar.x, collar.y, collar.z]}
+              rotation={[0, 0, side * collar.turn]}
+            >
+              <primitive
+                object={getRoundedBox(collar.width, collar.height, collar.depth, collar.rounding)}
+                attach="geometry"
+              />
+              <meshStandardMaterial color={collar.color} roughness={1} />
             </mesh>
           ))}
-        <group ref={head} position={[0, 1.67, 0]}>
+        <group ref={head} position={[0, CHARACTER_BODY.headHeight, 0]}>
           <mesh geometry={fixedHead} castShadow>
             <meshStandardMaterial vertexColors roughness={0.9} />
           </mesh>
@@ -244,7 +263,7 @@ export function ProceduralCharacter({
           </group>
         </group>
         {[-1, 1].map((side) => (
-          <group key={`arm-${side}`} ref={side < 0 ? leftArm : rightArm} position={[side * 0.43, 1.25, 0]}>
+          <group key={`arm-${side}`} ref={side < 0 ? leftArm : rightArm} position={[side * armPivot.x, armPivot.y, 0]}>
             <mesh position={[0, -0.12, 0]} castShadow>
               <primitive
                 object={getRoundedBox(0.2, appearance.longSleeves ? 0.45 : 0.25, 0.27, 0.08)}
@@ -259,23 +278,20 @@ export function ProceduralCharacter({
           </group>
         ))}
         {[-1, 1].map((side) => (
-          <group key={`leg-${side}`} ref={side < 0 ? leftLeg : rightLeg} position={[side * 0.17, 0.73, 0]}>
-            <mesh position={[0, -0.18, 0]} castShadow>
-              <primitive object={getRoundedBox(appearance.relaxed ? 0.3 : 0.24, 0.36, 0.28, 0.08)} attach="geometry" />
+          <group key={`leg-${side}`} ref={side < 0 ? leftLeg : rightLeg} position={[side * HIP_WIDTH, HIP_HEIGHT, 0]}>
+            <mesh position={legSolids.thigh.center} castShadow>
+              <primitive object={getRoundedBox(...legSolids.thigh.size, legSolids.thigh.rounding)} attach="geometry" />
               <meshStandardMaterial color={appearance.bottom} roughness={1} />
             </mesh>
-            <group ref={side < 0 ? leftKnee : rightKnee} position={[0, -0.36, 0]}>
-              <mesh position={[0, -0.14, 0]} castShadow>
-                <primitive
-                  object={getRoundedBox(appearance.relaxed ? 0.27 : 0.21, 0.28, 0.24, 0.075)}
-                  attach="geometry"
-                />
+            <group ref={side < 0 ? leftKnee : rightKnee} position={[0, -THIGH_LENGTH, 0]}>
+              <mesh position={legSolids.shin.center} castShadow>
+                <primitive object={getRoundedBox(...legSolids.shin.size, legSolids.shin.rounding)} attach="geometry" />
                 <meshStandardMaterial color={appearance.shorts ? appearance.skin : appearance.bottom} roughness={1} />
               </mesh>
-              <group ref={side < 0 ? leftAnkle : rightAnkle} position={[0, -0.29, 0]}>
-                <mesh position={[0, appearance.boots ? 0.05 : 0, 0.07]} castShadow>
+              <group ref={side < 0 ? leftAnkle : rightAnkle} position={[0, -SHIN_LENGTH, 0]}>
+                <mesh position={legSolids.shoe.center} castShadow>
                   <primitive
-                    object={getRoundedBox(0.27, appearance.boots ? 0.25 : 0.15, 0.41, appearance.boots ? 0.08 : 0.055)}
+                    object={getRoundedBox(...legSolids.shoe.size, legSolids.shoe.rounding)}
                     attach="geometry"
                   />
                   <meshStandardMaterial color={appearance.shoes} roughness={0.85} />

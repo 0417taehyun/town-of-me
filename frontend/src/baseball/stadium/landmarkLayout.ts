@@ -23,6 +23,7 @@ import { getRoundedBox } from '../../scene/roundedBox'
 import { fenceDistance, FOUL_ANGLE } from '../game/field'
 import { type Clearing, sprayOf, STANDS, STANDS_DEPTH, STANDS_TOP, standCurve, standPoint } from './bowlLayout'
 import { DUGOUT_SPOTS, foulPoleSpots, sweptPoint } from './fieldLayout'
+import { SCOREBOARD_FONT } from './scoreboard'
 
 // The garden's landmarks, in the field meters of fieldLayout.ts: the oak with its treehouse scoreboard beyond center
 // field, the corgi and giant-ball topiaries, the flower-stem light towers, string lights over the stands and the
@@ -420,7 +421,7 @@ export function drawFenceLabels(context: CanvasRenderingContext2D) {
     context.fillStyle = '#f8f3e7'
     context.fillRect(0, top, width, rowHeight)
     context.fillStyle = '#374b65'
-    context.font = `900 ${rowHeight * 0.62}px 'Pretendard Variable', Pretendard, -apple-system, system-ui, sans-serif`
+    context.font = `900 ${rowHeight * 0.62}px ${SCOREBOARD_FONT}`
     context.textAlign = 'center'
     context.textBaseline = 'middle'
     context.fillText(fenceSignLabel(spray), width / 2, top + rowHeight * 0.54)

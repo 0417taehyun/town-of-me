@@ -10,9 +10,6 @@ what changed.
 - Let route handles (residents' and the pet's) move with the keyboard, not only by dragging.
 - Add redo, multi-select, grid snapping, and a two-finger twist to rotate the top view if they prove necessary.
 - Page the guestbook beyond the newest 100 notes if it fills up.
-- Export the town character's measurements (torso, head, hips, legs, shoes, collar) from `scene/characters`, so
-  `ProceduralCharacter.tsx` and the `/baseball` ballplayer rig (`stage/actors/ballplayerRig.ts`), which repeats them
-  today, share one source.
 - Tune the `/baseball` camera swing (`SWING_RULES` and `CONTACT_HEIGHT` in `baseball/vision/swingTracker.ts`, the
   held-object rules in `heldObject.ts`, and the stance hold's `STANCE_HOLD_RULES` in `flow/stanceHold.ts`) in a
   hands-on session with a real webcam; they come from synthetic swings and one draft log only. Measure there how late

@@ -12,9 +12,14 @@ export function lerp(from: number, to: number, amount: number) {
   return from + (to - from) * amount
 }
 
+/** How far (0..1) to move toward a target this frame, to close on it at `rate` per second at any frame rate. */
+export function dampingAlpha(rate: number, delta: number) {
+  return 1 - Math.exp(-Math.max(0, rate) * Math.max(0, delta))
+}
+
 /** Moves `current` toward `target` at `rate` per second, the same at any frame rate. */
 export function damp(current: number, target: number, rate: number, delta: number) {
-  return lerp(current, target, 1 - Math.exp(-rate * delta))
+  return lerp(current, target, dampingAlpha(rate, delta))
 }
 
 /** Eases 0..1 in and out (Hermite smoothstep). */
@@ -34,7 +39,7 @@ export function wrapAngle(angle: number) {
 
 /** Like `damp`, for a heading: eases `current` toward `target` at `rate` per second, turning the short way round. */
 export function dampAngle(current: number, target: number, rate: number, delta: number) {
-  return current + wrapAngle(target - current) * (1 - Math.exp(-rate * delta))
+  return current + wrapAngle(target - current) * dampingAlpha(rate, delta)
 }
 
 export function seededFraction(index: number, salt: number) {

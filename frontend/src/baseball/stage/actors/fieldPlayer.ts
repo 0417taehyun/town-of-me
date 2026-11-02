@@ -12,7 +12,7 @@ import {
   poseLegs,
   reachArm,
 } from './ballplayerRig'
-import { alignHand, createGlove } from './gloves'
+import { alignHand, createGlove, FIELDER_GLOVE } from './gloves'
 import type { HeadLook } from './headLook'
 
 // Everyone else on the field, on the town character's rig (ballplayerRig.ts): the other team's fielders with a glove on
@@ -25,16 +25,13 @@ export type FieldPose = { crouch: number; run: number; stride: number; slump: nu
 
 export const STANDING: FieldPose = { crouch: 0, run: 0, stride: 0, slump: 0, cheer: 0, wave: 0 }
 
-/** A fielder's glove's half-sizes (rig units) and how far past the wrist its center sits. */
-export const FIELD_GLOVE = { wide: 0.15, long: 0.19, thick: 0.08, ahead: 0.12 }
-
 /** `look` is where the head turns; `glove` is on the left hand, or null for a player without one. */
 export type FieldPlayer = { rig: BallplayerRig; glove: Group | null; look: HeadLook }
 
 export function createFieldPlayer(profile: PlayerProfile, gloved: boolean): FieldPlayer {
   const rig = createBallplayerRig(profile)
   rig.root.scale.setScalar(PLAYER_SCALE)
-  const player = { rig, glove: gloved ? createGlove(rig, FIELD_GLOVE) : null, look: { yaw: 0, pitch: 5 } }
+  const player = { rig, glove: gloved ? createGlove(rig, FIELDER_GLOVE) : null, look: { yaw: 0, pitch: 5 } }
   poseFieldPlayer(player, STANDING)
   return player
 }
@@ -92,5 +89,5 @@ export function poseFieldPlayer(player: FieldPlayer, pose: FieldPose) {
     direction((index === 0 ? -1 : 1) * 100, -40 + 40 * pose.cheer, pole)
     reachArm(rig, index, fieldWrist(index, pose, wrist), pole)
   })
-  if (glove) alignHand(glove, rig, 1, pole, FIELD_GLOVE.ahead)
+  if (glove) alignHand(glove, rig, 1, pole, FIELDER_GLOVE.ahead)
 }

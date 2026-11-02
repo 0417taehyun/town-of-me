@@ -12,12 +12,14 @@ import {
 } from 'three'
 import type { PlayerProfile } from '../../../data/playerProfile'
 import { getAvatarAppearance } from '../../../scene/characters/avatarAppearance'
+import { type BodySolid, CHARACTER_BODY, characterLegSolids } from '../../../scene/characters/characterBody'
 import { characterGeometries, mergeAvatarParts } from '../../../scene/characters/characterGeometries'
+import { HIP_HEIGHT, HIP_WIDTH, SHIN_LENGTH, THIGH_LENGTH } from '../../../scene/motion/walkCycle'
 import { getRoundedBox } from '../../../scene/roundedBox'
 import { solveTwoBone } from './twoBoneIk'
 
 // The town character as a ballplayer: the procedural character's torso, head, legs, and colors in its proportions
-// (scene/characters/ProceduralCharacter.tsx), posed by joints instead of a walk. A pelvis carries both legs, which
+// (scene/characters/characterBody.ts), posed by joints instead of a walk. A pelvis carries both legs, which
 // reach their planted feet with two-bone IK, so the hips turn and sink without the feet sliding; the chest turns about
 // a tilted spine, so the back shoulder dips as it turns, the way a swing plane does; the arms bend at the elbow, as
 // thick as the pose lab's that the visitor chose, the forearm keeping its thickness into the hand.
@@ -69,23 +71,20 @@ export type BallplayerRig = {
   headGeometry: BufferGeometry
 }
 
-/**
- * The town character's measurements (rig units), read off its procedural model. They repeat ProceduralCharacter.tsx's
- * literals (as do buildLeg's and addCollar's) until the town character exports them (TODO.md); keep them in step.
- */
+/** The town character's measurements (rig units, characterBody.ts and the walk's), and the rig's own shin and waist. */
 export const BALLPLAYER_BODY = {
-  hipHeight: 0.73,
-  hipHalfWidth: 0.17,
-  thigh: 0.36,
+  hipHeight: HIP_HEIGHT,
+  hipHalfWidth: HIP_WIDTH,
+  thigh: THIGH_LENGTH,
+  /** Knee to ankle for the legs' two-bone IK (ANKLE_IN_FOOT). */
   shin: 0.27,
   /** The waist sits this far above the hips, where the turned chest meets the pelvis. */
   waistUp: 0.08,
-  headHeight: 1.67,
-  /** Torso: a rounded box this size and rounding, centered this high. */
-  torso: { width: 0.64, height: 0.64, depth: 0.38, rounding: 0.14, centerY: 1.04 },
+  headHeight: CHARACTER_BODY.headHeight,
+  torso: CHARACTER_BODY.torso,
 }
-/** Elbow-arm shoulders (body space): the town pivot (0.43, 1.25) moved 0.06 in and forward. */
-export const SHOULDER = { x: 0.37, y: 1.25, z: 0.06 }
+/** Elbow-arm shoulders (body space): the town character's arm pivot moved 0.06 in and forward. */
+export const SHOULDER = { x: CHARACTER_BODY.armPivot.x - 0.06, y: CHARACTER_BODY.armPivot.y, z: 0.06 }
 /** Shoulder to elbow and elbow to wrist, so the hands reach the batting research's grips. */
 export const ARM_BONES = { upper: 0.37, fore: 0.35 }
 /** The forearm keeps one thickness all the way into the hand, as in Animal Crossing (no thinner wrist). */
@@ -97,22 +96,23 @@ export const TOE_PIVOT_IN_KNEE = new Vector3(0, -0.365, 0.205)
 export const ANKLE_IN_FOOT = new Vector3(0, -BALLPLAYER_BODY.shin, 0).sub(TOE_PIVOT_IN_KNEE)
 
 /** A rounded box of a ballplayer's lower body: its size, its rounding, and its center in its group's space. */
-export type LegSolid = { size: [number, number, number]; rounding: number; center: Vector3 }
+export type LegSolid = BodySolid
+
+/** The town shoe's ankle from the knee, where the shoe hangs (the rig's foot pivots on the ball instead). */
+const SHOE_ANKLE_IN_KNEE = new Vector3(0, -SHIN_LENGTH, 0)
 
 /**
  * The hips (in the pelvis), a thigh (in its leg), a shin (in its knee), and a shoe (in its foot), wider in relaxed
  * trousers and taller in boots: what the rig draws and what the batter keeps its arms and bat out of.
  */
-export function legSolids({ relaxed, boots }: Pick<AvatarAppearance, 'relaxed' | 'boots'>) {
+export function legSolids(appearance: Pick<AvatarAppearance, 'relaxed' | 'boots'>) {
+  const { thigh, shin, shoe } = characterLegSolids(appearance)
+  shoe.center.add(SHOE_ANKLE_IN_KNEE).sub(TOE_PIVOT_IN_KNEE)
   return {
-    hips: { size: [relaxed ? 0.58 : 0.52, 0.24, 0.34], rounding: 0.1, center: new Vector3(0, 0.02, 0) },
-    thigh: { size: [relaxed ? 0.3 : 0.24, 0.36, 0.28], rounding: 0.08, center: new Vector3(0, -0.18, 0) },
-    shin: { size: [relaxed ? 0.27 : 0.21, 0.28, 0.24], rounding: 0.075, center: new Vector3(0, -0.14, 0) },
-    shoe: {
-      size: [0.27, boots ? 0.25 : 0.15, 0.41],
-      rounding: boots ? 0.08 : 0.055,
-      center: new Vector3(0, -0.29 + (boots ? 0.05 : 0), 0.07).sub(TOE_PIVOT_IN_KNEE),
-    },
+    hips: { size: [appearance.relaxed ? 0.58 : 0.52, 0.24, 0.34], rounding: 0.1, center: new Vector3(0, 0.02, 0) },
+    thigh,
+    shin,
+    shoe,
   } satisfies Record<string, LegSolid>
 }
 
@@ -202,9 +202,10 @@ export function createBallplayerRig(profile: PlayerProfile): BallplayerRig {
 }
 
 export function addCollar(owner: Pick<BallplayerRig, 'materials'>, body: Group, side: number) {
-  const collar = addPart(owner, body, getRoundedBox(0.16, 0.12, 0.04, 0.015), '#eee6d5')
-  collar.position.set(side * 0.09, 1.31, 0.21)
-  collar.rotation.z = side * 0.35
+  const { width, height, depth, rounding, x, y, z, turn, color } = CHARACTER_BODY.collar
+  const collar = addPart(owner, body, getRoundedBox(width, height, depth, rounding), color)
+  collar.position.set(side * x, y, z)
+  collar.rotation.z = side * turn
   collar.castShadow = false
 }
 

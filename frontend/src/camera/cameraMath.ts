@@ -1,10 +1,6 @@
 import type { Vector3Tuple } from 'three'
 import { clamp, clamp01, lerp, smoothstep } from '../motionMath'
 
-export function dampingAlpha(lambda: number, delta: number) {
-  return 1 - Math.exp(-Math.max(0, lambda) * Math.max(0, delta))
-}
-
 export function clampYaw(yaw: number, maxYaw: number) {
   return clamp(yaw, -Math.abs(maxYaw), Math.abs(maxYaw))
 }

@@ -1,5 +1,30 @@
 export type AppLanguage = 'en' | 'ko'
 
+/** Each language's advice for when 3D graphics are off: the town's fallback, and under its own title the ballpark's. */
+const englishGraphics = {
+  town: 'The 3D town could not open.',
+  preview: '3D preview unavailable',
+  description: 'In Chrome settings, turn on “Use graphics acceleration when available”, then relaunch Chrome.',
+  copy: 'Copy Chrome settings address',
+  addressLabel: 'Chrome graphics settings address',
+  pasteHint: 'Paste this address into Chrome. Websites cannot open browser settings directly.',
+  copied: 'Address copied. Paste it into Chrome’s address bar and press Enter.',
+  copyByHand: 'Select and copy the address below, then paste it into Chrome’s address bar and press Enter.',
+  reload: 'Reload page',
+} as const
+
+const koreanGraphics = {
+  town: '3D 마을을 열지 못했어요.',
+  preview: '3D 미리보기를 볼 수 없어요',
+  description: 'Chrome 설정에서 “가능한 경우 그래픽 가속 사용”을 켜고 Chrome을 다시 시작해 주세요.',
+  copy: 'Chrome 설정 주소 복사',
+  addressLabel: 'Chrome 그래픽 설정 주소',
+  pasteHint: '이 주소를 Chrome 주소창에 붙여 넣어 주세요. 웹사이트는 브라우저 설정을 직접 열 수 없어요.',
+  copied: '주소를 복사했어요. Chrome 주소창에 붙여 넣고 Enter를 누르세요.',
+  copyByHand: '아래 주소를 선택해서 복사한 뒤 Chrome 주소창에 붙여 넣고 Enter를 누르세요.',
+  reload: '새로고침',
+} as const
+
 export const languageCopy = {
   en: {
     languageLabel: 'Preferred language',
@@ -74,17 +99,7 @@ export const languageCopy = {
       tryHouseDoor: 'Try the door',
       houseUnavailable: "You can't enter the house yet!",
     },
-    graphics: {
-      town: 'The 3D town could not open.',
-      preview: '3D preview unavailable',
-      description: 'In Chrome settings, turn on “Use graphics acceleration when available”, then relaunch Chrome.',
-      copy: 'Copy Chrome settings address',
-      addressLabel: 'Chrome graphics settings address',
-      pasteHint: 'Paste this address into Chrome. Websites cannot open browser settings directly.',
-      copied: 'Address copied. Paste it into Chrome’s address bar and press Enter.',
-      copyByHand: 'Select and copy the address below, then paste it into Chrome’s address bar and press Enter.',
-      reload: 'Reload page',
-    },
+    graphics: englishGraphics,
     creator: {
       title: 'Make your character',
       close: 'Close character creator',
@@ -674,13 +689,7 @@ export const languageCopy = {
           copied: 'Link copied. Open it on your computer.',
           addressLabel: 'Home run derby address',
         },
-        graphics: {
-          title: 'The ballpark needs 3D graphics',
-          description: 'In Chrome settings, turn on “Use graphics acceleration when available”, then relaunch Chrome.',
-          copy: 'Copy Chrome settings address',
-          copied: 'Address copied. Paste it into Chrome’s address bar and press Enter.',
-          addressLabel: 'Chrome graphics settings address',
-        },
+        graphics: { ...englishGraphics, title: 'The ballpark needs 3D graphics' },
         slow: {
           title: 'This computer can’t follow a swing in time',
           description:
@@ -889,17 +898,7 @@ export const languageCopy = {
       tryHouseDoor: '문 열어보기',
       houseUnavailable: '아직은 집에 들어갈 수 없어요!',
     },
-    graphics: {
-      town: '3D 마을을 열지 못했어요.',
-      preview: '3D 미리보기를 볼 수 없어요',
-      description: 'Chrome 설정에서 “가능한 경우 그래픽 가속 사용”을 켜고 Chrome을 다시 시작해 주세요.',
-      copy: 'Chrome 설정 주소 복사',
-      addressLabel: 'Chrome 그래픽 설정 주소',
-      pasteHint: '이 주소를 Chrome 주소창에 붙여 넣어 주세요. 웹사이트는 브라우저 설정을 직접 열 수 없어요.',
-      copied: '주소를 복사했어요. Chrome 주소창에 붙여 넣고 Enter를 누르세요.',
-      copyByHand: '아래 주소를 선택해서 복사한 뒤 Chrome 주소창에 붙여 넣고 Enter를 누르세요.',
-      reload: '새로고침',
-    },
+    graphics: koreanGraphics,
     creator: {
       title: '캐릭터 만들기',
       close: '캐릭터 만들기 닫기',
@@ -1477,13 +1476,7 @@ export const languageCopy = {
           copied: '링크를 복사했어요. 컴퓨터에서 열어 주세요.',
           addressLabel: '홈런 더비 주소',
         },
-        graphics: {
-          title: '3D 그래픽을 켜야 해요',
-          description: 'Chrome 설정에서 “가능한 경우 그래픽 가속 사용”을 켜고 Chrome을 다시 시작해 주세요.',
-          copy: 'Chrome 설정 주소 복사',
-          copied: '주소를 복사했어요. Chrome 주소창에 붙여 넣고 Enter를 누르세요.',
-          addressLabel: 'Chrome 그래픽 설정 주소',
-        },
+        graphics: { ...koreanGraphics, title: '3D 그래픽을 켜야 해요' },
         slow: {
           title: '이 기기에서는 스윙을 정확히 읽기 어려워요',
           description:

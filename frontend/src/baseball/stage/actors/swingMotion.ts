@@ -366,6 +366,6 @@ export function contactRate(contactAt: number, pace: number) {
  */
 export function followSeconds(contactAt: number, rate: number, sinceContactMs: number) {
   const span = SWING_KEY_TIMES.finish - contactAt
-  const onward = Math.min(1, Math.max(0, sinceContactMs) / FOLLOW_MS)
+  const onward = clamp01(sinceContactMs / FOLLOW_MS)
   return contactAt + span * (1 - (1 - onward) ** ((rate * FOLLOW_MS) / span))
 }

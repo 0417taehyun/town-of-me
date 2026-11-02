@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
-import { CHROME_GRAPHICS_SETTINGS, copyStatus, copyText } from '../../scene/webglSupport'
+import { CopyAddress } from '../../scene/GraphicsCanvas'
+import { CHROME_GRAPHICS_SETTINGS } from '../../scene/webglSupport'
 import type { DeviceBlock } from '../deviceGate'
 
 /**
@@ -13,27 +14,16 @@ export function DeviceBlocked({ block, language }: { block: DeviceBlock; languag
   const copy = languageCopy[language].baseball.blocked
   const reason = copy[block]
   const [address] = useState(() => (block === 'graphics' ? CHROME_GRAPHICS_SETTINGS : window.location.href))
-  const [copied, setCopied] = useState<boolean | null>(null)
-  const status = copyStatus(copied, { untried: '', copied: reason.copied, byHand: copy.copyByHand })
   return (
     <section className="baseball-card derby-blocked" role="alert" aria-labelledby="derby-blocked-title">
       <h1 id="derby-blocked-title">{reason.title}</h1>
       <p>{reason.description}</p>
-      <button
-        className="primary-button compact"
-        type="button"
-        onClick={() => void copyText(address, navigator.clipboard).then(setCopied)}
-      >
-        {reason.copy}
-      </button>
-      <input
-        className="graphics-settings-address"
-        aria-label={reason.addressLabel}
-        value={address}
-        readOnly
-        onFocus={(event) => event.currentTarget.select()}
+      <CopyAddress
+        address={address}
+        copyLabel={reason.copy}
+        addressLabel={reason.addressLabel}
+        messages={{ untried: '', copied: reason.copied, byHand: copy.copyByHand }}
       />
-      <small role="status">{status}</small>
       {block === 'graphics' && (
         <button className="text-button" type="button" onClick={() => window.location.reload()}>
           {copy.reload}

@@ -3,7 +3,8 @@ import { useEffect, useRef } from 'react'
 import { MathUtils, PerspectiveCamera, Vector3, type Vector3Tuple } from 'three'
 import type { MutableRefObject } from 'react'
 import { CAMERA_EYE_TARGET_HEIGHT, type CameraSettings } from '../camera/cameraConfig'
-import { adjustFovByInputDelta, cameraOffset, clampGlance, clampYaw, dampingAlpha } from '../camera/cameraMath'
+import { adjustFovByInputDelta, cameraOffset, clampGlance, clampYaw } from '../camera/cameraMath'
+import { damp, dampingAlpha } from '../motionMath'
 import { measurePinch, type ScreenPoint } from './controls'
 
 /** How much closer the camera moves while the player talks, as a share of the follow distance. */
@@ -164,31 +165,27 @@ export function CameraRig({
   useFrame((state, rawDelta) => {
     const activeCamera = state.camera
     if (activeCamera instanceof PerspectiveCamera && Math.abs(activeCamera.fov - settings.fov) > 0.001) {
-      activeCamera.fov = MathUtils.lerp(activeCamera.fov, settings.fov, dampingAlpha(7, rawDelta))
+      activeCamera.fov = damp(activeCamera.fov, settings.fov, 7, rawDelta)
       activeCamera.updateProjectionMatrix()
     }
     const delta = Math.min(rawDelta, 0.05)
     const speedMultiplier = reducedMotion ? 2 : 1
     if (!dragging.current && performance.now() - releasedAt.current > 800) {
-      yaw.current = MathUtils.lerp(yaw.current, 0, dampingAlpha(settings.yawReturnSpeed * speedMultiplier, delta))
-      pitch.current = MathUtils.lerp(pitch.current, 0, dampingAlpha(settings.yawReturnSpeed * speedMultiplier, delta))
+      yaw.current = damp(yaw.current, 0, settings.yawReturnSpeed * speedMultiplier, delta)
+      pitch.current = damp(pitch.current, 0, settings.yawReturnSpeed * speedMultiplier, delta)
     }
 
     // Frame the player and the resident together by aiming between them, a little closer.
     const dialogueFocus = reducedMotion ? null : dialogueFocusRef.current
     if (dialogueFocus)
       dialogueShift.current.subVectors(dialogueFocus, playerPosition.current).setY(0).multiplyScalar(0.5)
-    dialogueBlend.current = MathUtils.lerp(
-      dialogueBlend.current,
-      dialogueFocus ? 1 : 0,
-      dampingAlpha(DIALOGUE_EASE_SPEED, delta),
-    )
+    dialogueBlend.current = damp(dialogueBlend.current, dialogueFocus ? 1 : 0, DIALOGUE_EASE_SPEED, delta)
     const shift = appliedDialogueShift.current.copy(dialogueShift.current).multiplyScalar(dialogueBlend.current)
     const distance = settings.distance * (1 - DIALOGUE_ZOOM * dialogueBlend.current)
 
-    smoothedHeight.current = MathUtils.lerp(smoothedHeight.current, settings.height, dampingAlpha(3.2, delta))
+    smoothedHeight.current = damp(smoothedHeight.current, settings.height, 3.2, delta)
     const [x, y, z] = cameraOffset(yaw.current, smoothedHeight.current, distance, offset.current)
-    verticalAnchor.current = MathUtils.lerp(verticalAnchor.current, playerPosition.current.y, dampingAlpha(1.25, delta))
+    verticalAnchor.current = damp(verticalAnchor.current, playerPosition.current.y, 1.25, delta)
     desiredPosition.current.set(playerPosition.current.x + x, verticalAnchor.current + y, playerPosition.current.z + z)
     desiredPosition.current.add(shift)
 

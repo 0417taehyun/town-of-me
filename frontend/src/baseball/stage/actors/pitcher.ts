@@ -15,7 +15,7 @@ import {
   reachArm,
   shoulderPoint,
 } from './ballplayerRig'
-import { alignHand, createGlove } from './gloves'
+import { alignHand, createGlove, FIELDER_GLOVE } from './gloves'
 import type { HeadLook } from './headLook'
 import { createMitten, MITTEN } from './mittenHands'
 import { keyedTracks, type MonotoneTrack, sampleTracks } from './keyframes'
@@ -112,8 +112,6 @@ export type PitcherPose = Record<PitcherChannel, number>
 
 /** From the throwing hand's wrist to the ball's center along the forearm: at the mitten's fingertips. */
 export const BALL_HOLD = 0.16
-/** The glove's half-sizes (rig units) and how far past the wrist its center sits. */
-export const PITCHER_GLOVE = { wide: 0.15, long: 0.19, thick: 0.08, ahead: 0.12 }
 
 /** `ballPoint` is where the ball in his hand is as last posed (field meters); `look` is where his head turns. */
 export type Pitcher = {
@@ -136,7 +134,7 @@ export function createPitcher(): Pitcher {
   const pitcher: Pitcher = {
     rig,
     hand: createMitten(rig, 0),
-    glove: createGlove(rig, PITCHER_GLOVE),
+    glove: createGlove(rig, FIELDER_GLOVE),
     tracks,
     ballPoint: new Vector3(),
     look: { yaw: 0, pitch: 5 },
@@ -216,7 +214,7 @@ export function posePitcher(pitcher: Pitcher, seconds: number) {
   alignHand(pitcher.hand, rig, 0, ballPole, MITTEN.wrist)
   direction(pose.glovePoleAzimuth, pose.glovePoleElevation, glovePole)
   reachArm(rig, 1, gloveTarget.set(pose.gloveX, pose.gloveY, pose.gloveZ), glovePole)
-  alignHand(pitcher.glove, rig, 1, glovePole, PITCHER_GLOVE.ahead)
+  alignHand(pitcher.glove, rig, 1, glovePole, FIELDER_GLOVE.ahead)
   rig.root.updateMatrix()
   pitcher.ballPoint.copy(heldBall).applyMatrix4(rig.root.matrix)
 }

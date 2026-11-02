@@ -6,14 +6,14 @@ import { seededFraction } from '../../motionMath'
 
 export function createCanvasTexture(
   size: number,
-  draw: (context: CanvasRenderingContext2D, size: number) => void,
+  draw: (context: CanvasRenderingContext2D, size: number, height: number) => void,
   height = size,
 ) {
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = height
   const context = canvas.getContext('2d')
-  if (context) draw(context, size)
+  if (context) draw(context, size, height)
   const texture = new CanvasTexture(canvas)
   texture.colorSpace = SRGBColorSpace
   texture.wrapS = RepeatWrapping

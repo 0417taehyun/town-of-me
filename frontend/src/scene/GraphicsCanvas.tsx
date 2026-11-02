@@ -7,29 +7,55 @@ import { CHROME_GRAPHICS_SETTINGS, copyStatus, copyText, supportsWebGL } from '.
 /** The sharpest pixel ratio a scene renders at; devices that cannot hold the frame rate drop to 1. */
 const SHARP_PIXEL_RATIO = 1.35
 
+/**
+ * A button that copies `address`, the address itself to select and copy by hand, and a status line: `messages.untried`
+ * until the button is pressed, then whether the copy worked (copyStatus).
+ */
+export function CopyAddress({
+  address,
+  copyLabel,
+  addressLabel,
+  messages,
+}: {
+  address: string
+  copyLabel: string
+  addressLabel: string
+  messages: Parameters<typeof copyStatus>[1]
+}) {
+  const [copied, setCopied] = useState<boolean | null>(null)
+  return (
+    <>
+      <button
+        className="primary-button compact"
+        type="button"
+        onClick={() => void copyText(address, navigator.clipboard).then(setCopied)}
+      >
+        {copyLabel}
+      </button>
+      <input
+        className="graphics-settings-address"
+        aria-label={addressLabel}
+        value={address}
+        readOnly
+        onFocus={(event) => event.currentTarget.select()}
+      />
+      <small role="status">{copyStatus(copied, messages)}</small>
+    </>
+  )
+}
+
 export function GraphicsFallback({ language, preview = false }: { language: AppLanguage; preview?: boolean }) {
   const copy = languageCopy[language].graphics
-  const [copied, setCopied] = useState<boolean | null>(null)
-  const status = copyStatus(copied, { untried: copy.pasteHint, copied: copy.copied, byHand: copy.copyByHand })
   return (
     <div className={`webgl-fallback ${preview ? 'preview-fallback' : ''}`} role="alert">
       <strong>{preview ? copy.preview : copy.town}</strong>
       <p>{copy.description}</p>
-      <button
-        className="primary-button compact"
-        type="button"
-        onClick={() => void copyText(CHROME_GRAPHICS_SETTINGS, navigator.clipboard).then(setCopied)}
-      >
-        {copy.copy}
-      </button>
-      <input
-        className="graphics-settings-address"
-        aria-label={copy.addressLabel}
-        value={CHROME_GRAPHICS_SETTINGS}
-        readOnly
-        onFocus={(event) => event.currentTarget.select()}
+      <CopyAddress
+        address={CHROME_GRAPHICS_SETTINGS}
+        copyLabel={copy.copy}
+        addressLabel={copy.addressLabel}
+        messages={{ untried: copy.pasteHint, copied: copy.copied, byHand: copy.copyByHand }}
       />
-      <small role="status">{status}</small>
       <button className="text-button" type="button" onClick={() => window.location.reload()}>
         {copy.reload}
       </button>

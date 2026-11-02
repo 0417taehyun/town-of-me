@@ -11,9 +11,8 @@ import {
   type WebGLProgramParametersWithUniforms,
 } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { dampingAlpha } from '../../camera/cameraMath'
 import type { PlayerProfile } from '../../data/playerProfile'
-import { damp, seededFraction } from '../../motionMath'
+import { damp, dampingAlpha, seededFraction } from '../../motionMath'
 import { glslFloat } from '../../scene/objects/foliageMaterial'
 import type { PitchResult } from '../game/derbyScore'
 import type { BallView } from '../stage/ballMeshes'

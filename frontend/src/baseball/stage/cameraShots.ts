@@ -1,7 +1,6 @@
 import { type PerspectiveCamera, Vector3 } from 'three'
-import { dampingAlpha } from '../../camera/cameraMath'
 import type { Vec3 } from '../../data/models'
-import { clamp, damp } from '../../motionMath'
+import { clamp, damp, dampingAlpha } from '../../motionMath'
 import type { PitchResult } from '../game/derbyScore'
 import { type BattingSide, FENCE_HEIGHT, fenceDistance, STRIKE_ZONE } from '../game/field'
 import { sprayPoint } from '../game/flight'

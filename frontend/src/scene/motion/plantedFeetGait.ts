@@ -12,7 +12,7 @@ import {
   createRestPose,
   type CharacterPose,
 } from './walkCycle'
-import { clamp, clamp01, damp, fract, lerp, smoothstep } from '../../motionMath'
+import { clamp, clamp01, damp, dampingAlpha, fract, lerp, smoothstep } from '../../motionMath'
 
 // Feet stay where they land in town and two-bone IK bends the legs to reach them. Heights follow walkCycle's
 // side-on leg model, the same one setPoseOnGround uses, so a planted sole ends exactly on the ground.
@@ -259,7 +259,7 @@ export function moveFeet(state: PlantedFeetState, input: GaitInput) {
 
 /** A skid or brake poses the legs itself, so the feet just slide along under the hips. */
 export function slideFeet(state: PlantedFeetState) {
-  const follow = 1 - Math.exp(-22 * state.delta)
+  const follow = dampingAlpha(22, state.delta)
   state.feet.forEach((foot) => slideFoot(state.body, foot, follow))
 }
 

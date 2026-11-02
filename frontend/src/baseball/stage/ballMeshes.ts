@@ -1,6 +1,5 @@
 import {
   BackSide,
-  CanvasTexture,
   CircleGeometry,
   DoubleSide,
   Group,
@@ -11,7 +10,6 @@ import {
   SphereGeometry,
   Sprite,
   SpriteMaterial,
-  SRGBColorSpace,
   Vector3,
   type PerspectiveCamera,
 } from 'three'
@@ -19,6 +17,7 @@ import type { Vec3 } from '../../data/models'
 import { clamp, damp } from '../../motionMath'
 import { BALL_RADIUS } from '../game/field'
 import { FIELD_LAYERS } from '../stadium/fieldLayout'
+import { createCanvasTexture } from '../stadium/fieldTextures'
 
 // The ball as drawn: a regulation ball 1.8 times larger with red seams, a dark rim so it reads against sky and grass,
 // a soft glow around it on its way (warm once it is hit), a trail behind it, a blob on the ground under it, and a ring
@@ -85,17 +84,6 @@ export function drawSeam(context: CanvasRenderingContext2D, offset: number, leng
   context.stroke()
 }
 
-export function createSeamTexture() {
-  const canvas = document.createElement('canvas')
-  canvas.width = 256
-  canvas.height = 128
-  const context = canvas.getContext('2d')
-  if (context) drawSeams(context, canvas.width, canvas.height)
-  const texture = new CanvasTexture(canvas)
-  texture.colorSpace = SRGBColorSpace
-  return texture
-}
-
 /** A round light, bright in the middle and gone at the edge, for the ball's glow and the stage's flashes. */
 export function drawGlowGradient(context: CanvasRenderingContext2D, size: number) {
   const gradient = context.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
@@ -107,21 +95,14 @@ export function drawGlowGradient(context: CanvasRenderingContext2D, size: number
 }
 
 export function createGlowTexture() {
-  const canvas = document.createElement('canvas')
-  canvas.width = 128
-  canvas.height = 128
-  const context = canvas.getContext('2d')
-  if (context) drawGlowGradient(context, canvas.width)
-  const texture = new CanvasTexture(canvas)
-  texture.colorSpace = SRGBColorSpace
-  return texture
+  return createCanvasTexture(128, drawGlowGradient)
 }
 
 export function createBallParts(): BallParts {
   const ball = new Mesh(
     new SphereGeometry(DRAWN_BALL_RADIUS, 24, 16),
     new MeshStandardMaterial({
-      map: createSeamTexture(),
+      map: createCanvasTexture(256, drawSeams, 128),
       roughness: 0.45,
       emissive: '#fff6e4',
       emissiveIntensity: 0.35,
