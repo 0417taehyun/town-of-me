@@ -326,7 +326,7 @@ export function parseScheduledBallparkRules(value: unknown): ScheduledBallparkRu
   const field = 'venues.ballpark.scheduledRules'
   const input = inputRecord(value, field)
   return {
-    fromMonth: matchingText(input.fromMonth, rankingMonthPattern, `${field}.fromMonth`, 'a YYYY-MM month'),
+    fromMonth: rankingMonthInput(input.fromMonth, `${field}.fromMonth`),
     rules: parseBallparkRules(input.rules, `${field}.rules`),
   }
 }
@@ -342,6 +342,21 @@ export function rankingMonth(now: number): string {
 export function nextRankingMonth(month: string): string {
   // Date.UTC counts months from 0, so the 1-based month number is already the month after.
   return new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 1)).toISOString().slice(0, 7)
+}
+
+/** A `YYYY-MM` ranking month as a client writes it; whether that month has come is up to the caller. */
+export function rankingMonthInput(value: unknown, field: string): string {
+  return matchingText(value, rankingMonthPattern, field, 'a YYYY-MM month')
+}
+
+/** When a `YYYY-MM` ranking month starts: 00:00 KST on its first day, in epoch ms. */
+export function rankingMonthStart(month: string): number {
+  return Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, 1) - kstOffsetMs
+}
+
+/** The KST calendar day, `YYYY-MM-DD`, that an ISO time falls on. */
+export function rankingDay(time: string): string {
+  return new Date(Date.parse(time) + kstOffsetMs).toISOString().slice(0, 10)
 }
 
 /** The rules played in `month`; `YYYY-MM` months sort as text. */

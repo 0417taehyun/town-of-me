@@ -595,6 +595,31 @@ async function checkEntryStore(store: Store, assert: Assert): Promise<void> {
     (await store.rankOf({ ...latecomer, listed: false, score: 4, tiebreak: 100, achievedAt: later })) === 2,
     'an unlisted record is told the place it would take',
   )
+  const board = await store.listBoard({ game: runGame, season }, 3)
+  assert(
+    board.map(({ id }) => id).join() === [leader, sameMoment, earlier].map(({ id }) => id).join(),
+    'the board lists listed, not disqualified records in public order, up to the limit',
+  )
+
+  const changes = {
+    authorName: null,
+    nameStatus: null,
+    appearance: { ...runAppearance, hat: 'cap' },
+    listed: false,
+    reviewStatus: 'disqualified' as const,
+    updatedAt: new Date(runIssuedAt + 5 * 60_000).toISOString(),
+  }
+  assert(
+    (await store.updateEntry(leader.id, new Date(runIssuedAt + 9 * 60_000).toISOString(), changes)) === null &&
+      isDeepStrictEqual(await store.getBoardEntryByVisitor(leader, 'rank-leader'), leader),
+    'an update from a version that is no longer current changes nothing',
+  )
+  const updated = await store.updateEntry(leader.id, leader.updatedAt, changes)
+  assert(
+    isDeepStrictEqual(updated, { ...leader, ...changes }) &&
+      isDeepStrictEqual(await store.getBoardEntryByVisitor(leader, 'rank-leader'), updated),
+    'an update from the current version replaces the name, its status, the appearance, listing, and review',
+  )
 }
 
 /** Runs the contract in a throwaway schema so a developer database can double as the test database. */

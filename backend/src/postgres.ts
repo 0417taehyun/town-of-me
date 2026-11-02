@@ -9,6 +9,7 @@ import type { GuestbookAppearance, GuestbookEntry, GuestbookStatus } from './gue
 import type { DerbyRunRecord, PublicDerbyResult } from './homeRunDerby.js'
 import type {
   BoardKey,
+  EntryChanges,
   EntrySettlement,
   FinishedRun,
   GameRun,
@@ -484,6 +485,35 @@ export class PostgresStore implements Store {
       [entry.game, entry.season, entry.score, entry.tiebreak, entry.achievedAt, entry.id],
     )
     return firstRow(rows).ahead + 1
+  }
+
+  async listBoard(board: BoardKey, limit: number): Promise<LeaderboardEntry[]> {
+    const { rows } = await this.pool.query<LeaderboardEntryRow>(
+      `SELECT * FROM minigame_entries
+       WHERE game = $1 AND season = $2 AND listed AND review_status <> 'disqualified'
+       ORDER BY score DESC, tiebreak DESC, achieved_at, id LIMIT $3`,
+      [board.game, board.season, limit],
+    )
+    return rows.map(toLeaderboardEntry)
+  }
+
+  async updateEntry(id: string, expectedUpdatedAt: string, changes: EntryChanges): Promise<LeaderboardEntry | null> {
+    const { rows } = await this.pool.query<LeaderboardEntryRow>(
+      `UPDATE minigame_entries SET author_name = $3, name_status = $4, author_appearance = $5, listed = $6,
+         review_status = $7, updated_at = $8
+       WHERE id = $1 AND updated_at = $2::timestamptz RETURNING *`,
+      [
+        id,
+        expectedUpdatedAt,
+        changes.authorName,
+        changes.nameStatus,
+        JSON.stringify(changes.appearance),
+        changes.listed,
+        changes.reviewStatus,
+        changes.updatedAt,
+      ],
+    )
+    return mapFirstRow(rows, toLeaderboardEntry)
   }
 }
 

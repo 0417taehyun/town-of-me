@@ -92,7 +92,7 @@ Create a handler with `createApi({ service, authStore, linkedInOidc, allowedOrig
 - `GET /v1/guestbook` returns `{ entries, own }`: the newest 100 approved entries, and this browser's latest entry with its `status` and whether it is still `revisable`
 - `POST /v1/guestbook` and `PUT /v1/guestbook/:id` take `{ message, locale, profile }` from anyone and return `{ entry }`; see the guestbook rules below
 - `GET /v1/admin/guestbook` lists the newest 200 entries of every status with `updatedAt`; `POST /v1/admin/guestbook/:id/approval` with `{ updatedAt }` publishes the entry only if it was not revised since that version (`409` otherwise); `DELETE /v1/admin/guestbook/:id` removes it
-- `POST /v1/games/:game/runs` and `POST /v1/games/:game/runs/:id/result` start and record a ranked run; see [Ranked runs](#ranked-runs)
+- `POST /v1/games/:game/runs` and `POST /v1/games/:game/runs/:id/result` start and record a ranked run, `GET /v1/games/:game/leaderboard` and `GET /v1/games/:game/podium` read the monthly board and its statues, and `PUT /v1/games/:game/entries/own` lists or unlists the visitor's record; see [Ranked runs](#ranked-runs)
 - `GET /v1/towns/:id` returns `{ town }` with `revision`, or `404` when no such town exists
 - `PUT /v1/admin/towns/:id` with `{ baseRevision, name, owner, pet, spawn, movement, venues, objects, residents }` replaces the town for an admin session (`401` signed out, `403` otherwise) and returns the saved `{ town }`; `baseRevision` is `0` for the first save
 - `POST /v1/admin/resident-dialogues` with `{ name, role, relationship, reference, owner }` (`owner` is the owner's `{ ko, en }` name) returns a drafted `{ dialogue }` for an admin session without storing it; the admin saves it with the town
@@ -145,6 +145,22 @@ the same results).
   same player (the same appearance, and the same name when it had one); a listed record whose next run looks like
   someone else's goes off the board and loses its name, so a shared browser never publishes one player's score under
   another's consent.
+- `PUT /v1/games/home-run-derby/entries/own` with `{ listed?, profile? }` changes this month's record of the visitor
+  cookie (`404` without one): `listed: true` needs `profile`, whose name is stored from then on, and `listed: false`
+  drops the name. A new name waits for approval again, and a new appearance returns the record to review. It returns
+  `{ entry }`, the visitor's own view (`listed`, `name`, `nameStatus`, `disqualified`, `profile`, `homeRuns`,
+  `totalDistanceDm`, `achievedAt`, and `rank`, the place it holds or would hold).
+- `GET /v1/games/home-run-derby/leaderboard?season=YYYY-MM` (this month by default; a malformed season is `400`, a
+  season still to come `404`) returns `{ season: { id, startsAt, endsAt, final }, podium, ranks, own }`. The public
+  order is listed, not disqualified records by home runs, then their distance, then the earlier record; `podium` is
+  its first three, the statues, and `ranks` places 4 to 50. A public row has `id`, `rank`, `name`, `nameState`,
+  `profile`, `homeRuns`, `totalDistanceDm`, and `achievedOn`: the name only once approved (`nameState` is `approved`,
+  `reviewing`, or `anonymous`), the default silhouette `{ kind: 'default' }` for an anonymous batter, and only the KST
+  day; never a visitor hash, a review state, or an exact time. `own` is the visitor's own view, or `null`.
+- `GET /v1/games/home-run-derby/podium` returns this month's `{ season: { id }, podium }` for the town's statues. It
+  reads and sets no cookie and is `Cache-Control: public, max-age=60` (nginx leaves its `no-store` off this path), so
+  a disqualification shows within a minute. Reads stay open while the ballpark is hidden; the frontend decides what a
+  hidden venue shows.
 
 ## OpenRouter dialogue drafts
 

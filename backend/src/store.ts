@@ -7,6 +7,7 @@ import {
   boardOrder,
   isPublicEntry,
   type BoardKey,
+  type EntryChanges,
   type EntrySettlement,
   type FinishedRun,
   type GameRun,
@@ -64,6 +65,10 @@ export interface Store extends AuthStore {
   getBoardEntryByVisitor(board: BoardKey, visitorHash: string): Promise<LeaderboardEntry | null>
   /** 1 + the records ahead of `entry` in its board's public order: for an unlisted record, the place it would take. */
   rankOf(entry: LeaderboardEntry): Promise<number>
+  /** The top of the board's public order (listed and not disqualified); its first three are the statues. */
+  listBoard(board: BoardKey, limit: number): Promise<LeaderboardEntry[]>
+  /** Applies `changes` only while the record is still at `expectedUpdatedAt`; `null` if it is missing or changed. */
+  updateEntry(id: string, expectedUpdatedAt: string, changes: EntryChanges): Promise<LeaderboardEntry | null>
 }
 
 export type GuestbookEntryChanges = Partial<
@@ -286,6 +291,21 @@ export class MemoryStore implements Store {
       (other) => isOnBoard(other, entry) && isPublicEntry(other) && boardOrder(other, entry) < 0,
     )
     return ahead.length + 1
+  }
+
+  async listBoard(board: BoardKey, limit: number): Promise<LeaderboardEntry[]> {
+    const listed = [...this.leaderboardEntries.values()].filter(
+      (entry) => isOnBoard(entry, board) && isPublicEntry(entry),
+    )
+    return structuredClone(listed.sort(boardOrder).slice(0, limit))
+  }
+
+  async updateEntry(id: string, expectedUpdatedAt: string, changes: EntryChanges): Promise<LeaderboardEntry | null> {
+    const entry = this.leaderboardEntries.get(id)
+    if (entry?.updatedAt !== expectedUpdatedAt) return null
+    const updated = { ...entry, ...structuredClone(changes) }
+    this.leaderboardEntries.set(id, updated)
+    return structuredClone(updated)
   }
 }
 

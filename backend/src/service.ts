@@ -12,11 +12,15 @@ import {
   publicDerbyResult,
 } from './homeRunDerby.js'
 import {
+  leaderboardLength,
+  ownEntryChanges,
+  parseOwnEntryUpdate,
   parseRunProfile,
   randomRunSeed,
   runLifetimeMs,
   runStanding,
   settleBoardEntry,
+  statueCount,
   type FinishedRun,
   type GameRun,
   type LeaderboardEntry,
@@ -29,6 +33,7 @@ import {
   parseResidentDialogueSource,
   parseTownLayout,
   rankingMonth,
+  rankingMonthInput,
   settleBallparkSettings,
   type ResidentDialogue,
   type ResidentDialogueSource,
@@ -43,6 +48,14 @@ export interface RunOutcome {
   entry: LeaderboardEntry | null
   rank: number
   standing: RunStanding
+}
+
+/** A board's top places in public order, and the visitor's own record with its place. */
+export interface Leaderboard {
+  season: string
+  currentSeason: string
+  entries: LeaderboardEntry[]
+  own: { entry: LeaderboardEntry; rank: number } | null
 }
 
 export class BackendService {
@@ -314,6 +327,55 @@ export class BackendService {
     const saved = await this.store.finishRun(run.id, run.visitorHash, tooFast, null)
     if (!saved) return this.submitRunResult(run.game, run.visitorHash, run.id, input, now)
     throw new DomainError('CONFLICT', 'The run ended sooner than its pitches can be played')
+  }
+
+  /**
+   * A season's board, this KST month's by default, kept with no end date. A season still to come has none. Reads stay
+   * open while the ballpark is hidden: the frontend decides what a hidden venue shows.
+   */
+  async getLeaderboard(
+    game: string,
+    visitorHash: string | null,
+    requestedSeason: string | null,
+    now = Date.now(),
+  ): Promise<Leaderboard> {
+    assertRankedGame(game)
+    const currentSeason = rankingMonth(now)
+    const season = requestedSeason === null ? currentSeason : rankingMonthInput(requestedSeason, 'season')
+    if (season > currentSeason) throw new DomainError('NOT_FOUND', 'That season has not started')
+    const board = { game, season }
+    const own = visitorHash ? await this.store.getBoardEntryByVisitor(board, visitorHash) : null
+    return {
+      season,
+      currentSeason,
+      entries: await this.store.listBoard(board, leaderboardLength),
+      own: own && { entry: own, rank: await this.store.rankOf(own) },
+    }
+  }
+
+  /** This KST month's statues: the first three of its public order, read by the town without a visitor cookie. */
+  async getPodium(game: string, now = Date.now()): Promise<{ season: string; entries: LeaderboardEntry[] }> {
+    assertRankedGame(game)
+    const season = rankingMonth(now)
+    return { season, entries: await this.store.listBoard({ game, season }, statueCount) }
+  }
+
+  /** The visitor lists or unlists this month's record, or changes the character and name it shows. */
+  async updateOwnEntry(
+    game: string,
+    visitorHash: string | null,
+    input: Record<string, unknown>,
+    now = Date.now(),
+  ): Promise<{ entry: LeaderboardEntry; rank: number }> {
+    assertRankedGame(game)
+    const update = parseOwnEntryUpdate(input)
+    const board = { game, season: rankingMonth(now) }
+    const entry = visitorHash ? await this.store.getBoardEntryByVisitor(board, visitorHash) : null
+    if (!entry) throw new DomainError('NOT_FOUND', 'No record this month')
+    const changes = ownEntryChanges(entry, update, new Date(now).toISOString())
+    const updated = await this.store.updateEntry(entry.id, entry.updatedAt, changes)
+    if (!updated) throw new DomainError('CONFLICT', 'The record changed while it was being updated')
+    return { entry: updated, rank: await this.store.rankOf(updated) }
   }
 
   /** `entry` is the record the run just settled, if it did; otherwise the visitor's record is read as it stands now. */

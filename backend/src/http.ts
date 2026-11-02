@@ -11,8 +11,8 @@ import {
 import { DomainError, type Actor, type LinkedUser } from './domain.js'
 import { ownGuestbookEntry, publicGuestbookEntry, reviewedGuestbookEntry } from './guestbook.js'
 import { publicDerbyResult } from './homeRunDerby.js'
-import { ownEntry, type GameRun } from './leaderboard.js'
-import { BackendService, type RunOutcome } from './service.js'
+import { ownEntry, rankedEntry, seasonView, statueCount, type GameRun } from './leaderboard.js'
+import { BackendService, type Leaderboard, type RunOutcome } from './service.js'
 import { townIdPattern } from './town.js'
 import { inputRecord, invalidInput } from './validation.js'
 
@@ -108,6 +108,17 @@ const routes: readonly Route[] = [
     const body = await objectBody(request, gameBodyLimitBytes)
     const outcome = await dependencies.service.submitRunResult(game, await readVisitorHash(request), runId, body)
     return json(runOutcomeView(outcome))
+  }),
+  route('GET', `/v1/games/(${gameId})/leaderboard`, async ({ request, url, pathId, dependencies }) => {
+    const visitorHash = await readVisitorHash(request)
+    const season = url.searchParams.get('season')
+    return json(leaderboardView(await dependencies.service.getLeaderboard(pathId, visitorHash, season)))
+  }),
+  route('GET', `/v1/games/(${gameId})/podium`, servePodium),
+  route('PUT', `/v1/games/(${gameId})/entries/own`, async ({ request, pathId, dependencies }) => {
+    const body = await objectBody(request, gameBodyLimitBytes)
+    const { entry, rank } = await dependencies.service.updateOwnEntry(pathId, await readVisitorHash(request), body)
+    return json({ entry: ownEntry(entry, rank) })
   }),
   route('GET', `/v1/towns/(${townIdPattern})`, async ({ pathId, dependencies }) =>
     json({ town: await dependencies.service.getTown(pathId) }),
@@ -226,6 +237,27 @@ export function issuedRunView(run: GameRun) {
   return { id: run.id, season: run.season, expiresAt: run.expiresAt, rules: run.rules, seed: run.seed }
 }
 
+/**
+ * The town's statues. No cookie is read or set and nothing in it belongs to one visitor, so shared caches may keep it
+ * for a minute; a disqualification shows within that.
+ */
+export async function servePodium({ pathId, dependencies }: RouteContext): Promise<Response> {
+  const { season, entries } = await dependencies.service.getPodium(pathId)
+  const podium = entries.map((entry, index) => rankedEntry(entry, index + 1))
+  return json({ season: { id: season }, podium }, 200, { 'Cache-Control': 'public, max-age=60' })
+}
+
+/** The first three places are the statues and the rest the list below them. */
+export function leaderboardView({ season, currentSeason, entries, own }: Leaderboard) {
+  const ranked = entries.map((entry, index) => rankedEntry(entry, index + 1))
+  return {
+    season: seasonView(season, currentSeason),
+    podium: ranked.slice(0, statueCount),
+    ranks: ranked.slice(statueCount),
+    own: own && ownEntry(own.entry, own.rank),
+  }
+}
+
 /** The server's own result, never the client's totals, with the visitor's record and standing. */
 export function runOutcomeView({ run, entry, rank, standing }: RunOutcome) {
   if (!run.result) throw new Error('A recorded run keeps its result')
@@ -328,8 +360,9 @@ export function parseJson(text: string): unknown {
 }
 
 /**
- * Every response is `no-store`: guestbook reads carry the visitor's own pending entry, a town save must show at
- * once, and session-bound answers must never be kept by a shared cache.
+ * Every response is `no-store` unless its route says otherwise (only the podium does): guestbook and leaderboard reads
+ * carry the visitor's own entry, a town save must show at once, and session-bound answers must never be kept by a
+ * shared cache.
  */
 export function json(value: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return Response.json(value, { status, headers: { 'Cache-Control': 'no-store', ...headers } })

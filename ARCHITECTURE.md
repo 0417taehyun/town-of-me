@@ -220,7 +220,8 @@ Tests run with `npm test` through `test/run.ts`. `test/storeContract.ts` runs th
 /v1/admin/towns/:id` with the revision it loaded (a stale revision gets `409`).
 - **Guestbook:** anyone writes one note a day per browser cookie; notes stay pending until an admin approves them.
 - **Ranked run:** the derby asks for a run (rules for the KST month, a seed) → plays it → sends the raw swing numbers
-  → the server scores them again and keeps the visitor's best record for the month the run was issued in.
+  → the server scores them again and keeps the visitor's best record for the month the run was issued in. A listed
+  record joins the public board, whose first three are the statues (`/podium`).
 - **Resident dialogue:** an admin drafts it from a reference with OpenRouter and reviews it before saving; visits never
   call an LLM.
 

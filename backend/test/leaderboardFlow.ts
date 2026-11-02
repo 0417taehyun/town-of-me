@@ -11,9 +11,11 @@ import {
   hashToken,
   judgeDerbyRun,
   MemoryStore,
+  nextRankingMonth,
   parseDerbySubmission,
   parseTownLayout,
   rankingMonth,
+  rankingMonthStart,
   type BallparkRules,
 } from '../src/index.js'
 import { sampleTownLayout } from './townFlow.js'
@@ -76,6 +78,22 @@ function resultBody(rules: BallparkRules, seed: number, errorsMs: Array<number |
   }
 }
 
+type PublicEntry = {
+  id: string
+  rank: number
+  name: string | null
+  nameState: string
+  profile: Record<string, unknown>
+  homeRuns: number
+  achievedOn: string
+}
+type Board = {
+  season: { id: string; startsAt: string; endsAt: string; final: boolean }
+  podium: PublicEntry[]
+  ranks: PublicEntry[]
+  own: { id: string; listed: boolean; rank: number | null; disqualified: boolean } | null
+}
+
 async function rejection(action: () => Promise<unknown>): Promise<unknown> {
   return action().then(
     () => null,
@@ -83,8 +101,8 @@ async function rejection(action: () => Promise<unknown>): Promise<unknown> {
   )
 }
 
-/** Ranked runs: issued by the server, played on the client, and recorded once from the server's own judging. */
-export async function checkLeaderboardFlow(assert: Assert): Promise<void> {
+/** A store, its service and API, and the admin's ballpark settings stored as given (a save would settle the rules). */
+function leaderboardHarness() {
   const store = new MemoryStore()
   const service = new BackendService(store)
   const api = createApi({ service, authStore: store, allowedOrigins: new Set([origin]), frontendUrl: `${origin}/` })
@@ -100,10 +118,7 @@ export async function checkLeaderboardFlow(assert: Assert): Promise<void> {
     const body = options.body === undefined ? null : JSON.stringify(options.body)
     return api(new Request(`${origin}${path}`, { method, headers, body }))
   }
-  const submit = (runId: string, body: unknown, cookie?: string) =>
-    send('POST', `/v1/games/${game}/runs/${runId}/result`, cookie ? { body, cookie } : { body })
 
-  /** The admin's ballpark settings, stored as given (a save would settle the rules for the month). */
   async function setBallpark(ballpark: Record<string, unknown>, contactEmail: string | null = 'robin@example.com') {
     const layout = parseTownLayout({
       ...sampleTownLayout,
@@ -112,6 +127,15 @@ export async function checkLeaderboardFlow(assert: Assert): Promise<void> {
     })
     await store.saveTown('mossbell', layout, (await store.getTown('mossbell'))?.revision ?? 0)
   }
+
+  return { store, service, send, setBallpark }
+}
+
+/** Ranked runs: issued by the server, played on the client, and recorded once from the server's own judging. */
+export async function checkLeaderboardFlow(assert: Assert): Promise<void> {
+  const { store, service, send, setBallpark } = leaderboardHarness()
+  const submit = (runId: string, body: unknown, cookie?: string) =>
+    send('POST', `/v1/games/${game}/runs/${runId}/result`, cookie ? { body, cookie } : { body })
 
   assert((await send('POST', `/v1/games/${game}/runs`)).status === 503, 'a town never saved has no open ballpark')
   await setBallpark({ visible: false, rules: fiveNormal })
@@ -274,6 +298,201 @@ export async function checkLeaderboardFlow(assert: Assert): Promise<void> {
   await checkGoldenRun(assert, service, setBallpark, visitorHash)
   await checkMonthBoundary(assert, service, setBallpark)
   checkReviewFlags(assert)
+  await checkBoard(assert)
+}
+
+/**
+ * The board: listed records in public order, the first three standing as statues, names shown once approved, and
+ * nothing that identifies a visitor. A held run never stands, and a disqualified statue makes way for the next record.
+ */
+async function checkBoard(assert: Assert): Promise<void> {
+  const { store, service, send, setBallpark } = leaderboardHarness()
+  await setBallpark({ visible: true, rules: fiveNormal })
+  const seed = 404
+  async function play(token: string, errorsMs: Array<number | null>, extra: object = {}, now = Date.now()) {
+    const visitorHash = await hashToken(token)
+    const run = await service.issueRun(game, visitorHash, now - 2 * minute, seed)
+    return service.submitRunResult(
+      game,
+      visitorHash,
+      run.id,
+      { ...resultBody(fiveNormal, seed, errorsMs), ...extra },
+      now,
+    )
+  }
+  const cookieOf = (token: string) => `__Host-tom_visitor=${token}`
+  async function read(path: string, cookie?: string) {
+    const response = await send('GET', `/v1/games/${game}/${path}`, cookie ? { cookie } : {})
+    return { response, text: await response.clone().text(), body: (await response.json()) as Board }
+  }
+  const list = (token: string, body: unknown) =>
+    send('PUT', `/v1/games/${game}/entries/own`, { body, cookie: cookieOf(token) })
+
+  const players: Array<[string, Array<number | null>, string | null]> = [
+    ['board-four', [12, -21, null, 33, -27], 'Sprout'],
+    ['board-three', [12, -21, null, 33, null], 'Pebble'],
+    ['board-two', [12, null, null, 33, null], null],
+    ['board-one', [12, null, null, null, null], 'Clover'],
+  ]
+  for (const [token, errorsMs] of players) await play(token, errorsMs)
+  const unlisted = await read('leaderboard', cookieOf('board-four'))
+  assert(
+    unlisted.body.podium.length === 0 && unlisted.body.own?.listed === false && unlisted.body.own.rank === 1,
+    'records stay off the board until listed, and their owner is told the place they would take',
+  )
+  assert(
+    (await list('board-four', { listed: true })).status === 400 &&
+      (await send('PUT', `/v1/games/${game}/entries/own`, { body: { listed: false } })).status === 404 &&
+      (await list('board-nobody', { listed: false })).status === 404,
+    'listing needs the profile, and a browser lists only a record of its own',
+  )
+  for (const [token, , name] of players) await list(token, { listed: true, profile: { ...profile, name } })
+
+  const board = await read('leaderboard')
+  const order = [...board.body.podium, ...board.body.ranks]
+  const ids = await Promise.all(
+    players.map(
+      async ([token]) =>
+        (await store.getBoardEntryByVisitor({ game, season: board.body.season.id }, await hashToken(token)))?.id,
+    ),
+  )
+  assert(
+    isDeepStrictEqual(
+      order.map(({ id }) => id),
+      ids,
+    ) &&
+      board.body.podium.length === 3 &&
+      isDeepStrictEqual(
+        order.map(({ rank, homeRuns }) => [rank, homeRuns]),
+        [
+          [1, 4],
+          [2, 3],
+          [3, 2],
+          [4, 1],
+        ],
+      ),
+    'listed records rank by home runs, and the first three are the statues',
+  )
+  const hashes = await Promise.all(players.map(([token]) => hashToken(token)))
+  assert(
+    board.response.headers.get('Cache-Control') === 'no-store' &&
+      board.body.own === null &&
+      !hashes.some((hash) => board.text.includes(hash)) &&
+      !/visitorHash|achievedAt|reviewStatus/u.test(board.text) &&
+      order.every(({ achievedOn }) => /^\d{4}-\d{2}-\d{2}$/u.test(achievedOn)),
+    'the public board carries no visitor hash, review state, or exact time, only the KST day',
+  )
+  assert(
+    order.every(({ name }) => name === null) &&
+      order[0]?.nameState === 'reviewing' &&
+      order[2]?.nameState === 'anonymous' &&
+      isDeepStrictEqual(order[2].profile, { kind: 'default' }) &&
+      order[0].profile.hat === profile.hat,
+    'a name stays hidden until it is approved, and a record without one shows the default batter',
+  )
+  const leader = await store.getBoardEntryByVisitor({ game, season: board.body.season.id }, hashes[0] ?? '')
+  assert(leader, "the leader's record is stored")
+  await store.updateEntry(leader.id, leader.updatedAt, { ...leader, nameStatus: 'approved' })
+  assert((await read('leaderboard')).body.podium[0]?.name === 'Sprout', 'an approved name shows on its statue')
+
+  const heldStrong = await play('board-held', [12, -21, null, 33, -27], {
+    claimed: { homeRuns: 0, totalDistanceDm: 0 },
+  })
+  const heldBetter = await play('board-two', [12, -21, null, 33, -27], { claimed: { homeRuns: 0, totalDistanceDm: 0 } })
+  const afterHeld = await read('podium')
+  assert(
+    heldStrong.standing.kind === 'reviewing' &&
+      heldBetter.standing.kind === 'reviewing' &&
+      isDeepStrictEqual(
+        afterHeld.body.podium.map(({ id }) => id),
+        ids.slice(0, 3),
+      ),
+    'held runs, however strong, never change the statues',
+  )
+  const statueStore = await store.getBoardEntryByVisitor({ game, season: board.body.season.id }, hashes[0] ?? '')
+  assert(statueStore, 'the first statue is stored')
+  await store.updateEntry(statueStore.id, statueStore.updatedAt, { ...statueStore, reviewStatus: 'disqualified' })
+  const podium = await read('podium')
+  const podiumWithCookie = await read('podium', cookieOf('board-three'))
+  assert(
+    isDeepStrictEqual(
+      podium.body.podium.map(({ id }) => id),
+      ids.slice(1),
+    ) &&
+      isDeepStrictEqual(
+        podium.body.podium.map(({ rank }) => rank),
+        [1, 2, 3],
+      ),
+    'disqualifying a statue makes the fourth record a statue',
+  )
+  assert(
+    podium.response.headers.get('Cache-Control') === 'public, max-age=60' &&
+      podium.response.headers.get('Set-Cookie') === null &&
+      podium.text === podiumWithCookie.text &&
+      podium.body.season.id === board.body.season.id &&
+      !hashes.some((hash) => podium.text.includes(hash)),
+    'the podium is the same for everyone, sets no cookie, and may be cached for a minute',
+  )
+  const disqualified = await read('leaderboard', cookieOf('board-four'))
+  const disqualifiedBetter = await play('board-four', [12, -21, -8, 33, -27])
+  assert(
+    disqualified.body.own?.disqualified === true &&
+      disqualified.body.own.rank === null &&
+      disqualifiedBetter.standing.kind === 'excluded' &&
+      (await read('podium')).text === podium.text,
+    'a disqualified record stays off the board, even after a better run',
+  )
+
+  const thisMonth = board.body.season.id
+  const nextMonth = nextRankingMonth(thisMonth)
+  assert((await read('leaderboard?season=2026-13')).response.status === 400, 'a season must be a YYYY-MM month')
+  assert((await read(`leaderboard?season=${nextMonth}`)).response.status === 404, 'a season still to come has no board')
+  const lastMonth = await read('leaderboard?season=2026-01')
+  assert(
+    lastMonth.response.status === 200 &&
+      lastMonth.body.season.final &&
+      lastMonth.body.podium.length === 0 &&
+      lastMonth.body.season.startsAt === '2025-12-31T15:00:00.000Z' &&
+      lastMonth.body.season.endsAt === '2026-01-31T15:00:00.000Z',
+    'a past season is still served, final, and bounded by midnight KST',
+  )
+
+  const nextMonthAt = rankingMonthStart(nextMonth) + 5 * minute
+  const returning = await play(
+    'board-three',
+    [12, null, null, null, null],
+    { profile: { ...profile, name: 'Pebble' } },
+    nextMonthAt,
+  )
+  assert(
+    returning.standing.kind === 'ranked' &&
+      returning.entry?.listed &&
+      returning.entry.season === nextMonth &&
+      returning.entry.authorName === 'Pebble',
+    "a visitor's first record of a new month stays listed like their last one, under the same name",
+  )
+  const someoneElse = await play(
+    'board-one',
+    [12, null, null, null, null],
+    { profile: { ...profile, name: 'Clover', hat: 'cap' } },
+    nextMonthAt,
+  )
+  assert(
+    someoneElse.standing.kind === 'consentNeeded' &&
+      someoneElse.entry?.listed === false &&
+      someoneElse.entry.authorName === null,
+    "a first record that looks like someone else's waits for its own consent",
+  )
+  const renamed = await play(
+    'board-three',
+    [12, null, null, null, null],
+    { profile: { ...profile, name: 'Pebble Two' } },
+    nextMonthAt + minute,
+  )
+  assert(
+    renamed.standing.kind === 'consentNeeded' && renamed.entry?.listed === false && renamed.entry.authorName === null,
+    'a run under another name takes a listed record off the board with its name',
+  )
 }
 
 /** Each review check holds a run that trips it and leaves an ordinary run alone. */

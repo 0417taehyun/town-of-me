@@ -4,7 +4,8 @@ import { parseCharacterAppearance, type CharacterAppearance } from './character.
 import type { DerbyInputLog } from './derbyJudge/derbyScore.js'
 import type { DerbyRunRecord, PublicDerbyResult } from './homeRunDerby.js'
 import type { BallparkRules } from './town.js'
-import { inputRecord, optionalInput, singleLineText } from './validation.js'
+import { nextRankingMonth, rankingDay, rankingMonthStart } from './town.js'
+import { inputRecord, invalidInput, optionalInput, singleLineText } from './validation.js'
 
 // The monthly boards, apart from any one game: a board is a game and a KST month (its season), and each visitor has at
 // most one record on it, their best accepted run. The public order is home runs, then their distance, then whoever got
@@ -12,6 +13,10 @@ import { inputRecord, optionalInput, singleLineText } from './validation.js'
 
 /** A run is open this long after it is issued: a five-pitch run takes about two minutes, pauses included. */
 export const runLifetimeMs = 10 * 60_000
+/** The public order's first places, which stand as statues. */
+export const statueCount = 3
+/** How many places the leaderboard lists. */
+export const leaderboardLength = 50
 
 /** `issued` until a result arrives; a new run abandons the visitor's open one. Only `scored` runs reach a board. */
 export type RunStatus = 'issued' | 'abandoned' | 'scored' | 'flagged' | 'rejected'
@@ -84,6 +89,16 @@ export interface LeaderboardEntry {
   updatedAt: string
 }
 
+/** What a conditional entry update replaces. */
+export type EntryChanges = Pick<
+  LeaderboardEntry,
+  'authorName' | 'nameStatus' | 'appearance' | 'listed' | 'reviewStatus' | 'updatedAt'
+>
+
+/** What the visitor asks of their own record: whether it is listed, and the character and name it shows. */
+export type OwnEntryUpdate =
+  { listed: false; profile: RunProfile | null } | { listed: boolean | null; profile: RunProfile }
+
 /** Who a run's result says played it: an appearance, and a name when the tab had one. */
 export interface RunProfile {
   name: string | null
@@ -123,6 +138,9 @@ export type RunStanding =
   | { kind: 'excluded' }
   | { kind: 'ranked'; rank: number; personalBest: boolean }
   | { kind: 'unlisted' | 'consentNeeded'; wouldBeRank: number; personalBest: boolean }
+
+/** How the public reads a record's name. */
+export type PublicNameState = 'approved' | 'reviewing' | 'anonymous'
 
 /** A run's seed: any 32-bit unsigned integer. */
 export function randomRunSeed(): number {
@@ -254,6 +272,41 @@ export function revisedEntry(candidate: BoardCandidate, current: LeaderboardEntr
   }
 }
 
+/** Listing needs the profile, since the name is stored from then on; unlisting needs nothing else. */
+export function parseOwnEntryUpdate(input: Record<string, unknown>): OwnEntryUpdate {
+  const listed = input.listed ?? null
+  if (listed !== null && typeof listed !== 'boolean') throw invalidInput('listed must be a boolean')
+  const profile = optionalInput(input.profile, parseRunProfile)
+  if (profile) return { listed, profile }
+  if (listed === false) return { listed, profile }
+  throw invalidInput('profile is required unless listed is false')
+}
+
+/**
+ * The visitor's change to their own record: a listed record shows the profile's name, an unlisted one keeps none. A
+ * new name waits for approval again while the record's own name keeps its status, and a new appearance returns the
+ * record to review, since a statue shows it at once.
+ */
+export function ownEntryChanges(entry: LeaderboardEntry, update: OwnEntryUpdate, now: string): EntryChanges {
+  const listed = update.listed ?? entry.listed
+  const appearance = update.profile?.appearance ?? entry.appearance
+  const authorName = listed ? (update.profile?.name ?? null) : null
+  const appearanceChanged = !isDeepStrictEqual(appearance, entry.appearance)
+  return {
+    listed,
+    authorName,
+    nameStatus: nameStatusFor(entry, authorName),
+    appearance,
+    reviewStatus: appearanceChanged && entry.reviewStatus !== 'disqualified' ? 'pending' : entry.reviewStatus,
+    updatedAt: nextVersion(entry.updatedAt, now),
+  }
+}
+
+export function nameStatusFor(entry: LeaderboardEntry, name: string | null): NameStatus | null {
+  if (name === null) return null
+  return name === entry.authorName ? entry.nameStatus : 'pending'
+}
+
 /** A run held for review leaves the record as it was; a disqualified record is off this board whatever the run did. */
 export function runStanding(
   run: GameRun,
@@ -266,6 +319,30 @@ export function runStanding(
   const personalBest = entry.bestRunId === run.id
   if (entry.listed) return { kind: 'ranked', rank, personalBest }
   return { kind: consentNeeded ? 'consentNeeded' : 'unlisted', wouldBeRank: rank, personalBest }
+}
+
+/** Names show once approved; a record without one, or with a rejected one, is an anonymous batter. */
+export function publicNameState(entry: LeaderboardEntry): PublicNameState {
+  if (entry.authorName === null || entry.nameStatus === 'rejected') return 'anonymous'
+  return entry.nameStatus === 'approved' ? 'approved' : 'reviewing'
+}
+
+/**
+ * A record as anyone sees it: no visitor hash, review state, or exact time. An anonymous batter keeps their score but
+ * shows the default silhouette, since a character can be recognized without a name.
+ */
+export function rankedEntry(entry: LeaderboardEntry, rank: number) {
+  const nameState = publicNameState(entry)
+  return {
+    id: entry.id,
+    rank,
+    name: nameState === 'approved' ? entry.authorName : null,
+    nameState,
+    profile: nameState === 'anonymous' ? { kind: 'default' as const } : entry.appearance,
+    homeRuns: entry.score,
+    totalDistanceDm: entry.tiebreak,
+    achievedOn: rankingDay(entry.achievedAt),
+  }
 }
 
 /** The visitor's own record: the real name and its status, and its place, or the place it would have if listed. */
@@ -283,5 +360,15 @@ export function ownEntry(entry: LeaderboardEntry, rank: number) {
     totalDistanceDm: entry.tiebreak,
     achievedAt: entry.achievedAt,
     rank: disqualified ? null : rank,
+  }
+}
+
+/** A season's bounds; a season before `currentSeason` is final. */
+export function seasonView(season: string, currentSeason: string) {
+  return {
+    id: season,
+    startsAt: new Date(rankingMonthStart(season)).toISOString(),
+    endsAt: new Date(rankingMonthStart(nextRankingMonth(season))).toISOString(),
+    final: season < currentSeason,
   }
 }
