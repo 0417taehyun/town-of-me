@@ -24,7 +24,14 @@ export interface LinkedUser {
 
 export class DomainError extends Error {
   constructor(
-    readonly code: 'AUTH_REQUIRED' | 'FORBIDDEN' | 'INVALID_INPUT' | 'NOT_CONFIGURED' | 'NOT_FOUND' | 'CONFLICT',
+    readonly code:
+      | 'AUTH_REQUIRED'
+      | 'FORBIDDEN'
+      | 'INVALID_INPUT'
+      | 'NOT_CONFIGURED'
+      | 'NOT_FOUND'
+      | 'CONFLICT'
+      | 'REQUEST_TOO_LARGE',
     message: string,
   ) {
     super(message)

@@ -10,6 +10,7 @@ import {
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { checkDerbyJudge } from './derbyJudge.js'
 import { checkGuestbookFlow } from './guestbookFlow.js'
+import { checkLeaderboardFlow } from './leaderboardFlow.js'
 import { checkLoginFlow } from './loginFlow.js'
 import { checkPostgresStoreContract, checkStoreContract } from './storeContract.js'
 import { checkTownFlow } from './townFlow.js'
@@ -268,5 +269,6 @@ await checkLoginFlow(assert)
 await checkGuestbookFlow(assert)
 await checkTownFlow(assert)
 await checkDerbyJudge(assert)
+await checkLeaderboardFlow(assert)
 
 console.log(`ok - ${assertions} assertions`)

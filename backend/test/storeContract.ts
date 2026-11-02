@@ -4,11 +4,15 @@ import pg from 'pg'
 import {
   applyMigrations,
   DomainError,
+  parseCharacterAppearance,
   parseGuestbookInput,
   parseTownLayout,
   parseTownVenues,
   PostgresStore,
   seedTown,
+  type EntrySettlement,
+  type GameRun,
+  type LeaderboardEntry,
   type Store,
   type VerifiedLinkedInIdentity,
 } from '../src/index.js'
@@ -221,6 +225,8 @@ export async function checkStoreContract(store: Store, assert: Assert): Promise<
   await checkTownSeed(store, assert)
 
   await checkGuestbookStore(store, assert)
+  await checkRunStore(store, assert)
+  await checkEntryStore(store, assert)
 }
 
 /** The admin list is seeded once, decides the role at every sign-in, and removing an email ends that role at once. */
@@ -366,6 +372,229 @@ async function checkGuestbookStore(store: Store, assert: Assert): Promise<void> 
   )
   await store.deleteGuestbookEntry(older.id)
   assert((await store.getGuestbookEntry(older.id)) === null, 'deleted guestbook entries must disappear')
+}
+
+const runGame = 'home-run-derby'
+const runIssuedAt = Date.parse('2026-10-20T03:00:00.000Z')
+const runAppearance = parseCharacterAppearance(
+  {
+    hair: 'bob',
+    hat: 'none',
+    eyes: 'happy',
+    ears: 'round',
+    nose: 'button',
+    mouth: 'smile',
+    mustache: 'none',
+    top: 'sweater',
+    bottom: 'trousers',
+    shoes: 'sneakers',
+    colors: { skin: '#e9ba99', hair: '#503a2e', hat: '#638fab', top: '#ca7765', bottom: '#ece3cc', shoes: '#374b65' },
+  },
+  'appearance',
+)
+
+function issuedRun(visitorHash: string, season = '2026-10'): GameRun {
+  return {
+    id: crypto.randomUUID(),
+    game: runGame,
+    season,
+    visitorHash,
+    // The largest 32-bit unsigned seed, which a 32-bit signed column would not hold.
+    seed: 4_294_967_295,
+    rules: { pitchCount: 5, difficulty: 'normal' },
+    status: 'issued',
+    issuedAt: new Date(runIssuedAt).toISOString(),
+    expiresAt: new Date(runIssuedAt + 10 * 60_000).toISOString(),
+    submittedAt: null,
+    inputLog: null,
+    result: null,
+    score: null,
+    tiebreak: null,
+    flags: [],
+  }
+}
+
+const scoredRun = {
+  status: 'scored' as const,
+  submittedAt: new Date(runIssuedAt + 60_000).toISOString(),
+  inputLog: {
+    side: 'left' as const,
+    practice: [{ errorMs: 96.4, speed: 8.1 }],
+    swings: [{ contactMs: 941.2, startedMs: 722.5, speed: 9.4, heightError: null }, null],
+  },
+  result: null,
+  score: 2,
+  tiebreak: 2114,
+  flags: [],
+}
+
+function entryFor(run: GameRun, fields: Partial<LeaderboardEntry> = {}): LeaderboardEntry {
+  const time = new Date(runIssuedAt + 60_000).toISOString()
+  return {
+    id: crypto.randomUUID(),
+    game: run.game,
+    season: run.season,
+    visitorHash: run.visitorHash,
+    bestRunId: run.id,
+    score: 2,
+    tiebreak: 2114,
+    result: {
+      homeRuns: 2,
+      totalDistanceDm: 2114,
+      pitches: [{ pitchType: 'curve', outcome: 'homeRun', distanceDm: 1204 }],
+    },
+    achievedAt: time,
+    authorName: null,
+    nameStatus: null,
+    appearance: runAppearance,
+    listed: false,
+    reviewStatus: 'pending',
+    createdAt: time,
+    updatedAt: time,
+    ...fields,
+  }
+}
+
+/** Stores `entry` as its visitor's record, through a scored run of its own like the service does. */
+async function recordEntry(store: Store, visitorHash: string, season: string, fields: Partial<LeaderboardEntry>) {
+  const run = issuedRun(visitorHash, season)
+  await store.issueRun(run)
+  const entry = entryFor(run, fields)
+  await store.finishRun(run.id, visitorHash, scoredRun, () => ({ entry, changed: true, consentNeeded: false }))
+  return entry
+}
+
+/** A visitor has one open run per game, and a run is finished once, before it expires, by its own visitor. */
+async function checkRunStore(store: Store, assert: Assert): Promise<void> {
+  const first = issuedRun('run-visitor')
+  const bystander = issuedRun('run-bystander')
+  await store.issueRun(first)
+  await store.issueRun(bystander)
+  assert(isDeepStrictEqual(await store.getRun(first.id), first), 'an issued run round-trips with its seed and rules')
+  const second = issuedRun('run-visitor')
+  await store.issueRun(second)
+  assert(
+    (await store.getRun(first.id))?.status === 'abandoned' &&
+      (await store.getRun(second.id))?.status === 'issued' &&
+      (await store.getRun(bystander.id))?.status === 'issued',
+    "a new run abandons the visitor's open one and no one else's",
+  )
+  const racing = [issuedRun('run-racer'), issuedRun('run-racer')]
+  await Promise.all(racing.map((run) => store.issueRun(run)))
+  const racingStatuses = await Promise.all(racing.map(async (run) => (await store.getRun(run.id))?.status))
+  assert(
+    racingStatuses.sort().join() === 'abandoned,issued',
+    'two runs issued at once for one visitor leave exactly one open',
+  )
+
+  assert(
+    (await store.finishRun(second.id, 'run-bystander', scoredRun, null)) === null &&
+      (await store.finishRun(first.id, 'run-visitor', scoredRun, null)) === null,
+    'a run cannot be finished by another visitor, nor once it is abandoned',
+  )
+  const atExpiry = { ...scoredRun, submittedAt: second.expiresAt }
+  assert((await store.finishRun(second.id, 'run-visitor', atExpiry, null)) === null, 'an expired run is not finished')
+  const results = await Promise.all([
+    store.finishRun(second.id, 'run-visitor', scoredRun, null),
+    store.finishRun(second.id, 'run-visitor', { ...scoredRun, score: 5 }, null),
+  ])
+  assert(
+    results.filter((result) => result !== null).length === 1,
+    'two results for one run at the same moment finish it once',
+  )
+  const finished = await store.getRun(second.id)
+  assert(
+    finished?.status === 'scored' &&
+      finished.submittedAt === scoredRun.submittedAt &&
+      isDeepStrictEqual(finished.inputLog, scoredRun.inputLog) &&
+      finished.score === results.find((result) => result !== null)?.run.score,
+    'a finished run keeps its log, score, and when it arrived',
+  )
+  assert(
+    (await store.finishRun(second.id, 'run-visitor', scoredRun, null)) === null,
+    'a finished run cannot be finished again',
+  )
+}
+
+/** A record is settled with the run that changes it, from the visitor's record on that board or their latest one. */
+async function checkEntryStore(store: Store, assert: Assert): Promise<void> {
+  const october = await recordEntry(store, 'entry-visitor', '2026-09', {
+    listed: true,
+    authorName: 'Sprout',
+    nameStatus: 'approved',
+  })
+  const run = issuedRun('entry-visitor')
+  await store.issueRun(run)
+  const seen: Array<[LeaderboardEntry | null, LeaderboardEntry | null]> = []
+  const first = entryFor(run, { listed: true, authorName: 'Sprout', nameStatus: 'pending' })
+  const settled = await store.finishRun(run.id, 'entry-visitor', scoredRun, (current, latest) => {
+    seen.push([current, latest])
+    return { entry: first, changed: true, consentNeeded: false }
+  })
+  assert(
+    seen.length === 1 && seen[0]?.[0] === null && isDeepStrictEqual(seen[0][1], october),
+    "a first record on a board is settled from the visitor's latest record of the game",
+  )
+  assert(
+    isDeepStrictEqual(settled?.settlement?.entry, first) &&
+      isDeepStrictEqual(await store.getBoardEntryByVisitor(run, 'entry-visitor'), first),
+    'the settled record is stored with its name, appearance, and result',
+  )
+  const next = issuedRun('entry-visitor')
+  await store.issueRun(next)
+  const unchanged: EntrySettlement = { entry: { ...first, score: 9 }, changed: false, consentNeeded: false }
+  await store.finishRun(next.id, 'entry-visitor', scoredRun, (current, latest) => {
+    seen.push([current, latest])
+    return unchanged
+  })
+  assert(
+    isDeepStrictEqual(seen[1], [first, null]) &&
+      (await store.getBoardEntryByVisitor(run, 'entry-visitor'))?.score === first.score,
+    'a later run is settled from the record on its board, and an unchanged settlement writes nothing',
+  )
+
+  const season = '2026-08'
+  const tied = new Date(runIssuedAt).toISOString()
+  const later = new Date(runIssuedAt + 1).toISOString()
+  const listed = { listed: true, authorName: 'Batter', nameStatus: 'pending' as const }
+  const leader = await recordEntry(store, 'rank-leader', season, {
+    ...listed,
+    score: 4,
+    tiebreak: 100,
+    achievedAt: tied,
+  })
+  await recordEntry(store, 'rank-hidden', season, { score: 5, tiebreak: 9000 })
+  await recordEntry(store, 'rank-out', season, { ...listed, score: 5, tiebreak: 9000, reviewStatus: 'disqualified' })
+  const [lowId = '', highId = ''] = [crypto.randomUUID(), crypto.randomUUID()].sort()
+  const earlier = await recordEntry(store, 'rank-early', season, {
+    ...listed,
+    score: 3,
+    tiebreak: 500,
+    achievedAt: tied,
+    id: highId,
+  })
+  const sameMoment = await recordEntry(store, 'rank-same', season, {
+    ...listed,
+    score: 3,
+    tiebreak: 500,
+    achievedAt: tied,
+    id: lowId,
+  })
+  const latecomer = await recordEntry(store, 'rank-late', season, {
+    ...listed,
+    score: 3,
+    tiebreak: 500,
+    achievedAt: later,
+  })
+  const ranks = await Promise.all([leader, sameMoment, earlier, latecomer].map((entry) => store.rankOf(entry)))
+  assert(
+    ranks.join() === '1,2,3,4',
+    'places follow home runs, then distance, then the earlier record, then the id, counting only listed records on the board',
+  )
+  assert(
+    (await store.rankOf({ ...latecomer, listed: false, score: 4, tiebreak: 100, achievedAt: later })) === 2,
+    'an unlisted record is told the place it would take',
+  )
 }
 
 /** Runs the contract in a throwaway schema so a developer database can double as the test database. */

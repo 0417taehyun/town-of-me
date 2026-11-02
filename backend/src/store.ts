@@ -3,6 +3,16 @@ import type { Actor, LinkedUser } from './domain.js'
 import { DomainError } from './domain.js'
 import type { AuthStore, AuthTransaction, VerifiedLinkedInIdentity } from './auth.js'
 import type { GuestbookEntry, GuestbookStatus } from './guestbook.js'
+import {
+  boardOrder,
+  isPublicEntry,
+  type BoardKey,
+  type EntrySettlement,
+  type FinishedRun,
+  type GameRun,
+  type LeaderboardEntry,
+  type SettleEntry,
+} from './leaderboard.js'
 import type { TownLayout, TownLayoutInput } from './town.js'
 
 export interface Store extends AuthStore {
@@ -37,6 +47,23 @@ export interface Store extends AuthStore {
    * with NOT_FOUND when it is not listed and CONFLICT when it is the last one, so someone can always sign in as admin.
    */
   removeAdminEmail(email: string): Promise<void>
+  /** Abandons the visitor's open run of the same game, if any, and stores `run`, in one step. Runs are never counted. */
+  issueRun(run: GameRun): Promise<void>
+  getRun(id: string): Promise<GameRun | null>
+  /**
+   * Finishes the run only while it is still `issued`, the visitor's, and unexpired at `finished.submittedAt`; for a
+   * scored run, `settle` decides the visitor's record on the run's board within the same step. `null`, with nothing
+   * changed, when the run cannot be finished, so a run is recorded once however many results arrive together.
+   */
+  finishRun(
+    id: string,
+    visitorHash: string,
+    finished: FinishedRun,
+    settle: SettleEntry | null,
+  ): Promise<{ run: GameRun; settlement: EntrySettlement | null } | null>
+  getBoardEntryByVisitor(board: BoardKey, visitorHash: string): Promise<LeaderboardEntry | null>
+  /** 1 + the records ahead of `entry` in its board's public order: for an unlisted record, the place it would take. */
+  rankOf(entry: LeaderboardEntry): Promise<number>
 }
 
 export type GuestbookEntryChanges = Partial<
@@ -55,6 +82,8 @@ export class MemoryStore implements Store {
   readonly transactions = new Map<string, AuthTransaction>()
   readonly sessions = new Map<string, SessionRow>()
   readonly adminEmails = new Map<string, AdminEmail>()
+  readonly gameRuns = new Map<string, GameRun>()
+  readonly leaderboardEntries = new Map<string, LeaderboardEntry>()
 
   async saveTransaction(transaction: AuthTransaction): Promise<void> {
     this.transactions.set(transaction.id, transaction)
@@ -210,6 +239,78 @@ export class MemoryStore implements Store {
     const revoked = [...this.sessions].filter(([, session]) => demotedIds.has(session.userId)).map(([hash]) => hash)
     revoked.forEach((tokenHash) => this.sessions.delete(tokenHash))
   }
+
+  async issueRun(run: GameRun): Promise<void> {
+    const open = [...this.gameRuns.values()].filter(
+      (other) => other.game === run.game && other.visitorHash === run.visitorHash && other.status === 'issued',
+    )
+    open.forEach((other) => this.gameRuns.set(other.id, { ...other, status: 'abandoned' }))
+    this.gameRuns.set(run.id, structuredClone(run))
+  }
+
+  async getRun(id: string): Promise<GameRun | null> {
+    const run = this.gameRuns.get(id)
+    return run ? structuredClone(run) : null
+  }
+
+  // Nothing is awaited between the check and the writes, so this is one step like the PostgreSQL transaction.
+  async finishRun(
+    id: string,
+    visitorHash: string,
+    finished: FinishedRun,
+    settle: SettleEntry | null,
+  ): Promise<{ run: GameRun; settlement: EntrySettlement | null } | null> {
+    const run = this.gameRuns.get(id)
+    if (run?.status !== 'issued' || run.visitorHash !== visitorHash) return null
+    if (Date.parse(run.expiresAt) <= Date.parse(finished.submittedAt)) return null
+    const done: GameRun = { ...run, ...structuredClone(finished) }
+    this.gameRuns.set(id, done)
+    const settlement = settle ? this.settleEntry(done, settle) : null
+    return { run: structuredClone(done), settlement }
+  }
+
+  settleEntry(run: GameRun, settle: SettleEntry): EntrySettlement {
+    const entries = [...this.leaderboardEntries.values()]
+    const current = findBoardEntry(entries, run, run.visitorHash)
+    const settlement = settle(current, current ? null : findLatestEntry(entries, run.game, run.visitorHash))
+    if (settlement.changed) this.leaderboardEntries.set(settlement.entry.id, structuredClone(settlement.entry))
+    return structuredClone(settlement)
+  }
+
+  async getBoardEntryByVisitor(board: BoardKey, visitorHash: string): Promise<LeaderboardEntry | null> {
+    return findBoardEntry([...this.leaderboardEntries.values()], board, visitorHash)
+  }
+
+  async rankOf(entry: LeaderboardEntry): Promise<number> {
+    const ahead = [...this.leaderboardEntries.values()].filter(
+      (other) => isOnBoard(other, entry) && isPublicEntry(other) && boardOrder(other, entry) < 0,
+    )
+    return ahead.length + 1
+  }
+}
+
+export function isOnBoard(entry: LeaderboardEntry, board: BoardKey): boolean {
+  return entry.game === board.game && entry.season === board.season
+}
+
+export function findBoardEntry(
+  entries: readonly LeaderboardEntry[],
+  board: BoardKey,
+  visitorHash: string,
+): LeaderboardEntry | null {
+  const entry = entries.find((candidate) => isOnBoard(candidate, board) && candidate.visitorHash === visitorHash)
+  return entry ? structuredClone(entry) : null
+}
+
+/** The visitor's record of the game from the latest season. */
+export function findLatestEntry(
+  entries: readonly LeaderboardEntry[],
+  game: string,
+  visitorHash: string,
+): LeaderboardEntry | null {
+  const own = entries.filter((entry) => entry.game === game && entry.visitorHash === visitorHash)
+  const latest = own.sort((left, right) => (left.season < right.season ? 1 : -1))[0]
+  return latest ? structuredClone(latest) : null
 }
 
 export function deleteExpiredRecords(records: Map<string, { expiresAt: number }>, now: number): void {

@@ -4,9 +4,23 @@ import { adminEmailAlreadyListed, adminEmailNotListed, lastAdminEmail, type Admi
 import { hashToken, type AuthTransaction, type VerifiedLinkedInIdentity } from './auth.js'
 import type { CharacterAppearance } from './character.js'
 import { DomainError, type Actor, type LinkedUser, type Locale, type LocalizedText } from './domain.js'
+import type { DerbyInputLog } from './derbyJudge/derbyScore.js'
 import type { GuestbookAppearance, GuestbookEntry, GuestbookStatus } from './guestbook.js'
+import type { DerbyRunRecord, PublicDerbyResult } from './homeRunDerby.js'
+import type {
+  BoardKey,
+  EntrySettlement,
+  FinishedRun,
+  GameRun,
+  LeaderboardEntry,
+  NameStatus,
+  ReviewStatus,
+  RunStatus,
+  SettleEntry,
+} from './leaderboard.js'
 import type { GuestbookEntryChanges, Store } from './store.js'
 import {
+  type BallparkRules,
   parseTownVenues,
   type ResidentDialogue,
   type TownLayout,
@@ -20,6 +34,8 @@ import {
 } from './town.js'
 
 const migrationLockKey = 7_301_202_610
+// The first key of the two-key advisory locks that serialize issuing runs for one visitor; a key space of its own.
+const runIssueLockSpace = 7_301_203
 
 type UserRow = {
   id: string
@@ -45,6 +61,44 @@ type GuestbookRow = {
 }
 
 type SessionActorRow = { user_id: string; role: LinkedUser['role'] }
+
+type GameRunRow = {
+  id: string
+  game: string
+  season: string
+  visitor_hash: string
+  // bigint, which node-postgres reads as text.
+  seed: string
+  rules: BallparkRules
+  status: RunStatus
+  issued_at: Date
+  expires_at: Date
+  submitted_at: Date | null
+  input_log: DerbyInputLog | null
+  result: DerbyRunRecord | null
+  score: number | null
+  tiebreak: number | null
+  flags: string[]
+}
+
+type LeaderboardEntryRow = {
+  id: string
+  game: string
+  season: string
+  visitor_hash: string
+  best_run_id: string | null
+  score: number
+  tiebreak: number
+  result: PublicDerbyResult
+  achieved_at: Date
+  author_name: string | null
+  name_status: NameStatus | null
+  author_appearance: CharacterAppearance
+  listed: boolean
+  review_status: ReviewStatus
+  created_at: Date
+  updated_at: Date
+}
 
 type TransactionRow = { state: string; nonce: string; expires_at: Date }
 
@@ -347,6 +401,194 @@ export class PostgresStore implements Store {
         [email],
       )
     })
+  }
+
+  async issueRun(run: GameRun): Promise<void> {
+    await inTransaction(this.pool, async (client) => {
+      // Without it, two issues at once would each find nothing to abandon, and the second would break the one-open index.
+      await client.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [
+        runIssueLockSpace,
+        `${run.game}:${run.visitorHash}`,
+      ])
+      await client.query(
+        `UPDATE minigame_runs SET status = 'abandoned' WHERE game = $1 AND visitor_hash = $2 AND status = 'issued'`,
+        [run.game, run.visitorHash],
+      )
+      await client.query(
+        `INSERT INTO minigame_runs (id, game, season, visitor_hash, seed, rules, status, issued_at, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'issued', $7, $8)`,
+        [
+          run.id,
+          run.game,
+          run.season,
+          run.visitorHash,
+          run.seed,
+          JSON.stringify(run.rules),
+          run.issuedAt,
+          run.expiresAt,
+        ],
+      )
+    })
+  }
+
+  async getRun(id: string): Promise<GameRun | null> {
+    const { rows } = await this.pool.query<GameRunRow>('SELECT * FROM minigame_runs WHERE id = $1', [id])
+    return mapFirstRow(rows, toGameRun)
+  }
+
+  async finishRun(
+    id: string,
+    visitorHash: string,
+    finished: FinishedRun,
+    settle: SettleEntry | null,
+  ): Promise<{ run: GameRun; settlement: EntrySettlement | null } | null> {
+    return inTransaction(this.pool, async (client) => {
+      // The row lock this takes makes a second result for the same run wait, then find it no longer issued.
+      const { rows } = await client.query<GameRunRow>(
+        `UPDATE minigame_runs
+         SET status = $3, submitted_at = $4, input_log = $5, result = $6, score = $7, tiebreak = $8, flags = $9
+         WHERE id = $1 AND visitor_hash = $2 AND status = 'issued' AND expires_at > $4 RETURNING *`,
+        [
+          id,
+          visitorHash,
+          finished.status,
+          finished.submittedAt,
+          jsonOrNull(finished.inputLog),
+          jsonOrNull(finished.result),
+          finished.score,
+          finished.tiebreak,
+          finished.flags,
+        ],
+      )
+      const row = rows[0]
+      if (!row) return null
+      const run = toGameRun(row)
+      return { run, settlement: settle ? await settleEntryWithin(client, run, settle) : null }
+    })
+  }
+
+  async getBoardEntryByVisitor(board: BoardKey, visitorHash: string): Promise<LeaderboardEntry | null> {
+    const { rows } = await this.pool.query<LeaderboardEntryRow>(
+      'SELECT * FROM minigame_entries WHERE game = $1 AND season = $2 AND visitor_hash = $3',
+      [board.game, board.season, visitorHash],
+    )
+    return mapFirstRow(rows, toLeaderboardEntry)
+  }
+
+  async rankOf(entry: LeaderboardEntry): Promise<number> {
+    const { rows } = await this.pool.query<{ ahead: number }>(
+      `SELECT count(*)::integer AS ahead FROM minigame_entries
+       WHERE game = $1 AND season = $2 AND listed AND review_status <> 'disqualified'
+         AND (score > $3 OR (score = $3 AND (tiebreak > $4
+           OR (tiebreak = $4 AND (achieved_at, id) < ($5::timestamptz, $6::uuid)))))`,
+      [entry.game, entry.season, entry.score, entry.tiebreak, entry.achievedAt, entry.id],
+    )
+    return firstRow(rows).ahead + 1
+  }
+}
+
+/**
+ * Settles the visitor's record on the finished run's board inside its transaction. The record's row lock keeps an
+ * owner's or admin's change from landing in between; a first record needs none, since a visitor has one open run.
+ */
+export async function settleEntryWithin(
+  client: PoolClient,
+  run: GameRun,
+  settle: SettleEntry,
+): Promise<EntrySettlement> {
+  const { rows } = await client.query<LeaderboardEntryRow>(
+    'SELECT * FROM minigame_entries WHERE game = $1 AND season = $2 AND visitor_hash = $3 FOR UPDATE',
+    [run.game, run.season, run.visitorHash],
+  )
+  const current = mapFirstRow(rows, toLeaderboardEntry)
+  const settlement = settle(current, current ? null : await latestEntry(client, run.game, run.visitorHash))
+  if (settlement.changed) await writeEntry(client, settlement.entry)
+  return settlement
+}
+
+export async function latestEntry(client: PoolClient, game: string, visitorHash: string) {
+  const { rows } = await client.query<LeaderboardEntryRow>(
+    'SELECT * FROM minigame_entries WHERE game = $1 AND visitor_hash = $2 ORDER BY season DESC LIMIT 1',
+    [game, visitorHash],
+  )
+  return mapFirstRow(rows, toLeaderboardEntry)
+}
+
+export async function writeEntry(client: PoolClient, entry: LeaderboardEntry): Promise<void> {
+  await client.query(
+    `INSERT INTO minigame_entries
+     (id, game, season, visitor_hash, best_run_id, score, tiebreak, result, achieved_at, author_name, name_status,
+      author_appearance, listed, review_status, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+     ON CONFLICT (id) DO UPDATE SET
+       best_run_id = EXCLUDED.best_run_id, score = EXCLUDED.score, tiebreak = EXCLUDED.tiebreak,
+       result = EXCLUDED.result, achieved_at = EXCLUDED.achieved_at, author_name = EXCLUDED.author_name,
+       name_status = EXCLUDED.name_status, author_appearance = EXCLUDED.author_appearance, listed = EXCLUDED.listed,
+       review_status = EXCLUDED.review_status, updated_at = EXCLUDED.updated_at`,
+    [
+      entry.id,
+      entry.game,
+      entry.season,
+      entry.visitorHash,
+      entry.bestRunId,
+      entry.score,
+      entry.tiebreak,
+      JSON.stringify(entry.result),
+      entry.achievedAt,
+      entry.authorName,
+      entry.nameStatus,
+      JSON.stringify(entry.appearance),
+      entry.listed,
+      entry.reviewStatus,
+      entry.createdAt,
+      entry.updatedAt,
+    ],
+  )
+}
+
+/** A jsonb parameter; `null` stays SQL NULL rather than the JSON value null, which an object check would refuse. */
+export function jsonOrNull(value: unknown): string | null {
+  return value === null ? null : JSON.stringify(value)
+}
+
+export function toGameRun(row: GameRunRow): GameRun {
+  return {
+    id: row.id,
+    game: row.game,
+    season: row.season,
+    visitorHash: row.visitor_hash,
+    seed: Number(row.seed),
+    rules: row.rules,
+    status: row.status,
+    issuedAt: row.issued_at.toISOString(),
+    expiresAt: row.expires_at.toISOString(),
+    submittedAt: row.submitted_at?.toISOString() ?? null,
+    inputLog: row.input_log,
+    result: row.result,
+    score: row.score,
+    tiebreak: row.tiebreak,
+    flags: row.flags,
+  }
+}
+
+export function toLeaderboardEntry(row: LeaderboardEntryRow): LeaderboardEntry {
+  return {
+    id: row.id,
+    game: row.game,
+    season: row.season,
+    visitorHash: row.visitor_hash,
+    bestRunId: row.best_run_id,
+    score: row.score,
+    tiebreak: row.tiebreak,
+    result: row.result,
+    achievedAt: row.achieved_at.toISOString(),
+    authorName: row.author_name,
+    nameStatus: row.name_status,
+    appearance: row.author_appearance,
+    listed: row.listed,
+    reviewStatus: row.review_status,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
   }
 }
 

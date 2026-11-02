@@ -53,8 +53,8 @@ transaction.
     defaults to `false`, so a venue stays hidden until the admin shows it, also in a town saved before the switch
     existed. Like the look, it applies as soon as it is saved, never on the rules' monthly schedule. The public town
     still carries a hidden venue's other settings, since the editor loads the town from the same `GET` and saves them
-    back; the frontend decides what a hidden venue shows. The leaderboard's run endpoints, still to come (PR 13), must
-    refuse to start or record a run while the ballpark is hidden.
+    back; the frontend decides what a hidden venue shows. While the ballpark is hidden, ranked runs are neither issued
+    nor recorded (see [Ranked runs](#ranked-runs)).
   - The look applies as soon as it is saved. The frontend owns the themes and color roles, so only the shape is checked:
     `theme` matches the type pattern, and `colors` maps up to 12 role names (the same pattern) to `#rrggbb` colors,
     stored in lowercase. A role left out keeps the theme's color.
@@ -92,6 +92,7 @@ Create a handler with `createApi({ service, authStore, linkedInOidc, allowedOrig
 - `GET /v1/guestbook` returns `{ entries, own }`: the newest 100 approved entries, and this browser's latest entry with its `status` and whether it is still `revisable`
 - `POST /v1/guestbook` and `PUT /v1/guestbook/:id` take `{ message, locale, profile }` from anyone and return `{ entry }`; see the guestbook rules below
 - `GET /v1/admin/guestbook` lists the newest 200 entries of every status with `updatedAt`; `POST /v1/admin/guestbook/:id/approval` with `{ updatedAt }` publishes the entry only if it was not revised since that version (`409` otherwise); `DELETE /v1/admin/guestbook/:id` removes it
+- `POST /v1/games/:game/runs` and `POST /v1/games/:game/runs/:id/result` start and record a ranked run; see [Ranked runs](#ranked-runs)
 - `GET /v1/towns/:id` returns `{ town }` with `revision`, or `404` when no such town exists
 - `PUT /v1/admin/towns/:id` with `{ baseRevision, name, owner, pet, spawn, movement, venues, objects, residents }` replaces the town for an admin session (`401` signed out, `403` otherwise) and returns the saved `{ town }`; `baseRevision` is `0` for the first save
 - `POST /v1/admin/resident-dialogues` with `{ name, role, relationship, reference, owner }` (`owner` is the owner's `{ ko, en }` name) returns a drafted `{ dialogue }` for an admin session without storing it; the admin saves it with the town
@@ -104,6 +105,46 @@ Visitors no longer sign in, so the guestbook is anonymous and moderated:
 - An entry keeps the visitor's character name and appearance from the request `profile` (never gender or a LinkedIn link) and starts `pending`. Only `approved` entries are public; a revision returns the entry to `pending`, so the admin always approves the text visitors will read.
 - The first entry gives the browser a random `__Host-tom_visitor` cookie (`HttpOnly`, one year). Only its hash is stored. One browser may write one entry per 24 hours and revise that entry during those 24 hours; another entry in that window returns `409`, and revising someone else's entry returns `404`.
 - Clearing the cookie starts a new visitor, and there is no per-address limit. Because nothing is public before approval, such entries only add to the admin's review list.
+
+## Ranked runs
+
+The home run derby (`home-run-derby`, the ballpark of the `mossbell` town the frontend plays) keeps a monthly board.
+Its season is the KST (UTC+9) calendar month written `YYYY-MM`, and a run belongs to the season it was issued in,
+whenever its result arrives. Any other game id returns `404`. The client never sends a score anyone keeps: the server
+judges the run again with `src/derbyJudge/`, the frontend judge's copy (`test/derbyJudgeVectors.json` holds both to
+the same results).
+
+- `POST /v1/games/home-run-derby/runs` (no body) returns `201 { run: { id, season, expiresAt, rules, seed } }` and
+  gives the browser the guestbook's `__Host-tom_visitor` cookie if it has none. `rules` are the stored town's
+  `{ pitchCount, difficulty }` in effect for the season, and `seed` is a 32-bit unsigned integer that plans the pitches
+  (the landings have no randomness, so it is no secret). A run is open for ten minutes, and a new one abandons the
+  visitor's open run; there is no limit on how many a visitor starts. It returns `503` while the ballpark is hidden and
+  when the town has no `owner.contactEmail`, since records are public and takedown requests need a contact.
+- `POST /v1/games/home-run-derby/runs/:id/result` takes at most 8 KB (`413` otherwise):
+  `{ side, practice, swings, clientElapsedMs, claimed, profile }`, where `side` is `right` or `left`; `practice` is up to
+  five `{ errorMs, speed }` (±5000 ms, 0–200 shoulder widths per second), at least three of them within 400 ms; `swings`
+  has exactly `rules.pitchCount` items, each `null` or `{ contactMs, startedMs, speed, heightError }` (0–5000 ms, −1000 ms
+  to `contactMs`, 0–200, and −3 to 3 m or `null`); `clientElapsedMs` is 0–600000; `claimed` is the client's
+  `{ homeRuns, totalDistanceDm }`; and `profile` is the character appearance with an optional `name` (NFKC, one line of
+  1–24 characters). Every other field, such as pose keypoints, is dropped and never stored; the run keeps only the
+  parsed `side`, `practice`, and `swings`, and the name is kept only on a listed record.
+- It answers `200 { result, standing, entry }`: the server's own `result` (`homeRuns`, `totalDistanceDm` of the home
+  runs, and per pitch only `pitchType`, `outcome`, and `distanceDm`), the visitor's `standing`, and their record on the
+  run's board (`entry`, or `null`). `standing.kind` is `ranked` (`rank`, `personalBest`), `unlisted` (`wouldBeRank`,
+  `personalBest`), `consentNeeded` (the same; the browser's listed record looked like someone else, so this one is off
+  the board until they agree), `reviewing` (the run is held), or `excluded` (the record is disqualified).
+- In order, the server checks the run (no visitor cookie, an unknown run, or someone else's is `404`; a run already
+  recorded answers again from what was stored; an abandoned, rejected, or expired run is `409`), then the time: a
+  result sooner than 85% of the shortest honest run (ready, windup, and a miss's result hold per pitch, 3.2 s) is `409`
+  and uses the run up. Then the body: a malformed one is `400` and leaves the run open. The server then scores the run
+  from its own rules and seed and the log, and holds it for review when a check in `src/homeRunDerby.ts`
+  `DERBY_REVIEW_RULES` finds it unusual, starting with claimed totals that differ from its own. A held run is stored
+  with its flags but leaves the visitor's record as it was; any other run becomes the record only if it has more home
+  runs, or as many and a longer total distance, so the earlier of two equal records stays.
+- A first record on a board is listed only if the visitor's latest record of the game was listed and looks like the
+  same player (the same appearance, and the same name when it had one); a listed record whose next run looks like
+  someone else's goes off the board and loses its name, so a shared browser never publishes one player's score under
+  another's consent.
 
 ## OpenRouter dialogue drafts
 

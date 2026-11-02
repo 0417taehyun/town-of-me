@@ -10,7 +10,9 @@ import {
 } from './auth.js'
 import { DomainError, type Actor, type LinkedUser } from './domain.js'
 import { ownGuestbookEntry, publicGuestbookEntry, reviewedGuestbookEntry } from './guestbook.js'
-import { BackendService } from './service.js'
+import { publicDerbyResult } from './homeRunDerby.js'
+import { ownEntry, type GameRun } from './leaderboard.js'
+import { BackendService, type RunOutcome } from './service.js'
 import { townIdPattern } from './town.js'
 import { inputRecord, invalidInput } from './validation.js'
 
@@ -22,6 +24,10 @@ const visitorCookieLifetimeMs = 365 * 24 * 60 * 60_000
 const cookieAttributes = 'Secure; HttpOnly; SameSite=Lax; Path=/'
 // Only UUID-shaped ids reach the store, so malformed ids become 404 instead of database type errors.
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+// A ranked game's id; an unknown one is a 404 from the service.
+const gameId = '[a-z][a-z0-9-]{0,31}'
+/** A run's result is a few numbers per pitch, so game routes take a small body even without nginx in front. */
+export const gameBodyLimitBytes = 8 * 1024
 const readOnlyMethods = new Set(['GET', 'HEAD', 'OPTIONS'])
 const domainErrorStatus: Readonly<Record<DomainError['code'], number>> = {
   AUTH_REQUIRED: 401,
@@ -30,6 +36,7 @@ const domainErrorStatus: Readonly<Record<DomainError['code'], number>> = {
   NOT_CONFIGURED: 503,
   NOT_FOUND: 404,
   CONFLICT: 409,
+  REQUEST_TOO_LARGE: 413,
 }
 
 type Logger = Pick<Console, 'warn' | 'error'>
@@ -50,6 +57,8 @@ export interface RouteContext {
   url: URL
   /** The id captured from the route path, or '' for a fixed path. */
   pathId: string
+  /** Every id captured from the route path, in order; `pathId` is the first. */
+  pathIds: readonly string[]
   /** Reads the session only for routes that act for someone, so sign-in and health checks never touch it. */
   actor(): Promise<Actor>
   dependencies: ApiDependencies & { logger: Logger }
@@ -93,6 +102,13 @@ const routes: readonly Route[] = [
     await dependencies.service.deleteGuestbookEntry(await actor(), pathId)
     return new Response(null, { status: 204 })
   }),
+  route('POST', `/v1/games/(${gameId})/runs`, serveRunIssue),
+  route('POST', `/v1/games/(${gameId})/runs/(${uuid})/result`, async ({ request, pathIds, dependencies }) => {
+    const [game = '', runId = ''] = pathIds
+    const body = await objectBody(request, gameBodyLimitBytes)
+    const outcome = await dependencies.service.submitRunResult(game, await readVisitorHash(request), runId, body)
+    return json(runOutcomeView(outcome))
+  }),
   route('GET', `/v1/towns/(${townIdPattern})`, async ({ pathId, dependencies }) =>
     json({ town: await dependencies.service.getTown(pathId) }),
   ),
@@ -129,10 +145,12 @@ export async function dispatch(request: Request, dependencies: RouteContext['dep
   const url = new URL(request.url)
   const matched = routes.find((candidate) => candidate.method === request.method && candidate.path.test(url.pathname))
   if (!matched) throw new DomainError('NOT_FOUND', 'Route not found')
+  const pathIds = url.pathname.match(matched.path)?.slice(1) ?? []
   return matched.handle({
     request,
     url,
-    pathId: url.pathname.match(matched.path)?.[1] ?? '',
+    pathId: pathIds[0] ?? '',
+    pathIds,
     actor: () => resolveActor(request, dependencies.authStore),
     dependencies,
   })
@@ -188,8 +206,30 @@ export async function serveGuestbookSigning({ request, dependencies }: RouteCont
   const existingToken = readCookie(request, visitorCookie)
   const visitorToken = existingToken || randomToken()
   const entry = await dependencies.service.signGuestbook(await hashToken(visitorToken), await objectBody(request))
-  const headers = existingToken ? {} : { 'Set-Cookie': cookie(visitorCookie, visitorToken, visitorCookieLifetimeMs) }
-  return json({ entry: ownGuestbookEntry(entry, Date.now()) }, 201, headers)
+  return json({ entry: ownGuestbookEntry(entry, Date.now()) }, 201, newVisitorCookie(existingToken, visitorToken))
+}
+
+/** The run's id, its season, and the rules and seed its pitches are planned from: all a client needs to play it. */
+export async function serveRunIssue({ request, pathId, dependencies }: RouteContext): Promise<Response> {
+  const existingToken = readCookie(request, visitorCookie)
+  const visitorToken = existingToken || randomToken()
+  const run = await dependencies.service.issueRun(pathId, await hashToken(visitorToken))
+  return json({ run: issuedRunView(run) }, 201, newVisitorCookie(existingToken, visitorToken))
+}
+
+/** Sets the visitor cookie the first time a browser writes something it may later change. */
+export function newVisitorCookie(existingToken: string | null, visitorToken: string): Record<string, string> {
+  return existingToken ? {} : { 'Set-Cookie': cookie(visitorCookie, visitorToken, visitorCookieLifetimeMs) }
+}
+
+export function issuedRunView(run: GameRun) {
+  return { id: run.id, season: run.season, expiresAt: run.expiresAt, rules: run.rules, seed: run.seed }
+}
+
+/** The server's own result, never the client's totals, with the visitor's record and standing. */
+export function runOutcomeView({ run, entry, rank, standing }: RunOutcome) {
+  if (!run.result) throw new Error('A recorded run keeps its result')
+  return { result: publicDerbyResult(run.result), standing, entry: entry && ownEntry(entry, rank) }
 }
 
 export function callbackParameters(request: Request, url: URL): { transactionId: string; state: string; code: string } {
@@ -264,14 +304,27 @@ export function cookie(name: string, value: string, lifetimeMs: number): string 
   return `${name}=${encodeURIComponent(value)}; ${cookieAttributes}; Max-Age=${Math.floor(lifetimeMs / 1000)}`
 }
 
-export async function objectBody(request: Request): Promise<Record<string, unknown>> {
+/** `maximumBytes` bounds the raw body, so an oversized one is refused before it is parsed. */
+export async function objectBody(
+  request: Request,
+  maximumBytes = Number.POSITIVE_INFINITY,
+): Promise<Record<string, unknown>> {
   if (!request.headers.get('Content-Type')?.toLowerCase().startsWith('application/json')) {
     throw invalidInput('Content-Type must be application/json')
   }
-  const body: unknown = await request.json().catch(() => {
+  const bytes = await request.arrayBuffer()
+  if (bytes.byteLength > maximumBytes) {
+    throw new DomainError('REQUEST_TOO_LARGE', `The request body must be at most ${maximumBytes} bytes`)
+  }
+  return inputRecord(parseJson(new TextDecoder().decode(bytes)), 'body')
+}
+
+export function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
     throw invalidInput('The request body must be valid JSON')
-  })
-  return inputRecord(body, 'body')
+  }
 }
 
 /**
