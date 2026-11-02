@@ -71,10 +71,8 @@ export function createBat(owner: Pick<BallplayerRig, 'materials'>) {
 
 export function batRadiusAt(height: number) {
   const along = clamp(height, 0, BAT.length)
-  const upper = Math.max(
-    1,
-    BAT_RADII.findIndex(([at]) => at >= along),
-  )
+  let upper = 1
+  while (upper < BAT_RADII.length - 1 && BAT_RADII[upper][0] < along) upper++
   const [fromHeight, fromRadius] = BAT_RADII[upper - 1]
   const [toHeight, toRadius] = BAT_RADII[upper]
   return fromRadius + ((toRadius - fromRadius) * (along - fromHeight)) / (toHeight - fromHeight)

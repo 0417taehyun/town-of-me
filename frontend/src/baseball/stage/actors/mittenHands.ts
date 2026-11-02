@@ -230,6 +230,30 @@ export function betweenNeighbours(neighbours: Neighbour[]) {
   return neighbours.reduce((sum, { swivel }, index) => sum + swivel * weights[index], 0) / total
 }
 
+/** The lowest point of searchSwivel's cost with nothing hit: the swivel between `neighbours`, drawn toward the pole. */
+export function smoothestSwivel(neighbours: Neighbour[], weight: number) {
+  const pull = neighbours.reduce((sum, { swivel, change }) => sum + swivel / (change * change), 0)
+  const stiffness = neighbours.reduce((sum, { change }) => sum + 1 / (change * change), weight / 45 ** 2)
+  return pull / stiffness
+}
+
+/** The grid offsets either side of and at `lowest` among searchSwivel's `trials`, when all three are short of `limit`. */
+export function aroundLowest(trials: number[], lowest: number, limit: number) {
+  const inside = lowest > 0 && lowest < trials.length - 1
+  const free = inside && Math.abs(trials[lowest - 1]) < limit && Math.abs(trials[lowest + 1]) < limit
+  return free ? [lowest - 1, lowest, lowest + 1] : []
+}
+
+/**
+ * Whether the middle of three neighbouring trials of searchSwivel's grid, the one nearest the lowest point of its cost
+ * with nothing hit, hits nothing and costs least of the three, so the whole grid would pick it: with nothing hit the
+ * cost is a parabola, and a hit only adds to it, so every trial further from that point costs more.
+ */
+export function bestOfGrid(trials: { cost: number; depth: number }[]) {
+  if (trials.length !== 3 || trials[1].depth !== 0) return false
+  return trials[1].cost < trials[0].cost && trials[1].cost <= trials[2].cost
+}
+
 /**
  * The elbow swivel for arm `index` holding the bat at `center` that keeps the arm off the bat, out of `volumes`, and
  * clear of the `other` arm's forearm, searched round its `neighbours` (the moments before and after) and paying for
@@ -254,13 +278,24 @@ export function searchSwivel(
   const trials = Array.from({ length: 2 * steps + 1 }, (_, offset) =>
     clamp(near + (offset - steps) * step, -limit, limit),
   )
-  const costs = trials.map((trial) => {
+  const trialCost = (trial: number) => {
     const arm = settleMitten(settled, shoulder, center, bat.axis, pole, trial)
     const posed = { elbow: arm.elbow, wrist: arm.wrist, center }
     const depth = armCollisionDepth(posed, shoulder, bat.knob, bat.axis, around, other)
     const away = neighbours.reduce((sum, { swivel, change }) => sum + ((trial - swivel) / change) ** 2, 0)
-    return weight * (trial / 45) ** 2 + (depth / depthScale) ** 2 + away
-  })
+    return { cost: weight * (trial / 45) ** 2 + (depth / depthScale) ** 2 + away, depth }
+  }
+  // Most searches hit nothing at the trial nearest the cost's lowest point: then it is the grid's best, and fitting it
+  // and its neighbours lands where trying the whole grid would.
+  const lowest = steps + Math.round((smoothestSwivel(neighbours, weight) - near) / step)
+  const nearestOffsets = aroundLowest(trials, lowest, limit)
+  const nearest = nearestOffsets.map((offset) => trialCost(trials[offset]))
+  if (bestOfGrid(nearest)) {
+    const [before, at, after] = nearest.map(({ cost }) => cost)
+    return clamp(near + (lowest - steps + parabolaOffset(before, at, after)) * step, -limit, limit)
+  }
+  // Else the whole grid, the three already tried not tried again.
+  const costs = trials.map((trial, offset) => nearest[nearestOffsets.indexOf(offset)]?.cost ?? trialCost(trial).cost)
   const best = costs.indexOf(Math.min(...costs))
   const inside = best > 0 && best < costs.length - 1
   const refined = inside ? parabolaOffset(costs[best - 1], costs[best], costs[best + 1]) : 0

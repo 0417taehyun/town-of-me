@@ -54,7 +54,18 @@ export function headVolumes(rig: Pick<BallplayerRig, 'body' | 'head' | 'appearan
   const { body, head } = rig
   headMatrix.multiplyMatrices(body.matrix, head.matrix)
   headTurn.copy(body.quaternion).multiply(head.quaternion)
-  return rig.appearance.headParts.filter(isSolidHeadPart).map((part) => headPartVolume(part, headMatrix, headTurn))
+  return solidHeadParts(rig.appearance).map((part) => headPartVolume(part, headMatrix, headTurn))
+}
+
+const solidParts = new WeakMap<object, AvatarPart[]>()
+
+/** `appearance`'s solid head parts (isSolidHeadPart), worked out once: they never change while it is worn. */
+export function solidHeadParts(appearance: Pick<BallplayerRig['appearance'], 'headParts'>) {
+  const known = solidParts.get(appearance)
+  if (known) return known
+  const parts = appearance.headParts.filter(isSolidHeadPart)
+  solidParts.set(appearance, parts)
+  return parts
 }
 
 /** The head's solids, the torso, and the lower body as last posed (poseLegs, poseChest), in the rig frame. */

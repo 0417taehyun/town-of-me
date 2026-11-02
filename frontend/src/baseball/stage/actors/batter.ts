@@ -1005,18 +1005,28 @@ export function* reachBallSteps(batter: Batter, target: Vector3) {
   const last = leans[leans.length - 1]
   const leaned = leans.slice(0, -1).reduce((sum, lean) => sum + lean.reach.tilt, 0)
   const times = REACH_CHECKS.map((offset) => contactAt + offset)
-  for (let round = 0; round < BODY_REACH.rounds; round++) {
-    turnToReach(batter, target, last, times)
-    yield
-  }
-  for (let round = 0; round < BODY_REACH.rounds; round++) {
-    shiftOnto(batter, target)
-    const pushes = times.map((time) => reachPush(batter, time))
-    const push = pushes.reduce((most, next) => (next.lengthSq() > most.lengthSq() ? next : most))
-    last.reach = reachFurther(last.reach, push, leaned)
-    yield
-  }
+  // Each round ends the rounds once it changes nothing, as every round after it would repeat it.
+  for (let round = 0; round < BODY_REACH.rounds && turnToReach(batter, target, last, times); round++) yield
+  for (let round = 0; round < BODY_REACH.rounds && leanToReach(batter, target, last, times, leaned); round++) yield
   shiftOnto(batter, target)
+}
+
+/**
+ * Leans `lean` (the swing under way's last) further by one round of reachBallSteps, `leaned` being how far its other
+ * leans tilt the chest already: whether that moved it.
+ */
+export function leanToReach(batter: Batter, target: Vector3, lean: Lean, times: number[], leaned: number) {
+  shiftOnto(batter, target)
+  const pushes = times.map((time) => reachPush(batter, time))
+  const push = pushes.reduce((most, next) => (next.lengthSq() > most.lengthSq() ? next : most))
+  const before = lean.reach
+  lean.reach = reachFurther(lean.reach, push, leaned)
+  return push.lengthSq() > 0 || !sameReach(before, lean.reach)
+}
+
+/** Whether two body reaches are the same in every way. */
+export function sameReach(first: BodyReach, second: BodyReach) {
+  return (Object.keys(first) as (keyof BodyReach)[]).every((key) => first[key] === second[key])
 }
 
 /** The farthest (rig units) the arms of the swing under way reach past comfort at `times`, the grip on `target`. */
@@ -1028,17 +1038,21 @@ export function farthestReach(batter: Batter, target: Vector3, times: number[]) 
 /**
  * Turns `lean`'s chest a step either way (BODY_REACH.turnStep, at most `turn`) where that brings the arms of the swing
  * under way closer to their mittens round its contact: the chest turning on its spine moves a shoulder toward its hand
- * without moving the head.
+ * without moving the head. Whether it turned.
  */
 export function turnToReach(batter: Batter, target: Vector3, lean: Lean, times: number[]) {
   const { turn, turnStep } = BODY_REACH
   const from = lean.reach.turn
+  // Arms that reach comfortably unturned stay so: a turn costs, and no reach is shorter than none.
+  if (from === 0 && farthestReach(batter, target, times) === 0) return false
   const trials = [from, from - turnStep, from + turnStep].map((trial) => clamp(trial, -turn, turn))
   const reaches = trials.map((trial) => {
     lean.reach = { ...lean.reach, turn: trial }
     return farthestReach(batter, target, times) + 1e-4 * Math.abs(trial)
   })
-  lean.reach = { ...lean.reach, turn: trials[reaches.indexOf(Math.min(...reaches))] }
+  const best = trials[reaches.indexOf(Math.min(...reaches))]
+  lean.reach = { ...lean.reach, turn: best }
+  return best !== from
 }
 
 /**
