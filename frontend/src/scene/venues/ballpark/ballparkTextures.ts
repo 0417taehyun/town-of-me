@@ -1,8 +1,9 @@
 import { CanvasTexture, RepeatWrapping, SRGBColorSpace } from 'three'
-import { seededFraction } from '../../motionMath'
+import { seededFraction } from '../../../motionMath'
 
-// The field's textures are drawn in light greys, so the season's color on the material tints them like the town's
-// grass and hedges (scene/environment/season.ts). Seeded, so the park looks the same on every visit.
+// The ballpark's canvas textures. The field's and the hedges' are drawn in light greys, so the season's color on the
+// material tints them like the town's grass and hedges (scene/environment/season.ts). Seeded, so the park looks the
+// same on every visit.
 
 /** A texture `draw` paints on a canvas; a `tiled` one, as the field's are, repeats and stays sharp at grazing angles. */
 export function createCanvasTexture(

@@ -48,7 +48,7 @@ import {
   steppingStones,
 } from './bowlLayout'
 import { coverWithSnow } from './fieldLayout'
-import { createCanvasTexture, drawGlass, drawLeaves } from './fieldTextures'
+import { createCanvasTexture, drawGlass, drawLeaves } from '../../scene/venues/ballpark/ballparkTextures'
 import { landmarkFootprints } from './landmarkLayout'
 
 const hedgeColors = getSeasonColors('hedge')

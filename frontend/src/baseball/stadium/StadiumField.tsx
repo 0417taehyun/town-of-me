@@ -27,7 +27,7 @@ import {
   MOUND,
   WARNING_TRACK_PROFILE,
 } from './fieldLayout'
-import { createCanvasTexture, drawLawn, drawLeaves } from './fieldTextures'
+import { createCanvasTexture, drawLawn, drawLeaves } from '../../scene/venues/ballpark/ballparkTextures'
 
 const lawnColors = getSeasonColors('ground')
 const hedgeColors = getSeasonColors('hedge')

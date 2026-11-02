@@ -17,7 +17,7 @@ import type { Vec3 } from '../../data/models'
 import { clamp, damp } from '../../motionMath'
 import { BALL_RADIUS } from '../game/field'
 import { FIELD_LAYERS } from '../stadium/fieldLayout'
-import { createCanvasTexture } from '../stadium/fieldTextures'
+import { createCanvasTexture } from '../../scene/venues/ballpark/ballparkTextures'
 
 // The ball as drawn: a regulation ball 1.8 times larger with red seams, a dark rim so it reads against sky and grass,
 // a soft glow around it on its way (warm once it is hit), a trail behind it, a blob on the ground under it, and a ring

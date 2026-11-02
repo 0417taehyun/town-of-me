@@ -1,34 +1,27 @@
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { MutableRefObject } from 'react'
-import {
-  AdditiveBlending,
-  type Group,
-  type InstancedMesh,
-  type MeshStandardMaterial,
-  type MeshToonMaterial,
-  Object3D,
-} from 'three'
+import { type Group, type InstancedMesh, type MeshStandardMaterial, type MeshToonMaterial, Object3D } from 'three'
 import { useWebFontGlyphs } from '../../hooks/useWebFontGlyphs'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import { getSeasonColors, type Season, seasonPalettes } from '../../scene/environment/season'
 import { getSnowCover, seasonClock, type SeasonChange } from '../../scene/environment/seasonTransition'
 import { useSeasonalColor } from '../../scene/environment/useSeasonChange'
-import { getGlowTexture } from '../../scene/glowTexture'
 import { writeInstanceMatrices } from '../../scene/instancedMeshes'
 import { createGradientMap } from '../../scene/objects/foliageMaterial'
+import { glowPositions } from '../../scene/venues/ballpark/ballparkParts'
+import { Halos } from '../../scene/venues/ballpark/Halos'
 import type { BallparkPalette } from '../../scene/venues/ballpark/ballparkThemes'
 import type { VenueMaterials } from '../../scene/venues/venueMaterials'
 import { type DerbyHudState, homeRunDistanceText } from '../ui/derbyCues'
 import { coverWithSnow } from './fieldLayout'
-import { createCanvasTexture, drawLeaves, redrawCanvasTexture } from './fieldTextures'
+import { createCanvasTexture, drawLeaves, redrawCanvasTexture } from '../../scene/venues/ballpark/ballparkTextures'
 import {
   createLandmarkGeometries,
   drawFenceLabels,
   FENCE_LABEL_ROW,
   FENCE_SIGN_SPRAYS,
   fenceSignLabel,
-  glowPositions,
   landmarkLights,
   OAK,
   OAK_SNOW,
@@ -209,26 +202,5 @@ export function GardenLandmarks({
       {lampsOn && <Halos positions={glows.bulbs} size={1.6} />}
       {lampsOn && <Halos positions={glows.towers} size={26} />}
     </group>
-  )
-}
-
-/** Painted halos, one soft glow per point, `size` m across. */
-export function Halos({ positions, size }: { positions: Float32Array; size: number }) {
-  return (
-    <points frustumCulled={false}>
-      <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
-      </bufferGeometry>
-      <pointsMaterial
-        map={getGlowTexture()}
-        color="#ffd896"
-        size={size}
-        transparent
-        opacity={0.75}
-        depthWrite={false}
-        blending={AdditiveBlending}
-        toneMapped={false}
-      />
-    </points>
   )
 }

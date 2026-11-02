@@ -1,6 +1,6 @@
 import type { CanvasTexture } from 'three'
 import { type DerbyHudState, scoreboardTotals } from '../ui/derbyCues'
-import { redrawCanvasTexture } from './fieldTextures'
+import { redrawCanvasTexture } from '../../scene/venues/ballpark/ballparkTextures'
 
 // The treehouse scoreboard over center field. It counts only pitches whose balls have come down, as the HUD's figures
 // do, so it never tells a pitch's result (let alone its type, which it never shows) while the ball is still in play.
