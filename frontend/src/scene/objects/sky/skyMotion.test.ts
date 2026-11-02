@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { Object3D, PerspectiveCamera } from 'three'
 import {
   BIRD_COUNT,
+  CLOUD_COUNT,
   createBirdSpecs,
   createCloudSpecs,
+  getActiveAtmosphereCounts,
   getBirdPartColor,
   getCloudShadowOpacity,
   PARTS_PER_BIRD,
@@ -87,6 +89,15 @@ describe('bird and cloud motion through the actual camera projection', () => {
       expect(Math.abs(transform.position.x)).toBeLessThanOrEqual(78)
       expect(Math.abs(transform.position.z)).toBeLessThanOrEqual(78)
     })
+  })
+
+  it("scales the time-of-day populations to the town's own birds and clouds, rounding up", () => {
+    const seedTown = getActiveAtmosphereCounts('evening', BIRD_COUNT, CLOUD_COUNT)
+    expect(getActiveAtmosphereCounts('evening', BIRD_COUNT * 2, CLOUD_COUNT * 3)).toEqual({
+      birds: seedTown.birds * 2,
+      clouds: seedTown.clouds * 3,
+    })
+    expect(getActiveAtmosphereCounts('morning', 2, 1)).toEqual({ birds: 2, clouds: 1 })
   })
 
   it('starts each bird and cloud exactly at its placed anchor and follows its heading', () => {

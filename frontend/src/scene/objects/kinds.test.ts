@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { TownObject, TownObjectType } from '../../data/models'
+import { TOWN_OBJECT_VARIANTS, type TownObject, type TownObjectType } from '../../data/models'
 import { getTownLayers, TOWN_OBJECT_KINDS } from './kinds'
 
 const townObject = (id: string, type: TownObjectType, x: number): TownObject => ({
@@ -21,5 +21,11 @@ describe('town object kinds', () => {
     expect(natureProps[0].objects).toEqual([rock, bush, pumpkin])
     expect(new Set(layers.map(({ Layer }) => Layer)).size).toBe(layers.length)
     expect(getTownLayers([])).toHaveLength(layers.length)
+  })
+
+  it('offers in the editor exactly the variants the town parser keeps', () => {
+    Object.entries(TOWN_OBJECT_KINDS).forEach(([type, kind]) =>
+      expect(kind.variants).toBe(TOWN_OBJECT_VARIANTS[type as TownObjectType]),
+    )
   })
 })

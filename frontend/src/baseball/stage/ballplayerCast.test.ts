@@ -1,12 +1,12 @@
-import { MathUtils, Quaternion, Vector3 } from 'three'
+import { Quaternion, Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
 import type { Vec3 } from '../../data/models'
-import { DEFAULT_PLAYER_PROFILE, type PlayerProfile } from '../../data/playerProfile'
+import { DEFAULT_PLAYER_PROFILE } from '../../data/playerProfile'
 import { CALIBRATION_RULES } from '../game/calibration'
 import { DERBY_PHASE_MS } from '../game/derby'
 import type { BattingSide } from '../game/field'
 import { gameTime } from '../game/gameClock'
-import { contactHeight, contactSeconds, type PitchPlan, RELEASE_POINT } from '../game/pitch'
+import { contactSeconds, RELEASE_POINT } from '../game/pitch'
 import { createRunPlan } from '../game/runPlan'
 import { type BallplayerRig, turnHead } from './actors/ballplayerRig'
 import { BAT } from './actors/bat'
@@ -20,7 +20,6 @@ import {
   swingHeadWeight,
 } from './actors/batter'
 import { CONTACT_DELAY_MS } from './actors/swingMotion'
-import type { BallView } from './ballMeshes'
 import {
   type BallplayerCast,
   batterLoad,
@@ -32,26 +31,17 @@ import {
   posePlayers,
   settleBatter,
 } from './ballplayerCast'
-import { batterOverlaps, OVERLAP_PAIRS } from '../../testing/batterOverlap'
+import { type CastFrame, FRAME_MS, levelSwing, playWithCast } from '../../testing/castPlays'
 import {
   advanceStageRun,
   createStageRun,
   cueStageSwing,
   playStageFrame,
-  type RealTimeSwing,
   type RealTimeSwingCue,
-  type StageEvent,
   type StageRun,
   stageBallView,
   swingStageRun,
 } from './stageRun'
-
-const FRAME_MS = 10
-
-/** A camera swing with the bat level with `pitch` at `contactAtRealMs`. */
-function levelSwing(pitch: PitchPlan, contactAtRealMs: number): RealTimeSwing {
-  return { contactAtRealMs, startedAtRealMs: contactAtRealMs - 200, speed: 8, batHeight: contactHeight(pitch) }
-}
 
 /**
  * A one-pitch run on `side` with a swing the camera reports `offsetMs` after the ball reaches the contact point, handed
@@ -103,70 +93,6 @@ function headOffBall(rig: BallplayerRig, point: Vec3) {
 
 function distance(from: Vec3, to: Vec3) {
   return Math.hypot(to.x - from.x, to.y - from.y, to.z - from.z)
-}
-
-/** One frame as the director draws it, after posing the cast: game time and the ball. */
-type CastFrame = { nowMs: number; view: BallView; run: StageRun }
-
-/**
- * How the visitor meets each pitch: a swing this many ms off PERFECT, null to let it go, or 'checked', a swing the
- * camera sees begin 120 ms before PERFECT and checked 40 ms later.
- */
-type PitchPlay = number | null | 'checked'
-
-/** Real ms the stage reaches game ms `gameMs` at, at the run's clock rate now. */
-function realMsAt(run: StageRun, gameMs: number) {
-  return run.clock.realMs + (gameMs - run.clock.gameMs) / run.clock.rate
-}
-
-/** The swing at a pitch released among `events`, `plays[pitch]` ms off PERFECT, or null for none. */
-function swingAtRelease(run: StageRun, events: StageEvent[], plays: PitchPlay[]): RealTimeSwing | null {
-  const release = events.find((event) => event.type === 'release')
-  const offsetMs = release?.type === 'release' ? plays[release.pitchIndex] : null
-  if (release?.type !== 'release' || typeof offsetMs !== 'number') return null
-  const atGameMs = release.releasedMs + contactSeconds(release.pitch) * 1000 + offsetMs
-  return levelSwing(release.pitch, realMsAt(run, atGameMs))
-}
-
-/** The camera's cues (and the real ms each comes at) for a pitch released among `events` that `plays` checks. */
-function cuesAtRelease(run: StageRun, events: StageEvent[], plays: PitchPlay[]) {
-  const release = events.find((event) => event.type === 'release')
-  if (release?.type !== 'release' || plays[release.pitchIndex] !== 'checked') return []
-  const crossingAtRealMs = realMsAt(run, release.releasedMs + contactSeconds(release.pitch) * 1000)
-  return [
-    { atMs: crossingAtRealMs - 120, cue: { kind: 'started', crossingAtRealMs } },
-    { atMs: crossingAtRealMs - 80, cue: { kind: 'checked' } },
-  ] satisfies { atMs: number; cue: RealTimeSwingCue }[]
-}
-
-/**
- * Plays a normal run on `side` with `cast` the way the director does, a frame every `frameMs`: each pitch met as
- * `plays` says, a swing handed in with the next frame, the heads eased `delta` seconds a frame.
- */
-function playWithCast(
-  cast: BallplayerCast,
-  side: BattingSide,
-  plays: PitchPlay[],
-  watch: (frame: CastFrame) => void,
-  { frameMs = FRAME_MS, delta = frameMs / 1000 }: { frameMs?: number; delta?: number } = {},
-) {
-  const plan = createRunPlan({ pitchCount: plays.length, difficulty: 'normal' }, 7)
-  const run = createStageRun({ plan, log: { side, practice: [] } }, 0)
-  let pending: RealTimeSwing | null = null
-  let cues: { atMs: number; cue: RealTimeSwingCue }[] = []
-  for (let realMs = frameMs; run.derby.phase !== 'finished'; realMs += frameMs) {
-    const handedIn: RealTimeSwing[] = pending && pending.contactAtRealMs < realMs ? [pending] : []
-    pending = handedIn.length > 0 ? null : pending
-    const due = cues.filter(({ atMs }) => atMs <= realMs).map(({ cue }) => cue)
-    cues = cues.filter(({ atMs }) => atMs > realMs)
-    const events = playStageFrame(run, handedIn, realMs, false, due)
-    pending = pending ?? swingAtRelease(run, events, plays)
-    cues = [...cues, ...cuesAtRelease(run, events, plays)]
-    const nowMs = gameTime(run.clock, realMs)
-    const view = stageBallView(run, nowMs, posePitcherAt(cast, run, nowMs))
-    posePlayers(cast, run, nowMs, view, delta)
-    watch({ nowMs, view, run })
-  }
 }
 
 /**
@@ -354,40 +280,4 @@ describe('ballplayer cast', () => {
     expect(fieldersOffBall.length).toBeGreaterThan(5)
     expect(Math.max(...fieldersOffBall)).toBeLessThan(0.5)
   })
-
-  // The looks whose brim or hair comes nearest the bat, the shoulders, and the hands, each once, the sides taking turns,
-  // through a home run, an early and a late swing, a pitch let go into the mitt, and a swing the camera saw begin and
-  // checked: the eyes follow the ball, and the swing's own head turn hands over to them on the way back. A frame every
-  // 4 ms, so a jump shows, measured every fifth.
-  const headLooks: Partial<PlayerProfile>[] = [
-    { hat: 'cap', hair: 'crop' },
-    { hat: 'beanie', hair: 'bob' },
-    { hat: 'sunhat', hair: 'crop' },
-    { hat: 'none', hair: 'bob', ears: 'pointed' },
-  ]
-  const headSides: BattingSide[] = ['right', 'left']
-  const headCases = headLooks.map((look, index) => ({ side: headSides[index % 2], look }))
-  it.each(headCases)(
-    'keeps the arms, the mittens, and the bat out of the head as its eyes follow the ball, smoothly: $look, $side',
-    ({ side, look }) => {
-      const cast = createCast(createBatter({ ...DEFAULT_PLAYER_PROFILE, ...look }, side), createFielders())
-      const depths: number[] = []
-      const heads: Quaternion[] = []
-      const watch = () => {
-        cast.batter.rig.root.updateMatrixWorld(true)
-        heads.push(cast.batter.rig.head.getWorldQuaternion(new Quaternion()))
-        if (heads.length % 5 !== 0) return
-        const overlaps = batterOverlaps(cast.batter)
-        depths.push(Math.max(...OVERLAP_PAIRS.map((pair) => overlaps[pair])))
-      }
-      playWithCast(cast, side, [0, -160, 150, null, 'checked'], watch, { frameMs: 4 })
-      expect(Math.max(...depths)).toBeLessThan(0.001)
-      // How far (degrees) the head turns off the even way between the frames either side: as the hit-stop stops a
-      // swing's fast head turn, a few degrees; a head that jumps in a frame, half its jump.
-      const twitches = heads
-        .slice(2)
-        .map((head, index) => heads[index + 1].angleTo(heads[index].clone().slerp(head, 0.5)))
-      expect(MathUtils.radToDeg(Math.max(...twitches))).toBeLessThan(8)
-    },
-  )
 })

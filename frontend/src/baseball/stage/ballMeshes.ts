@@ -102,7 +102,7 @@ export function createBallParts(): BallParts {
   const ball = new Mesh(
     new SphereGeometry(DRAWN_BALL_RADIUS, 24, 16),
     new MeshStandardMaterial({
-      map: createCanvasTexture(256, drawSeams, 128),
+      map: createCanvasTexture(256, drawSeams, 128, { tiled: false }),
       roughness: 0.45,
       emissive: '#fff6e4',
       emissiveIntensity: 0.35,

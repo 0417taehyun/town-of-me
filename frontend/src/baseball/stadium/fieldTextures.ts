@@ -4,10 +4,12 @@ import { seededFraction } from '../../motionMath'
 // The field's textures are drawn in light greys, so the season's color on the material tints them like the town's
 // grass and hedges (scene/environment/season.ts). Seeded, so the park looks the same on every visit.
 
+/** A texture `draw` paints on a canvas; a `tiled` one, as the field's are, repeats and stays sharp at grazing angles. */
 export function createCanvasTexture(
   size: number,
   draw: (context: CanvasRenderingContext2D, size: number, height: number) => void,
   height = size,
+  { tiled = true } = {},
 ) {
   const canvas = document.createElement('canvas')
   canvas.width = size
@@ -16,6 +18,7 @@ export function createCanvasTexture(
   if (context) draw(context, size, height)
   const texture = new CanvasTexture(canvas)
   texture.colorSpace = SRGBColorSpace
+  if (!tiled) return texture
   texture.wrapS = RepeatWrapping
   texture.wrapT = RepeatWrapping
   texture.anisotropy = 4
