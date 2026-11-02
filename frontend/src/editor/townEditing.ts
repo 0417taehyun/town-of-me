@@ -353,6 +353,11 @@ export function removePetRoutePoint(town: TownSnapshot, index: number) {
   )
 }
 
+/** Shows the ballpark to visitors or hides it; like the colors, this applies as soon as the town is saved. */
+export function withBallparkVisible(town: TownSnapshot, visible: boolean): TownSnapshot {
+  return { ...town, venues: { ...town.venues, ballpark: { ...town.venues.ballpark, visible } } }
+}
+
 /** The admin's color for one of the ballpark's building roles, or the theme's color again when `color` is null. */
 export function withBallparkColor(town: TownSnapshot, role: BallparkColorRole, color: string | null): TownSnapshot {
   const ballpark = town.venues.ballpark
@@ -369,12 +374,12 @@ export function withBallparkColor(town: TownSnapshot, role: BallparkColorRole, c
  * saving and the due schedule is never sent again. Rules equal to this month's leave nothing scheduled.
  */
 export function withBallparkSchedule(town: TownSnapshot, change: Partial<BallparkRules>, month: string): TownSnapshot {
-  const { theme, colors } = town.venues.ballpark
+  const { visible, theme, colors } = town.venues.ballpark
   const inEffect = effectiveBallparkRules(town.venues.ballpark, month)
   const rules = { ...plannedBallparkRules(town.venues.ballpark, month), ...change }
   const unchanged = rules.pitchCount === inEffect.pitchCount && rules.difficulty === inEffect.difficulty
   const scheduled = unchanged ? {} : { scheduledRules: { fromMonth: nextRankingMonth(month), rules } }
-  return { ...town, venues: { ...town.venues, ballpark: { theme, colors, rules: inEffect, ...scheduled } } }
+  return { ...town, venues: { ...town.venues, ballpark: { visible, theme, colors, rules: inEffect, ...scheduled } } }
 }
 
 /** Cancels the scheduled change, so next month keeps this month's rules. */

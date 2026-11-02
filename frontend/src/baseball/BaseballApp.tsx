@@ -17,9 +17,8 @@ import {
   upcomingBallparkRules,
 } from '../data/ballparkRules'
 import { InMemoryDemoRepository } from '../data/InMemoryDemoRepository'
-import type { BallparkSettings } from '../data/models'
+import type { BallparkSettings, TownSnapshot } from '../data/models'
 import { normalizePlayerProfile, type PlayerProfile } from '../data/playerProfile'
-import { fetchTownLayout } from '../data/townApi'
 import { useDemoSession } from '../hooks/useDemoSession'
 import { useLocalEnvironment } from '../hooks/useLocalEnvironment'
 import { usePageLanguage } from '../hooks/usePageLanguage'
@@ -96,10 +95,13 @@ const CharacterPreviewCanvas = lazy(() =>
   import('../ui/CharacterPreviewCanvas').then((module) => ({ default: module.CharacterPreviewCanvas })),
 )
 
-/** The home run derby page: the same town and tab session as the town, so a visitor plays as their character. */
-export function BaseballApp({ townId }: { townId: string }) {
-  const [repository] = useState(() => new InMemoryDemoRepository(fetchTownLayout))
-  const { town, session, error, save, retry } = useDemoSession(repository, townId)
+/**
+ * The home run derby page, once the gate (BaseballGate.tsx) has read the town: the same tab session as the town, so a
+ * visitor plays as their character.
+ */
+export function BaseballApp({ town: loadedTown }: { town: TownSnapshot }) {
+  const [repository] = useState(() => new InMemoryDemoRepository(async () => loadedTown))
+  const { town, session, save } = useDemoSession(repository, loadedTown.id)
   const [language, setLanguage] = usePageLanguage()
   // Phones and browsers without WebGL 2 stop here, before a character or the stadium could be made; so does a stadium
   // whose graphics fail or are lost later.
@@ -114,16 +116,6 @@ export function BaseballApp({ townId }: { townId: string }) {
   }, [language])
 
   if (block) return <BlockedPage block={block} exit={exit} language={language} onLanguageChange={setLanguage} />
-  if (error)
-    return (
-      <main className="load-state">
-        <p>{copy.baseball.loadError}</p>
-        <small>{error}</small>
-        <button className="primary-button compact" type="button" onClick={retry}>
-          {copy.app.retry}
-        </button>
-      </main>
-    )
   if (!town || !session)
     return (
       <main className="load-state" aria-busy="true">

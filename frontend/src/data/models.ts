@@ -122,8 +122,13 @@ export type BallparkRules = { pitchCount: number; difficulty: BaseballDifficulty
 /** Rules that take over from 00:00 KST on the first day of `fromMonth`, a ranking month. */
 export type ScheduledBallparkRules = { fromMonth: string; rules: BallparkRules }
 
-/** The look applies as soon as it is saved; the rules change only from the start of a KST ranking month. */
+/**
+ * Whether visitors see it and its look apply as soon as they are saved; the rules change only from the start of a KST
+ * ranking month.
+ */
 export type BallparkSettings = {
+  /** The admin's switch: while hidden, visitors cannot open `/baseball`, and only the admin's preview plays it. */
+  visible: boolean
   theme: BallparkTheme
   /** Only the roles the admin overrides; every other role keeps the theme's color. */
   colors: Partial<Record<BallparkColorRole, string>>
@@ -139,9 +144,10 @@ export type BallparkSettings = {
 /** The large venues at the town's edge, by venue id. */
 export type TownVenues = { ballpark: BallparkSettings }
 
-// The ballpark rules mirror defaultBallparkRules in backend/src/town.ts, which a town saved for the first time gets.
+// Mirrors backend/src/town.ts: a venue stays hidden until the admin shows it, and a town saved for the first time gets
+// defaultBallparkRules.
 export const DEFAULT_TOWN_VENUES: TownVenues = {
-  ballpark: { theme: 'garden', colors: {}, rules: { pitchCount: 5, difficulty: 'normal' } },
+  ballpark: { visible: false, theme: 'garden', colors: {}, rules: { pitchCount: 5, difficulty: 'normal' } },
 }
 
 /** Someone the town's copy names, such as its owner or the pet. */

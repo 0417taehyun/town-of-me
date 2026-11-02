@@ -46,7 +46,7 @@ export function rebaseOnSave(
 }
 
 /**
- * The admin's look on the backend's rules in effect, with the backend's schedule unless the admin changed it since
+ * The admin's switch and look on the backend's rules in effect, with the backend's schedule unless the admin changed it since
  * `sent`. A schedule due by the KST `month` is never kept: that save promoted it, so sending it again would be refused.
  */
 export function rebaseBallpark(
@@ -58,6 +58,7 @@ export function rebaseBallpark(
   const scheduledRules =
     edited.scheduledRules === sent.scheduledRules ? saved.scheduledRules : upcomingBallparkRules(edited, month)
   return {
+    visible: edited.visible,
     theme: edited.theme,
     colors: edited.colors,
     rules: saved.rules,

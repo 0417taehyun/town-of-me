@@ -46,7 +46,7 @@ skids, ballpark themes, and color roles need no backend change.
 | `scene/`           | Everything drawn with Three.js (see below). Loaded as a lazy chunk.                                 |
 | `editor/`          | The admin editor: panels, gestures, history, admin list, guestbook review. Loaded only on `/admin`. |
 | `ui/`              | DOM overlays: entry, HUD, dialogue, guestbook, map, character creator.                              |
-| `baseball/`        | The home run derby at `/baseball`, a lazy chunk; only `baseballRoute.ts` is in the main chunk.      |
+| `baseball/`        | The derby at `/baseball`, a lazy chunk; only its gate and `baseballRoute.ts` are in the main chunk. |
 | `camera/`          | Camera defaults and pure camera math.                                                               |
 | `audio/`           | Procedural music, voices, footsteps, skid squeal, derby sounds, and the bark sample.                |
 | `i18n/language.ts` | All copy, in Korean and English.                                                                    |
@@ -287,9 +287,15 @@ and the tracked body are wiped along with the panel's (a dev build's diagnostics
 
 ### The `/baseball` page
 
-`BaseballApp.tsx` checks the device first (`deviceGate.ts`: a phone or tablet, then WebGL 2) and shows why one cannot
-play in the visitor's language (also when the stadium's graphics fail later, or when the camera finds this computer too
-slow to track), then the character, then the derby. Each
+`BaseballGate.tsx` reads the town first (`useBallparkGate.ts`). While the admin hides the ballpark
+(`town.venues.ballpark.visible`, false until shown), only the admin's preview plays it (`ballparkOpens` in
+`baseballRoute.ts`, which asks `/v1/me` for the role only then); anyone else gets a coming-soon card in the town's
+style, and neither the derby's chunk nor the camera loads. Nothing in the town links to `/baseball` yet; the town's
+ballpark exterior, its gate, and the statues, when they come, read the same flag and stay out while it is hidden.
+
+The gate hands the town it read to `BaseballApp.tsx`, which checks the device first (`deviceGate.ts`: a phone or
+tablet, then WebGL 2) and shows why one cannot play in the visitor's language (also when the stadium's graphics fail
+later, or when the camera finds this computer too slow to track), then the character, then the derby. Each
 run reads the KST month it starts in and gets a `crypto` seed (`flow/derbyFlow.ts`), so a page left open into a new
 month plays the rules scheduled for it, as loaded with the page, from its next run. The editor's link to `?rules=next`
 (`isNextRulesPreview` in `baseballRoute.ts`) plays the rules scheduled for next month instead, or this month's when

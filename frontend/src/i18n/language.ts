@@ -596,6 +596,10 @@ export const languageCopy = {
       stageLabel: 'The ballpark, seen from behind home plate',
       leaveKey: 'Esc to leave',
       batsAs: 'You bat as the character you made in the town.',
+      comingSoon: {
+        title: 'The ballpark is coming soon',
+        description: 'The home run derby opens soon. Until then, enjoy the town.',
+      },
       hud: {
         pitch: 'Pitch',
         homeRuns: 'HR',
@@ -789,6 +793,10 @@ export const languageCopy = {
         rulesFrom: (month: string, pitchCount: number, difficulty: string) =>
           `From ${month}: ${pitchCount} pitches · ${difficulty}`,
         settingsTitle: 'Ballpark',
+        visible: 'Show the ballpark',
+        visibleNote:
+          'Applies as soon as you save. While it is hidden, visitors cannot open the ballpark, but you can still preview it.',
+        preview: 'Preview the ballpark',
         colorRoles: { walls: 'Walls', roof: 'Roof', trim: 'Trim', accent: 'Accent' },
         themeColor: 'Use theme color',
         colorsNote: 'Colors apply as soon as you save.',
@@ -1396,6 +1404,10 @@ export const languageCopy = {
       stageLabel: '홈플레이트 뒤에서 본 야구장',
       leaveKey: 'Esc로 나가기',
       batsAs: '마을에서 만든 모습 그대로 타석에 서요.',
+      comingSoon: {
+        title: '야구장은 준비 중이에요',
+        description: '홈런 더비는 곧 문을 열어요. 그동안 마을을 둘러보세요.',
+      },
       hud: {
         pitch: '투구',
         homeRuns: '홈런',
@@ -1576,6 +1588,10 @@ export const languageCopy = {
         rulesFrom: (month: string, pitchCount: number, difficulty: string) =>
           `${month}부터: ${pitchCount}구 · ${difficulty}`,
         settingsTitle: '야구장',
+        visible: '야구장 공개',
+        visibleNote:
+          '저장하면 바로 적용돼요. 숨겨 두면 방문자는 야구장에 들어갈 수 없고, 관리자만 미리보기로 볼 수 있어요.',
+        preview: '야구장 미리보기',
         colorRoles: { walls: '벽', roof: '지붕', trim: '테두리', accent: '강조색' },
         themeColor: '테마 색으로',
         colorsNote: '색은 저장하면 바로 적용돼요.',

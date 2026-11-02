@@ -191,6 +191,8 @@ export function parseBallparkSettings(value: unknown): BallparkSettings {
   const input = recordOrEmpty(value)
   const scheduledRules = parseScheduledRules(input.scheduledRules)
   return {
+    // Only an explicit `true` shows it, so a town saved before the switch existed keeps the ballpark hidden.
+    visible: input.visible === true,
     theme: pickStyle(input.theme, BALLPARK_THEMES, DEFAULT_TOWN_VENUES.ballpark.theme),
     colors: Object.fromEntries(Object.entries(recordOrEmpty(input.colors)).filter(isBallparkColor)),
     rules: parseBallparkRules(input.rules),

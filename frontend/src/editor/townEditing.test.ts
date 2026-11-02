@@ -255,10 +255,14 @@ describe('ballpark settings', () => {
   })
 
   it('changes the rules without touching the look or anything else in the town, and the look without the rules', () => {
-    const town = withBallpark({ colors: { roof: '#e8735a' } })
+    const town = withBallpark({ visible: true, colors: { roof: '#e8735a' } })
     const scheduled = withBallparkSchedule(town, { pitchCount: 9, difficulty: 'easy' }, '2026-11')
     expect({ ...scheduled, venues: town.venues }).toEqual(town)
-    expect(scheduled.venues.ballpark).toMatchObject({ theme: town.venues.ballpark.theme, colors: { roof: '#e8735a' } })
+    expect(scheduled.venues.ballpark).toMatchObject({
+      visible: true,
+      theme: town.venues.ballpark.theme,
+      colors: { roof: '#e8735a' },
+    })
     const recolored = withBallparkColor(scheduled, 'walls', '#f4e9d0')
     expect(recolored.venues.ballpark).toEqual({
       ...scheduled.venues.ballpark,

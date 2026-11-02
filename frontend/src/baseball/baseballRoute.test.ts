@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest'
-import { isBaseballPath, isNextRulesPreview, NEXT_RULES_PREVIEW_PATH } from './baseballRoute'
+import { describe, expect, it, vi } from 'vitest'
+import type { SessionUser } from '../data/adminSession'
+import { ballparkOpens, isBaseballPath, isNextRulesPreview, NEXT_RULES_PREVIEW_PATH } from './baseballRoute'
+
+const signedIn = (role: SessionUser['role']) => vi.fn(async () => ({ id: 'user', displayName: 'Robin', role }))
 
 describe('baseball route', () => {
   it('matches the ballpark page with or without a trailing slash, and nothing beside or below it', () => {
@@ -17,5 +20,16 @@ describe('baseball route', () => {
       false,
       false,
     ])
+  })
+
+  it('opens a hidden ballpark only for a signed-in admin on the preview, asking who is signed in only then', async () => {
+    const admin = signedIn('admin')
+    expect(await ballparkOpens({ visible: false }, false, admin)).toBe(false)
+    expect(await ballparkOpens({ visible: true }, false, admin)).toBe(true)
+    expect(admin).not.toHaveBeenCalled()
+    expect(await ballparkOpens({ visible: false }, true, signedIn('admin'))).toBe(true)
+    const others = [signedIn('member'), vi.fn(async () => null), vi.fn(() => Promise.reject(new Error('502')))]
+    const opened = await Promise.all(others.map((sessionUser) => ballparkOpens({ visible: false }, true, sessionUser)))
+    expect(opened).toEqual([false, false, false])
   })
 })

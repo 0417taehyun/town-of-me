@@ -26,6 +26,7 @@ const wireTown = (revision = 1) => ({ ...serializeTownLayout(SAMPLE_TOWN), id: S
 const savedResponse = (revision = 3) => ({ town: { ...wireTown(revision), updatedAt: '2026-10-24T00:00:00.000Z' } })
 
 const ballpark = {
+  visible: true,
   theme: 'garden',
   colors: { roof: '#e8735a' },
   rules: { pitchCount: 7, difficulty: 'hard' },
@@ -132,11 +133,17 @@ describe('town layout API boundary', () => {
     })
   })
 
-  it('round-trips the ballpark look, rules, and scheduled rules, so an admin save keeps them', () => {
+  it('round-trips whether the ballpark is shown, its look, rules, and scheduled rules, so an admin save keeps them', () => {
     const town = parseTownLayout({ ...wireTown(), venues: { ballpark } })
     expect(town.venues.ballpark).toEqual(ballpark)
     expect(parseTownLayout({ ...serializeTownLayout(town), id: town.id, revision: 1 })).toEqual(town)
     expect(parseTownLayout({ ...wireTown(), venues: undefined }).venues).toEqual(DEFAULT_TOWN_VENUES)
+  })
+
+  it('keeps the ballpark hidden unless the town shows it, also in a town saved before the switch existed', () => {
+    const visibility = [undefined, null, 'true', 1, false, true].map((visible) => withBallpark({ visible }).visible)
+    expect(visibility).toEqual([false, false, false, false, false, true])
+    expect(parseTownLayout({ ...wireTown(), venues: undefined }).venues.ballpark.visible).toBe(false)
   })
 
   it('falls back to the default theme, difficulty, or pitch count for values this build lacks', () => {

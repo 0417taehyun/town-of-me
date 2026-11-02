@@ -72,6 +72,7 @@ import {
   updateResidentProfile,
   withBallparkColor,
   withBallparkSchedule,
+  withBallparkVisible,
   withoutBallparkSchedule,
   type EditorSelection,
   type EditorView,
@@ -298,10 +299,11 @@ export function TownMovementFields({
 }
 
 /**
- * The ballpark's building colors, which apply once saved, and the rules for next month: the rules in effect never
- * change within a KST month, so the admin only schedules. Trying the schedule opens /baseball in this tab, because a
- * new tab would start without this tab's session storage (the visitor's character and language) behind /baseball's
- * opener isolation; leaving would lose unsaved edits, so the link shows only when everything is saved.
+ * Whether visitors see the ballpark and its building colors, both applied once saved, and the rules for next month:
+ * the rules in effect never change within a KST month, so the admin only schedules. The preview of a hidden ballpark
+ * or of the schedule opens /baseball in this tab, because a new tab would start without this tab's session storage
+ * (the visitor's character and language) behind /baseball's opener isolation; leaving would lose unsaved edits, so
+ * those links show only when everything is saved.
  */
 export function BallparkSettingsFields({
   town,
@@ -327,6 +329,26 @@ export function BallparkSettingsFields({
   return (
     <fieldset className="editor-appearance">
       <legend>{copy.settingsTitle}</legend>
+      <label className="editor-check">
+        <input
+          type="checkbox"
+          role="switch"
+          checked={ballpark.visible}
+          onChange={(event) => {
+            const visible = event.currentTarget.checked
+            edit((current) => withBallparkVisible(current, visible))
+          }}
+        />
+        {copy.visible}
+      </label>
+      <p className="editor-note">{copy.visibleNote}</p>
+      {!ballpark.visible && !dirty && (
+        <div className="editor-actions">
+          <a className="text-button" href={NEXT_RULES_PREVIEW_PATH}>
+            {copy.preview}
+          </a>
+        </div>
+      )}
       {BALLPARK_COLOR_ROLES.map((role) => (
         <ColorValueField
           key={role}

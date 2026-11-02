@@ -47,7 +47,8 @@ npm run build
 - **Time and seasons:** lighting, sky, lamps, music, birds, and clouds follow local time; the season follows the
   Northern Hemisphere month. The sun button previews any time and season. Changes play out in order: leaves fall
   before snow settles, and snow melts before leaves return.
-- **Home-run derby:** `/baseball` is a home-run derby in a garden ballpark, batting as your town character. Each run
+- **Home-run derby:** `/baseball` is a home-run derby in a garden ballpark, batting as your town character, once the
+  admin shows the ballpark; until then it says the ballpark is coming soon, and nothing else of it loads. Each run
   plays the pitch count (3–10) and difficulty the admin set for the current month in Korean time; a change takes effect
   from the next month, and a run started after midnight on the first plays the rules scheduled for it. A ball in play
   is a home run, a hit, or a foul; a pitch you let go is a strike and one you swing through a miss, and there are no
@@ -132,7 +133,9 @@ the role again on every save.
   email (both optional), the pet's walk, and how everyone walks and skids, with a looping preview.
 - **The pet's walk:** `Edit the walk` starts from the default loop around the fountain and edits it with the same
   handles as a resident route; `Use the default walk` goes back to the loop that follows the fountain.
-- **Ballpark** (town settings): the walls, roof, trim, and accent colors, or `Use theme color`, apply once saved. The
+- **Ballpark** (town settings): `Show the ballpark` lets visitors open `/baseball`; it starts off and, like the walls,
+  roof, trim, and accent colors (or `Use theme color`), applies once saved. While it is off, visitors read that the
+  ballpark is coming soon, and `Preview the ballpark` opens the preview described below for you. The
   pitch count (3–10) and difficulty change only from midnight KST on the first of next month, so the admin schedules
   next month's rules or cancels the change, and this month's games never change. Once saved, `Try next month's rules`
   plays them in the same tab at `/baseball?rules=next`, a preview that is never ranked.

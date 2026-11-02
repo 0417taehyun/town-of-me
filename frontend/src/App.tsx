@@ -33,6 +33,7 @@ import { VirtualStick } from './ui/TouchControls'
 import { TownLoadingScreen } from './ui/TownLoadingScreen'
 import { TownMapPanel } from './ui/TownMapPanel'
 import { isBaseballPath } from './baseball/baseballRoute'
+import { BaseballGate } from './baseball/BaseballGate'
 
 const TownScene = lazy(() => import('./scene/TownScene').then((module) => ({ default: module.TownScene })))
 const CharacterCreator = lazy(() =>
@@ -46,7 +47,6 @@ const TownEditorPanel = lazy(() =>
 const TownEditorScene = lazy(() =>
   import('./editor/TownEditorScene').then((module) => ({ default: module.TownEditorScene })),
 )
-const BaseballApp = lazy(() => import('./baseball/BaseballApp').then((module) => ({ default: module.BaseballApp })))
 
 const TOWN_ID = 'mossbell'
 
@@ -54,12 +54,7 @@ type HudPanel = 'environment' | 'help' | 'map' | null
 
 /** Picks the page before the town's hooks run. Pages change by full page load, so nginx sends each its own headers. */
 export function App() {
-  if (isBaseballPath(window.location.pathname))
-    return (
-      <Suspense fallback={null}>
-        <BaseballApp townId={TOWN_ID} />
-      </Suspense>
-    )
+  if (isBaseballPath(window.location.pathname)) return <BaseballGate townId={TOWN_ID} />
   return <TownApp />
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { SAMPLE_TOWN } from '../testing/sampleTown'
 import type { ScheduledBallparkRules, TownSnapshot } from '../data/models'
-import { updateObject, withBallparkColor, withBallparkSchedule } from './townEditing'
+import { updateObject, withBallparkColor, withBallparkSchedule, withBallparkVisible } from './townEditing'
 import { afterSave, rebaseOnSave, type EditorState } from './useTownEditor'
 
 const scheduled: ScheduledBallparkRules = { fromMonth: '2026-12', rules: { pitchCount: 8, difficulty: 'hard' } }
@@ -26,10 +26,11 @@ describe('town editor saves', () => {
     expect(rebaseOnSave(sent, sent, saved, month)).toBe(saved)
   })
 
-  it('keeps a color picked during a save on the rules it promoted, without resending the promoted schedule', () => {
-    const recolored = withBallparkColor(sent, 'roof', '#e8735a')
+  it('keeps a color picked and the ballpark shown during a save on the rules it promoted, without its schedule', () => {
+    const recolored = withBallparkVisible(withBallparkColor(sent, 'roof', '#e8735a'), true)
     expect(rebaseOnSave(recolored, sent, saved, month).venues.ballpark).toEqual({
       ...saved.venues.ballpark,
+      visible: true,
       colors: { roof: '#e8735a' },
     })
   })

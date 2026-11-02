@@ -1846,7 +1846,8 @@ input[type='range']::-webkit-slider-thumb {
   color: var(--ink);
   background: #a8cfca;
 }
-.town-loading {
+.town-loading,
+.ballpark-soon {
   position: fixed;
   inset: 0;
   z-index: 50;
@@ -1857,6 +1858,24 @@ input[type='range']::-webkit-slider-thumb {
   background:
     radial-gradient(circle at 50% 30%, rgba(255, 250, 239, 0.72), transparent 42%),
     linear-gradient(180deg, #b9ddd8 0%, #dce5bd 58%, #abc77f 100%);
+}
+/* /baseball while the admin hides the ballpark: the entry card on the loading screen's lawn. */
+.ballpark-soon {
+  word-break: keep-all;
+}
+.ballpark-soon .entry-card h1 {
+  font-size: clamp(1.8rem, 3.2vw, 2.4rem);
+  text-wrap: balance;
+}
+.ballpark-soon .entry-copy {
+  text-wrap: pretty;
+}
+.ballpark-soon .guest-button {
+  text-decoration: none;
+}
+.ballpark-soon .guest-button:focus-visible {
+  outline: 3px solid rgba(51, 101, 86, 0.42);
+  outline-offset: 3px;
 }
 .town-loading-card {
   display: grid;
