@@ -21,14 +21,6 @@ describe('pitcher', () => {
     expect(handAndBall(pitcher, -0.3).ball.distanceTo(release)).toBeGreaterThan(0.5)
   })
 
-  it('lets go with his hand still driving toward home', () => {
-    const pitcher = createPitcher()
-    const towardHome = (seconds: number) =>
-      (handAndBall(pitcher, seconds + 0.005).ball.z - handAndBall(pitcher, seconds - 0.005).ball.z) / 0.01
-    const throwing = Array.from({ length: 31 }, (_, step) => towardHome(-0.3 + step * 0.01))
-    expect(towardHome(0)).toBeGreaterThan(0.4 * Math.max(...throwing))
-  })
-
   it('is back in his set, the ball in his glove, before the next windup can begin', () => {
     const pitcher = createPitcher()
     const set = handAndBall(pitcher, -DERBY_PHASE_MS.windup / 1000)

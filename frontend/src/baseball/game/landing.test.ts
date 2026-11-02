@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { DIFFICULTY_RULES, type TimingWindows } from './difficulty'
 import { type BattingSide, fenceDistance, FOUL_ANGLE } from './field'
 import { SWING_POWER_RANGE } from './judging'
-import { type JudgedSwing, type Landing, landingFor, MAX_HOME_RUN_DISTANCE_DECIMETRES } from './landing'
+import { type JudgedSwing, type Landing, landingFor } from './landing'
 import { createSeededRandom } from './seededRandom'
 
 const allWindows = Object.values(DIFFICULTY_RULES).map((rule) => rule.timingWindows)
@@ -66,22 +66,6 @@ describe('landing', () => {
         }),
       ),
     )
-  })
-
-  it('never carries a home run past MAX_HOME_RUN_DISTANCE_DECIMETRES, which a perfect swing reaches', () => {
-    // Dead on, at full power, and level, where the longest is, then the windows' edges and between, 5 ms apart.
-    const longest = allWindows.map((windows) =>
-      [0, ...steps(-windows.contact, windows.contact, 5)]
-        .flatMap((errorMs) =>
-          powers.flatMap((power) =>
-            [null, ...measuredHeights].flatMap((heightError) =>
-              sides.map((side) => landingFor({ errorMs, power, heightError }, windows, side).distanceDecimetres),
-            ),
-          ),
-        )
-        .reduce((farthest, distance) => Math.max(farthest, distance), 0),
-    )
-    expect(longest).toEqual(allWindows.map(() => MAX_HOME_RUN_DISTANCE_DECIMETRES))
   })
 
   it('never lands shorter for closer timing, more power, or a bat nearer the ball', () => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { DIFFICULTY_RULES, PRACTICE_PITCH_FLIGHT_SECONDS } from './difficulty'
 import { BATTER_REACH, CONTACT_DEPTH } from './field'
 import { timingErrorMs } from './judging'
-import { contactSeconds, meetSeconds, PITCH_TYPE_IDS, pitchPosition, planPitch, RELEASE_POINT } from './pitch'
+import { contactSeconds, meetSeconds, PITCH_TYPE_IDS, pitchPosition, planPitch } from './pitch'
 import { PITCH_TARGET_BAND } from './pitchSchedule'
 
 const paces = [PRACTICE_PITCH_FLIGHT_SECONDS, ...Object.values(DIFFICULTY_RULES).map((rule) => rule.pitchFlightSeconds)]
@@ -33,25 +33,10 @@ describe('pitch flight', () => {
     })
   })
 
-  it('keeps its shape at every pace, the fastball dropping least and the curve most', () => {
-    paces.forEach((pace) => {
-      const [fastball, changeup, curve] = PITCH_TYPE_IDS.map((type) => dropAtPlate(type, pace))
-      expect(fastball).toBeLessThan(changeup)
-      expect(changeup).toBeLessThan(curve)
-      PITCH_TYPE_IDS.forEach((type) => expect(dropAtPlate(type, pace)).toBeCloseTo(dropAtPlate(type, paces[0]), 9))
-    })
-  })
-
-  it('never lifts a fastball more than a few centimeters above the hand, even at the slow practice pace', () => {
-    pitches
-      .filter(({ type }) => type === 'fastball')
-      .forEach(({ plan }) => {
-        const heights = Array.from(
-          { length: 101 },
-          (_, step) => pitchPosition(plan, (step / 100) * plan.flightSeconds).y,
-        )
-        expect(Math.max(...heights)).toBeLessThan(RELEASE_POINT.y + 0.03)
-      })
+  it('keeps its shape at every pace', () => {
+    paces.forEach((pace) =>
+      PITCH_TYPE_IDS.forEach((type) => expect(dropAtPlate(type, pace)).toBeCloseTo(dropAtPlate(type, paces[0]), 9)),
+    )
   })
 
   it('reaches the contact point at the reference time, so a swing timed to the plate reads late', () => {

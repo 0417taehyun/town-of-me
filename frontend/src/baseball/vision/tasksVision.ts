@@ -155,8 +155,8 @@ export function createPoseTracker() {
 
 /**
  * How sure a detection a dev build's object detector reports must be: below the held object's bar, so the diagnostics'
- * saved log also holds what a lower `candidateScore` would take, for a replay to try (devReplay.ts). Play is the same,
- * since the likeliest detections come first and only those sure enough count (heldObject.ts lockCandidates).
+ * panel and saved log also show what a lower `candidateScore` would take. Play is the same, since the likeliest
+ * detections come first and only those sure enough count (heldObject.ts lockCandidates).
  */
 export const DEV_DETECTOR_SCORE = 0.2
 

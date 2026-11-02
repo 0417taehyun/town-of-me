@@ -1,12 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  adjustFovByInputDelta,
-  cameraHeightForFov,
-  cameraOffset,
-  clampYaw,
-  dampingAlpha,
-  lookAheadOffset,
-} from './cameraMath'
+import { adjustFovByInputDelta, cameraHeightForFov, cameraOffset, clampYaw, dampingAlpha } from './cameraMath'
 
 describe('camera math', () => {
   it('returns a useful exponential damping alpha', () => {
@@ -42,10 +35,6 @@ describe('camera math', () => {
     expect(cameraHeightForFov(51)).toBeLessThan(8)
     expect(cameraHeightForFov(58)).toBe(8)
     expect(cameraHeightForFov(100)).toBe(8)
-  })
-
-  it('produces no look-ahead when idle', () => {
-    expect(lookAheadOffset(0, 0, 2)).toEqual([0, 0, 0])
   })
 
   it('preserves horizontal distance and requested height', () => {

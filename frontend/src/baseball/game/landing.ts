@@ -23,8 +23,6 @@ export type Landing = { outcome: Outcome; distanceDecimetres: number; spray: num
 
 /** The longest carry (m): a dead-on swing at full power with the bat level with the ball. */
 export const LONGEST_CARRY = 155
-/** No home run lands farther; the leaderboard reviews runs near the pitch count times this. */
-export const MAX_HOME_RUN_DISTANCE_DECIMETRES = LONGEST_CARRY * 10
 
 /** Timing quality at the edge of each window; it falls in straight lines from 1 for a dead-on swing. */
 export const TIMING_QUALITY = { perfectEdge: 0.835, goodEdge: 0.67, contactEdge: 0.4 }

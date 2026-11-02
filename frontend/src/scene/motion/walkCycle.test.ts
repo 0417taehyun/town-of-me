@@ -4,7 +4,7 @@ import {
   compensateHipShift,
   createWalkCycle,
   getCyclePose,
-  getLowestSole,
+  getLowestSoleInBody,
   getStrideLength,
   samplePeriodic,
   setPoseOnGround,
@@ -18,6 +18,9 @@ const groundedPose = (phase: number, run: number) => {
   return setPoseOnGround(pose)
 }
 
+/** The lowest sole of either foot after `setPoseOnGround`, in the character's frame (0 = on the ground). */
+const lowestSole = (pose: CharacterPose) => getLowestSoleInBody(pose) + pose.bodyY
+
 describe('key-pose walk and run cycle', () => {
   it('passes through every key exactly and loops smoothly', () => {
     const times = [0, 0.25, 0.5, 0.75]
@@ -28,9 +31,9 @@ describe('key-pose walk and run cycle', () => {
 
   it('keeps a sole on the ground all walk long and only leaves it in the run’s flight', () => {
     Array.from({ length: 100 }, (_, index) => index / 100).forEach((phase) => {
-      expect(getLowestSole(groundedPose(phase, 0))).toBeCloseTo(0, 6)
+      expect(lowestSole(groundedPose(phase, 0))).toBeCloseTo(0, 6)
       const running = groundedPose(phase, 1)
-      expect(getLowestSole(running)).toBeCloseTo(running.lift, 6)
+      expect(lowestSole(running)).toBeCloseTo(running.lift, 6)
     })
     expect(Math.max(...Array.from({ length: 100 }, (_, index) => groundedPose(index / 100, 1).lift))).toBeGreaterThan(
       0.05,

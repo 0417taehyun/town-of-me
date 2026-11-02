@@ -30,9 +30,3 @@ export function cameraOffset(
   result[2] = Math.cos(yaw) * distance
   return result
 }
-
-export function lookAheadOffset(x: number, z: number, distance: number): Vector3Tuple {
-  const length = Math.hypot(x, z)
-  if (length === 0) return [0, 0, 0]
-  return [(x / length) * distance, 0, (z / length) * distance]
-}

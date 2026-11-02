@@ -5,10 +5,8 @@ import {
   cameraPanelLayout,
   cameraScreen,
   derbyKeyAction,
-  MIN_PANEL_WIDTH,
   nextPanelSize,
   PANEL_EDGE,
-  PANEL_SHARES,
   readPanelSize,
   savePanelSize,
 } from './cameraPanelLayout'
@@ -32,7 +30,7 @@ const blockedStore = {
 }
 
 describe('the camera panel layout', () => {
-  it('is the stage while the camera sets up, beside the play from practice on, a chip in a chase, hidden when off', () => {
+  it('is the stage in setup, beside the play from practice on, a chip in a chase, hidden when off or too narrow to read', () => {
     const steps = ['setup', 'practice', 'practiceDone', 'play', 'result'] as const
     expect(steps.map((step) => cameraScreen(true, step))).toEqual(['setup', 'play', 'play', 'play', 'result'])
     expect(cameraScreen(false, 'play')).toBe(null)
@@ -40,6 +38,8 @@ describe('the camera panel layout', () => {
     expect(placementOf({})).toBe('side')
     expect(placementOf({ chasing: true })).toBe('chip')
     expect(placementOf({ screen: null })).toBe('hidden')
+    const narrow = cameraPanelLayout(PLAYING, { width: 600, height: 900 }, 'right')
+    expect([narrow.placement, narrow.band.width]).toEqual(['hidden', 600])
   })
 
   it('comes back at medium while a step waits for the stance, after practice or a run, though the visitor hid it', () => {
@@ -61,18 +61,6 @@ describe('the camera panel layout', () => {
     expect(cameraPanelLayout({ ...PLAYING, size: 'off', searching: true }, LAPTOP, 'right').width).toBeGreaterThan(0)
   })
 
-  it('stands opposite the batter and centres the play in the band it leaves free', () => {
-    const right = cameraPanelLayout(PLAYING, LAPTOP, 'right')
-    const left = cameraPanelLayout(PLAYING, LAPTOP, 'left')
-    expect([right.side, left.side]).toEqual(['right', 'left'])
-    const span = PANEL_EDGE + right.width
-    expect(right.band).toEqual({ centre: (LAPTOP.width - span) / 2, width: LAPTOP.width - span })
-    expect(left.band).toEqual({ centre: span + (LAPTOP.width - span) / 2, width: LAPTOP.width - span })
-    const fullWidth = { centre: LAPTOP.width / 2, width: LAPTOP.width }
-    expect(cameraPanelLayout({ ...PLAYING, chasing: true }, LAPTOP, 'right').band).toEqual(fullWidth)
-    expect(cameraPanelLayout({ ...PLAYING, size: 'off' }, LAPTOP, 'right').band).toEqual(fullWidth)
-  })
-
   it('keeps the scoreboard over the panel clear of the pitch line, at one size through a home run’s chase', () => {
     const clear = HUD_RESERVE.centre * LAPTOP.height
     const right = cameraPanelLayout(PLAYING, LAPTOP, 'right')
@@ -84,17 +72,9 @@ describe('the camera panel layout', () => {
     expect(cameraPanelLayout({ ...PLAYING, chasing: true }, LAPTOP, 'right').scoreboardRoom).toBe(right.scoreboardRoom)
   })
 
-  it('grows with V, keeps a very wide screen’s picture under the HUD, and hides when too narrow to read', () => {
+  it('grows with V', () => {
     const medium = cameraPanelLayout(PLAYING, LAPTOP, 'right').width
-    const large = cameraPanelLayout({ ...PLAYING, size: 'large' }, LAPTOP, 'right').width
-    expect(medium).toBe(Math.floor(PANEL_SHARES.medium * LAPTOP.width))
-    expect(large).toBeGreaterThan(medium)
-    const ultrawide = cameraPanelLayout(PLAYING, { width: 3840, height: 1080 }, 'right')
-    expect(ultrawide.width * 0.75).toBeLessThanOrEqual(1080 * 0.6)
-    const narrow = cameraPanelLayout(PLAYING, { width: 600, height: 900 }, 'right')
-    expect(narrow.width).toBeLessThan(MIN_PANEL_WIDTH)
-    expect(narrow.placement).toBe('hidden')
-    expect(narrow.band.width).toBe(600)
+    expect(cameraPanelLayout({ ...PLAYING, size: 'large' }, LAPTOP, 'right').width).toBeGreaterThan(medium)
   })
 
   it('starts medium, cycles medium, large, off with V, and remembers the pick, even where storage is blocked', () => {

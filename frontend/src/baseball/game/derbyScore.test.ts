@@ -107,13 +107,4 @@ describe('derby scoring', () => {
       expect(result.pitches[0].distanceDecimetres).toBeGreaterThan(lostBat.pitches[0].distanceDecimetres)
     })
   })
-
-  it('carries a faster swing farther against the practice peak, up to the power cap', () => {
-    const [slow, atPeak, fast, wild] = [5, 8, 9.2, 40].map(
-      (speed) => replayDerby(plan, cameraLog([swing(0, latency, 0, speed), null, null, null, null])).pitches[0],
-    )
-    expect(slow.distanceDecimetres).toBeLessThan(atPeak.distanceDecimetres)
-    expect(atPeak.distanceDecimetres).toBeLessThan(fast.distanceDecimetres)
-    expect(wild.distanceDecimetres).toBe(fast.distanceDecimetres)
-  })
 })

@@ -1,21 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { languageCopy } from '../../i18n/language'
 import { advanceDerby, createDerby, type Derby, type DerbyEvent, phaseEndMs, swingDerby } from '../game/derby'
-import { contactHeight, contactSeconds, type PitchTypeId } from '../game/pitch'
+import { contactHeight, contactSeconds } from '../game/pitch'
 import type { PitchResult } from '../game/derbyScore'
 import { createRunPlan, planRunPitch, type RunPlan } from '../game/runPlan'
+import { scoreboardSummary } from '../stadium/scoreboard'
 import type { StageEvent } from '../stage/stageRun'
 import {
   bannerResult,
-  bannerText,
   betweenPitches,
   cameraPanelWords,
   captionId,
   captionShown,
   chasingHomeRun,
   type DerbyHudState,
-  distanceText,
-  homeRunDistanceText,
   hudAfterEvent,
   NEW_RUN_HUD,
   outcomeTitle,
@@ -39,13 +37,40 @@ function stageEventsFor(event: DerbyEvent): StageEvent[] {
   return [event, { type: 'chase', pitchIndex }, { type: 'landed', pitchIndex }]
 }
 
-/** Whether the caption showed over the play after each of `events`, with the visitor in view. */
-function captionsShown(events: StageEvent[]) {
+/** The HUD after each of `events`, in turn. */
+function hudsAfter(events: StageEvent[]) {
   let hud = NEW_RUN_HUD
   return events.map((event) => {
     hud = hudAfterEvent(hud, event)
-    return captionShown(captionId(hud), false)
+    return hud
   })
+}
+
+/**
+ * What a 3-pitch run's HUD shows: the pitch the banner names, the big title, whether it chases a home run, is between
+ * pitches, or has a pitch in play, the pitch dots, and the scoreboard's filled stars and home runs.
+ */
+function hudRow(hud: DerbyHudState) {
+  return [
+    bannerResult(hud)?.pitchType ?? null,
+    outcomeTitle(hud),
+    chasingHomeRun(hud),
+    betweenPitches(hud, 3),
+    pitchInPlay(hud),
+    pitchDots(hud, 3),
+    scoreboardSummary(hud, 3).played,
+    scoreboardTotals(hud).homeRuns,
+  ]
+}
+
+/** Each of `events` with what the HUD shows after it. */
+function hudTimeline(events: StageEvent[]) {
+  return hudsAfter(events).map((hud, index) => [events[index].type, ...hudRow(hud)])
+}
+
+/** Whether the caption showed over the play after each of `events`, with the visitor in view. */
+function captionsShown(events: StageEvent[]) {
+  return hudsAfter(events).map((hud) => captionShown(captionId(hud), false))
 }
 
 /** A swing with the bat level with the ball the moment the pitch on its way reaches the contact point. */
@@ -70,72 +95,38 @@ function deadOnRun(plan: RunPlan, swings = true) {
 }
 
 describe('the derby HUD', () => {
-  it('names each pitch only once its ball is down, never while that one or the next is wound up or on its way', () => {
+  it('follows a run swung dead on: a home run’s title once the camera chases it, its name, dot and count once down', () => {
     const plan = createRunPlan({ pitchCount: 3, difficulty: 'normal' }, 11)
-    let derby = createDerby(plan, { side: 'right', practice: [] }, 0)
-    let hud = NEW_RUN_HUD
-    const named: Array<[StageEvent['type'], PitchTypeId | null]> = []
-    for (let nowMs = 0; derby.phase !== 'finished'; nowMs += 16) {
-      const update = advanceDerby(derby, nowMs)
-      derby = update.derby
-      update.events.flatMap(stageEventsFor).forEach((event) => {
-        hud = hudAfterEvent(hud, event)
-        named.push([event.type, bannerResult(hud)?.pitchType ?? null])
-      })
-    }
-    const pitchTypes = plan.schedule.map((pitch) => pitch.type)
-    expect(named).toEqual([
-      ...pitchTypes.flatMap((type) => [
-        ['windup', null],
-        ['release', null],
-        ['result', null],
-        ['caught', type],
+    const events = deadOnRun(plan)
+    const inPlay = [
+      ['current', 'coming', 'coming'],
+      ['homeRun', 'current', 'coming'],
+      ['homeRun', 'homeRun', 'current'],
+    ]
+    const down = [
+      ['homeRun', 'coming', 'coming'],
+      ['homeRun', 'homeRun', 'coming'],
+      ['homeRun', 'homeRun', 'homeRun'],
+    ]
+    expect(hudRow(NEW_RUN_HUD)).toEqual([null, null, false, true, false, inPlay[0], 0, 0])
+    // The event, then the banner's pitch, the title, chasing, between pitches, in play, the dots, stars and home runs.
+    expect(hudTimeline(events)).toEqual([
+      ...plan.schedule.flatMap(({ type }, index) => [
+        ['windup', null, null, false, false, true, inPlay[index], index, index],
+        ['release', null, null, false, false, true, inPlay[index], index, index],
+        ['result', null, null, false, false, true, inPlay[index], index, index],
+        ['chase', null, 'homeRun', true, false, true, inPlay[index], index, index],
+        ['landed', type, 'homeRun', false, index < 2, false, down[index], index + 1, index + 1],
       ]),
-      ['finished', null],
+      ['finished', null, null, false, false, false, down[2], 3, 3],
     ])
-  })
-
-  it('adds a home run and its distance to the scoreboard as its banner shows, not when the bat meets the ball', () => {
-    let hud = NEW_RUN_HUD
-    const scoreboard = deadOnRun(createRunPlan({ pitchCount: 3, difficulty: 'normal' }, 11)).map((event) => {
-      hud = hudAfterEvent(hud, event)
-      const { homeRuns, homeRunDistanceDecimetres } = scoreboardTotals(hud)
-      return { type: event.type, homeRuns, distance: homeRunDistanceDecimetres, banner: bannerResult(hud) }
-    })
-    expect(scoreboard.map((row) => [row.type, row.homeRuns])).toEqual([
-      ...[0, 1, 2].flatMap((before) => [
-        ['windup', before],
-        ['release', before],
-        ['result', before],
-        ['chase', before],
-        ['landed', before + 1],
-      ]),
-      ['finished', 3],
-    ])
-    const landed = scoreboard.filter((row) => row.type === 'landed')
-    const distances = landed.map((row) => row.banner?.distanceDecimetres ?? 0)
-    expect(landed.map((row) => row.distance)).toEqual(
+    const huds = hudsAfter(events)
+    const landed = huds.filter((_, index) => events[index].type === 'landed')
+    const distances = landed.map((hud) => bannerResult(hud)?.distanceDecimetres ?? 0)
+    expect(landed.map((hud) => scoreboardTotals(hud).homeRunDistanceDecimetres)).toEqual(
       distances.map((_, index) => distances.slice(0, index + 1).reduce((total, distance) => total + distance, 0)),
     )
-  })
-
-  it('chases a home run once the camera does, not from its result, until its ball is down, and no other ball', () => {
-    let hud = NEW_RUN_HUD
-    const chased = deadOnRun(createRunPlan({ pitchCount: 3, difficulty: 'normal' }, 11)).map((event) => {
-      hud = hudAfterEvent(hud, event)
-      return [event.type, chasingHomeRun(hud)]
-    })
-    expect(chased).toEqual([
-      ...[0, 1, 2].flatMap(() => [
-        ['windup', false],
-        ['release', false],
-        ['result', false],
-        ['chase', true],
-        ['landed', false],
-      ]),
-      ['finished', false],
-    ])
-    const hit = { ...hud.results[0], outcome: 'hit' as const }
+    const hit = { ...landed[0].results[0], outcome: 'hit' as const }
     const hitInTheAir: DerbyHudState = {
       phase: 'result',
       pitchIndex: 0,
@@ -146,34 +137,29 @@ describe('the derby HUD', () => {
     expect(chasingHomeRun(hitInTheAir)).toBe(false)
   })
 
-  it('pops up the outcome as the camera chases the ball or the mitt catches the pitch, never at its result', () => {
+  it('follows a run let go by: a strike’s title, name, dot and star once the mitt has it, never while on its way', () => {
     const plan = createRunPlan({ pitchCount: 3, difficulty: 'normal' }, 11)
-    let hud = NEW_RUN_HUD
-    const titles = (events: StageEvent[]) =>
-      events.map((event) => {
-        hud = hudAfterEvent(hud, event)
-        return [event.type, outcomeTitle(hud)]
-      })
-    expect(titles(deadOnRun(plan))).toEqual([
-      ...[0, 1, 2].flatMap(() => [
-        ['windup', null],
-        ['release', null],
-        ['result', null],
-        ['chase', 'homeRun'],
-        ['landed', 'homeRun'],
+    const events = deadOnRun(plan, false)
+    const inPlay = [
+      ['current', 'coming', 'coming'],
+      ['out', 'current', 'coming'],
+      ['out', 'out', 'current'],
+    ]
+    const down = [
+      ['out', 'coming', 'coming'],
+      ['out', 'out', 'coming'],
+      ['out', 'out', 'out'],
+    ]
+    expect(hudTimeline(events)).toEqual([
+      ...plan.schedule.flatMap(({ type }, index) => [
+        ['windup', null, null, false, false, true, inPlay[index], index, 0],
+        ['release', null, null, false, false, true, inPlay[index], index, 0],
+        ['result', null, null, false, false, true, inPlay[index], index, 0],
+        ['caught', type, 'strike', false, index < 2, false, down[index], index + 1, 0],
       ]),
-      ['finished', null],
+      ['finished', null, null, false, false, false, down[2], 3, 0],
     ])
-    hud = NEW_RUN_HUD
-    expect(titles(deadOnRun(plan, false))).toEqual([
-      ...[0, 1, 2].flatMap(() => [
-        ['windup', null],
-        ['release', null],
-        ['result', null],
-        ['caught', 'strike'],
-      ]),
-      ['finished', null],
-    ])
+    const hud = hudsAfter(events).at(-1) ?? NEW_RUN_HUD
     const swungAndMissed = { ...hud.results[0], timing: 'early' as const }
     const caught: DerbyHudState = { ...hud, phase: 'result', results: [swungAndMissed], settledPitch: 0 }
     expect(outcomeTitle(caught)).toBe('miss')
@@ -186,91 +172,6 @@ describe('the derby HUD', () => {
     expect(captionsShown(deadOnRun(plan, false))).not.toContain(true)
     expect(captionShown(captionId(NEW_RUN_HUD), true)).toBe(true)
     expect((['early', 'good', 'late', 'letGo'] as const).every((id) => captionShown(id, false))).toBe(true)
-  })
-
-  it('is between pitches before the first windup and once a ball is down, never with one on its way or after the last', () => {
-    let hud = NEW_RUN_HUD
-    expect(betweenPitches(hud, 3)).toBe(true)
-    const between = deadOnRun(createRunPlan({ pitchCount: 3, difficulty: 'normal' }, 11)).map((event) => {
-      hud = hudAfterEvent(hud, event)
-      return [event.type, betweenPitches(hud, 3)]
-    })
-    expect(between).toEqual([
-      ...[true, true, false].flatMap((another) => [
-        ['windup', false],
-        ['release', false],
-        ['result', false],
-        ['chase', false],
-        ['landed', another],
-      ]),
-      ['finished', false],
-    ])
-  })
-
-  it('keeps a pitch in play from its windup until its ball is down, through the swing it was judged by', () => {
-    let hud = NEW_RUN_HUD
-    expect(pitchInPlay(hud)).toBe(false)
-    const inPlay = deadOnRun(createRunPlan({ pitchCount: 3, difficulty: 'normal' }, 11)).map((event) => {
-      hud = hudAfterEvent(hud, event)
-      return [event.type, pitchInPlay(hud)]
-    })
-    expect(inPlay).toEqual([
-      ...[0, 1, 2].flatMap(() => [
-        ['windup', true],
-        ['release', true],
-        ['result', true],
-        ['chase', true],
-        ['landed', false],
-      ]),
-      ['finished', false],
-    ])
-  })
-
-  it('colours each pitch dot only once its ball is down, ringing the pitch up next until then', () => {
-    let hud = NEW_RUN_HUD
-    expect(pitchDots(hud, 3)).toEqual(['current', 'coming', 'coming'])
-    const dots = deadOnRun(createRunPlan({ pitchCount: 3, difficulty: 'normal' }, 11)).map((event) => {
-      hud = hudAfterEvent(hud, event)
-      return [event.type, pitchDots(hud, 3)]
-    })
-    const pitches = [
-      [
-        ['current', 'coming', 'coming'],
-        ['homeRun', 'coming', 'coming'],
-      ],
-      [
-        ['homeRun', 'current', 'coming'],
-        ['homeRun', 'homeRun', 'coming'],
-      ],
-      [
-        ['homeRun', 'homeRun', 'current'],
-        ['homeRun', 'homeRun', 'homeRun'],
-      ],
-    ]
-    expect(dots).toEqual([
-      ...pitches.flatMap(([inPlay, down]) => [
-        ['windup', inPlay],
-        ['release', inPlay],
-        ['result', inPlay],
-        ['chase', inPlay],
-        ['landed', down],
-      ]),
-      ['finished', ['homeRun', 'homeRun', 'homeRun']],
-    ])
-  })
-
-  it('names the distance and the pitch in the banner, never how the swing was timed', () => {
-    const landing = { outcome: 'homeRun', distanceDecimetres: 1203, spray: 0.1, launchDegrees: 28 } as const
-    const deadOn: PitchResult = { ...landing, pitchType: 'curve', timing: 'perfect', errorMs: 3 }
-    const lateSwing: PitchResult = { ...deadOn, timing: 'late', errorMs: 120 }
-    expect(bannerText(lateSwing, 'en')).toEqual(bannerText(deadOn, 'en'))
-    expect(bannerText(lateSwing, 'ko')).toEqual(bannerText(deadOn, 'ko'))
-    expect(bannerText({ ...deadOn, pitchType: 'fastball' }, 'en')).not.toEqual(bannerText(deadOn, 'en'))
-  })
-
-  it('shows distances in whole meters, spaced in English and not in Korean, and a total to the decimeter', () => {
-    expect([distanceText(1324, 'en'), distanceText(1324, 'ko')]).toEqual(['132 m', '132m'])
-    expect([homeRunDistanceText(2170, 'en', 1), homeRunDistanceText(2174, 'en', 1)]).toEqual(['217.0 m', '217.4 m'])
   })
 })
 

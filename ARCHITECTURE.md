@@ -155,7 +155,7 @@ extra size. The stadium's lawn and hedge take the visitor's season like the town
 light the time of day, and its dugouts and foul poles the ballpark palette; none of this reaches the score. The garden
 bowl (`bowlLayout.ts`, `GardenBowl.tsx`) and its landmarks (`landmarkLayout.ts`, `GardenLandmarks.tsx`) follow the same
 split: buildings in the palette's roles, nature in the season (town trees and flowers, with their snow). Nothing tall
-stands where a home run lands or the landing camera stands (`bowlLayout.test.ts`), and the treehouse scoreboard shows a
+stands where a home run lands or the landing camera stands, and the treehouse scoreboard shows a
 pitch only once its ball is down, as the HUD does (`scoreboard.ts`). The crowd (`crowdLayout.ts`, `Crowd.tsx`) is one
 instanced mesh whose vertex shader turns each fan toward the ball and makes it hop and wave as a result asks, so it costs
 one draw call and no per-fan work on the main thread; fans take approved guestbook looks, padded with random ones and
@@ -167,7 +167,7 @@ fielder nearest its landing runs for it, always to fair ground inside the hedge 
 show where the derby already sent it. The garden's breeze (`breezeLayout.ts`, `GardenBreeze.tsx`) drifts the season's
 petals or leaves round the park beyond the infield and flies butterflies over the flower beds by day and fireflies at
 night, and when a home run's ball clears the hedge it bursts petals over the hedge and from the far light towers, from
-one bounded pool; nothing of it comes near the pitch or between the camera and the ball (`breezeLayout.test.ts`), a
+one bounded pool; nothing of it comes near the pitch or between the camera and the ball, a
 reduced tier draws fewer, and reduced motion leaves it out (the town's own fireflies, which gather round the camera,
 stay out of the stadium). The ballpark's lamps follow the town's (`useLampsOn`): the towers' lamps, the string lights,
 and the windows glow and the conservatory lights up, all emissive with painted halos, and one warm floodlight
@@ -362,15 +362,10 @@ each camera frame, what the swing tracker and the stance hold read of it (the up
 what the object detector handed the tracker, the motion in the swing's band, the picture's size, the batting side, and
 the step that waited), with each pitch's release and result and each tap on the camera picture on the frames' clock;
 never a picture. The file stays on this computer unless the visitor hands it over; until the tab closes, a dev build
-also keeps that minute in memory after the camera turns off, so L can still save it. `devReplay.ts` feeds such a file
-back through the swing tracker and the stance hold as their rules are now, taps included, so a real session tunes
-`SWING_RULES`, `STANCE_HOLD_RULES`, and `HELD_OBJECT_RULES` (the motion stays as the page measured it, in the band it
-used then). A dev build's detector reports detections down to 0.2 rather than `candidateScore`, which play still
-filters by, so a replay can lower that bar to 0.2 but can add no label; the file's three decimals can tip a frame near
-a rule's limit the other way, and a file that starts mid-session replays from a fresh tracker and stance hold, so its
-first seconds differ from the notes. The drafts' design leaves out both the diagnostics export and its log replay; dev
-builds keep them, since the rules need a real webcam's tuning. A production build leaves the panel and the saver out;
-nothing in the app imports the replay. `ui/cameraPanelLayout.ts`
+also keeps that minute in memory after the camera turns off, so L can still save it. A dev build's detector reports
+detections down to 0.2 rather than `candidateScore`, which play still filters by, so the panel and the file also show
+what a lower bar would take. The drafts' design leaves out the diagnostics export; dev builds keep it, since the rules
+need a real webcam's tuning. A production build leaves the panel and the saver out. `ui/cameraPanelLayout.ts`
 places the camera panel: the mirrored camera is the stage while it sets up, a column under the scoreboard on the side
 opposite the batter from practice on (medium, 29% of the width, by default; V or the camera button cycles medium, large,
 hidden, remembered in `localStorage`), a corner chip while the camera chases a home run, and beside the result screen

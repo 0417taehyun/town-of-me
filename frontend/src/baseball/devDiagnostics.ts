@@ -66,11 +66,10 @@ import { DEV_DETECTOR_SCORE, type VisionTask } from './vision/tasksVision'
 // each pitch's release and result, and each tap on the camera picture, leave one too. D shows them in a panel
 // (ui/DiagnosticsPanel.tsx) and L saves the last minute of notes as a JSON file on this device, for tuning. A frame's
 // note keeps what the swing tracker and the stance hold read of it (the upper body's joint positions, what the object
-// detector handed the tracker, the motion in the swing's band, the batting side, the step that waited), so a saved
-// session can be replayed through changed rules (devReplay.ts); never a picture, and nothing is sent anywhere: the file
-// stays on this computer unless the visitor hands it over. cameraTracking.ts and BaseballApp.tsx reach this module only
-// behind `import.meta.env.DEV`, so a production build leaves it out. Times are performance.now() ms; lengths are
-// shoulder widths (SW), as in vision/swingTracker.ts.
+// detector handed the tracker, the motion in the swing's band, the batting side, the step that waited), never a
+// picture, and nothing is sent anywhere: the file stays on this computer unless the visitor hands it over.
+// cameraTracking.ts and BaseballApp.tsx reach this module only behind `import.meta.env.DEV`, so a production build
+// leaves it out. Times are performance.now() ms; lengths are shoulder widths (SW), as in vision/swingTracker.ts.
 
 export const DIAGNOSTICS_WINDOWS = {
   /** The camera's rates and medians are over this long (ms). */
@@ -598,10 +597,12 @@ export function gripUnseen({ view }: SwingTracker) {
 }
 
 /**
- * Over the notes handled in the last `windowMs` before `now`: the camera's frames per second, the pose task's median
- * time, the median wait from capture to handling, and the object detector's median time and runs per second.
+ * Over the notes handled in the last `DIAGNOSTICS_WINDOWS.summaryMs` before `now`: the camera's frames per second, the
+ * pose task's median time, the median wait from capture to handling, and the object detector's median time and runs
+ * per second.
  */
-export function cameraSummary(frames: readonly FrameNote[], now: number, windowMs = DIAGNOSTICS_WINDOWS.summaryMs) {
+export function cameraSummary(frames: readonly FrameNote[], now: number) {
+  const windowMs = DIAGNOSTICS_WINDOWS.summaryMs
   const recent = frames.filter((note) => now - note.handledAt <= windowMs)
   const objectTimes = recent.flatMap((note) => (note.objectsMs === null ? [] : [note.objectsMs]))
   const spanMs = recent.length > 1 ? recent[recent.length - 1].capturedAt - recent[0].capturedAt : 0
@@ -817,9 +818,9 @@ export function diagnosticsLog(diagnostics: Diagnostics, savedAt: Date) {
       'the picture; [] when a run was due with no detector at hand, null when none was due; only held-object labels ' +
       'scored at least rules.detectorScore), the picture size in pixels, the camera (one more each time it turned ' +
       "off), the batting side (side: -1 loads on the picture's left, a right-handed batter), and the step the stance " +
-      'hold followed (wait), so frontend/src/baseball/devReplay.ts can replay it through changed rules. No image or ' +
-      'video frame; this file stays on the computer that saved it, shared only if its visitor hands it over. Times ' +
-      'are performance.now() ms (capturedAt: when the camera took the frame; handledAt: when the page handled it or ' +
+      'hold followed (wait). No image or video frame; this file stays on the computer that saved it, shared only if ' +
+      'its visitor hands it over. Times are performance.now() ms (capturedAt: when the camera took the frame; ' +
+      'handledAt: when the page handled it or ' +
       "heard the event; a release's contactAt: when its ball reaches the contact point). " +
       'Lengths are shoulder widths (SW): grip depth behind the body midline toward the batting side, grip drop below ' +
       "the shoulders. A sweep's start is the swing-start signal the batter's swing follows (signalled: the tracker " +

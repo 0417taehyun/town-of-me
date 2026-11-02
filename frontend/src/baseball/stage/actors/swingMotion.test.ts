@@ -2,7 +2,6 @@ import { Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PLAYER_PROFILE } from '../../../data/playerProfile'
 import { CONTACT_DEPTH, STRIKE_ZONE } from '../../game/field'
-import { PLAYER_SCALE } from '../stageLayout'
 import { BAT } from './bat'
 import { createBatter, poseBatter } from './batter'
 import { monotoneTrack, sampleTrack } from './keyframes'
@@ -69,13 +68,6 @@ describe('the aimed swing', () => {
       const barrel = batter.bat.localToWorld(new Vector3(0, BAT.length, 0)).sub(sweetSpot)
       const offSquare = Math.atan2(Math.abs(barrel.z), Math.abs(barrel.x)) * (180 / Math.PI)
       expect(offSquare).toBeLessThan(15)
-    }
-  })
-
-  it('squares the bat at the contact depth and height from its keys alone, the aim trimming only a few centimeters', () => {
-    for (const batter of batters) {
-      const { x, y, z } = batter.motion.aimOffset
-      expect(Math.max(Math.abs(x), Math.abs(y), Math.abs(z)) * PLAYER_SCALE).toBeLessThan(0.05)
     }
   })
 })

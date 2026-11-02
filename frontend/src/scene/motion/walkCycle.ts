@@ -360,11 +360,6 @@ export function setPoseOnGround(pose: CharacterPose) {
   return pose
 }
 
-/** The lowest sole of either foot after `setPoseOnGround`, in the character's frame (0 = on the ground). */
-export function getLowestSole(pose: CharacterPose) {
-  return getLowestSoleInBody(pose) + pose.bodyY
-}
-
 export function sampleStance(phase: number, run: number) {
   const pose = getCyclePose(phase, run)
   const left = getSoleContact(pose, -1)

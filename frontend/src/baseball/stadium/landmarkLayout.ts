@@ -545,8 +545,13 @@ export function standRailSpots() {
     })
 }
 
-/** Lights sagging between consecutive anchors: the wire's segments (pairs of points) and the bulbs along it. */
-export function festoons(strands: readonly (readonly Vector3[])[], { sag = 1.1, spacing = 1.1 } = {}) {
+/**
+ * Lights sagging between consecutive anchors, 1.1 m mid-span, with a bulb about every 1.1 m: the wire's segments (pairs
+ * of points) and the bulbs along it.
+ */
+export function festoons(strands: readonly (readonly Vector3[])[]) {
+  const sag = 1.1
+  const spacing = 1.1
   const spans = strands.flatMap((anchors) => anchors.slice(1).map((to, index) => [anchors[index], to] as const))
   const points = spans.map(([from, to]) => {
     const count = Math.max(2, Math.round(from.distanceTo(to) / spacing))

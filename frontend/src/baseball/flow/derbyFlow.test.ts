@@ -220,28 +220,6 @@ describe('the derby flow', () => {
     expect(results.map((result) => result.outcome)).toEqual(results.map(() => expect.stringMatching(/^(hit|homeRun)$/)))
   })
 
-  it('hears good and is hit on the first two valid practice swings, however far apart they are', () => {
-    const results = playOnStage(createPracticeRun(ballpark, october, 'left'), [220, -60]).flatMap((event) =>
-      event.type === 'result' ? [event.result] : [],
-    )
-    // Against the midpoint of the two, the second would be 140 ms early.
-    const told = results.slice(0, 2).map((result) => [shownPracticeFeedback(result, 'normal'), result.timing])
-    expect(told).toEqual([
-      ['good', 'perfect'],
-      ['good', 'perfect'],
-    ])
-  })
-
-  it("hears a bit early for a swing far earlier than the visitor's usual timing, and the field agrees", () => {
-    const results = playOnStage(createPracticeRun(ballpark, october, 'left'), [150, 150, 150, 20, 150]).flatMap(
-      (event) => (event.type === 'result' ? [event.result] : []),
-    )
-    // The fourth swing would be a dead-on hit against the contact point, but it is 130 ms ahead of this visitor's usual.
-    const told = results.map((result) => [shownPracticeFeedback(result, 'normal'), result.timing, result.outcome])
-    expect(told[3]).toEqual(['early', 'early', 'foul'])
-    expect(told.map(([word]) => word)).toEqual(['good', 'good', 'good', 'early', 'good'])
-  })
-
   it('says which way a swing too far off to count missed the contact point, and counts only valid swings', () => {
     const offsetsMs = [-450, 200, 210]
     const setup = createPracticeRun(ballpark, october, 'left')

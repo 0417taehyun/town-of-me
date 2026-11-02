@@ -103,10 +103,6 @@ export function getBirdShape(species: BirdVariant) {
   return birdShapes[species]
 }
 
-export function getAtmospherePopulation(period: DayPeriod) {
-  return atmospherePopulations[period]
-}
-
 /** How many of a town's birds and clouds are out at this time of day, in the seed town's proportions. */
 export function getActiveAtmosphereCounts(period: DayPeriod, birds: number, clouds: number) {
   const population = atmospherePopulations[period]
