@@ -10,6 +10,8 @@ import {
   bannerText,
   betweenPitches,
   cameraPanelWords,
+  captionId,
+  captionShown,
   chasingHomeRun,
   type DerbyHudState,
   distanceText,
@@ -35,6 +37,15 @@ function stageEventsFor(event: DerbyEvent): StageEvent[] {
   const { pitchIndex } = event
   if (event.result.outcome === 'miss') return [event, { type: 'caught', pitchIndex }]
   return [event, { type: 'chase', pitchIndex }, { type: 'landed', pitchIndex }]
+}
+
+/** Whether the caption showed over the play after each of `events`, with the visitor in view. */
+function captionsShown(events: StageEvent[]) {
+  let hud = NEW_RUN_HUD
+  return events.map((event) => {
+    hud = hudAfterEvent(hud, event)
+    return captionShown(captionId(hud), false)
+  })
 }
 
 /** A swing with the bat level with the ball the moment the pitch on its way reaches the contact point. */
@@ -167,6 +178,14 @@ describe('the derby HUD', () => {
     const caught: DerbyHudState = { ...hud, phase: 'result', results: [swungAndMissed], settledPitch: 0 }
     expect(outcomeTitle(caught)).toBe('miss')
     expect(outcomeTitle({ ...caught, settledPitch: -1 })).toBe(null)
+  })
+
+  it('shows the caption over the play for a pause or a practice word, never over a pitch nor with an outcome title', () => {
+    const plan = createRunPlan({ pitchCount: 3, difficulty: 'normal' }, 11)
+    expect(captionsShown(deadOnRun(plan))).not.toContain(true)
+    expect(captionsShown(deadOnRun(plan, false))).not.toContain(true)
+    expect(captionShown(captionId(NEW_RUN_HUD), true)).toBe(true)
+    expect((['early', 'good', 'late', 'letGo'] as const).every((id) => captionShown(id, false))).toBe(true)
   })
 
   it('is between pitches before the first windup and once a ball is down, never with one on its way or after the last', () => {

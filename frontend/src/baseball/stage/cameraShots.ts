@@ -19,8 +19,12 @@ export type ShotKind = 'batting' | 'chase' | 'wide'
 /** Where the camera stands and looks, and how fast (per second) it eases there from where it was. */
 export type CameraShot = { kind: ShotKind; position: Vec3; look: Vec3; fov: number; rate: number; lookRate: number }
 
-/** The share of the screen's height the HUD keeps at the top and the bottom; the batting shot plays between them. */
-export const HUD_RESERVE = { top: 0.15, bottom: 0.08 }
+/**
+ * Where the HUD keeps clear of the batting shot, as shares of the screen's height: the bands at the top and the bottom,
+ * which the shot plays between, and `centre` on either side of the pitch line (the band's centre), which the HUD's top
+ * corners never cross though they hang below the top band, so the pitcher and his windup stay in view.
+ */
+export const HUD_RESERVE = { top: 0.15, bottom: 0.08, centre: 0.06 }
 /** The share of the screen's width kept clear on either side of the play. */
 export const SIDE_RESERVE = 0.05
 export const BATTING_EYE: Vec3 = { x: 0, y: 3.5, z: 4.8 }

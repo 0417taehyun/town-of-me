@@ -10,9 +10,6 @@ what changed.
 - Let route handles (residents' and the pet's) move with the keyboard, not only by dragging.
 - Add redo, multi-select, grid snapping, and a two-finger twist to rotate the top view if they prove necessary.
 - Page the guestbook beyond the newest 100 notes if it fills up.
-- Lay out the `/baseball` HUD for 4:3 and 16:10 screens: its centred English caption covers the home-run count once
-  the summed distance reaches four digits (by about 60 px at 1024×768 and 10 px at 1440×900), and by 9-36 px on 4:3
-  even with three.
 - Export the town character's measurements (torso, head, hips, legs, shoes, collar) from `scene/characters`, so
   `ProceduralCharacter.tsx` and the `/baseball` ballplayer rig (`stage/actors/ballplayerRig.ts`), which repeats them
   today, share one source.

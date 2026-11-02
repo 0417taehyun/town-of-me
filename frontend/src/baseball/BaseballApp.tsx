@@ -425,14 +425,16 @@ export function DerbyScreen({
   const month = rankingMonth(new Date())
   const rules = effectiveBallparkRules(ballpark, month)
   const upcoming = upcomingBallparkRules(ballpark, month)
-  // The HUD's caption and banner centre in the band the camera panel leaves free, as the play does, and size to it.
+  // The HUD's title, caption and banner centre in the band the camera panel leaves free, as the play does, and size to
+  // it; its scoreboard sizes to the room over the panel's side, and its corners and the links follow the panel's side.
   const layoutStyle = {
     '--play-centre': `${panel.band.centre}px`,
     '--play-width': `${panel.band.width}px`,
+    '--scoreboard-room': `${panel.scoreboardRoom}px`,
     '--camera-panel-edge': `${PANEL_EDGE}px`,
   } as CSSProperties
   return (
-    <main className="derby-screen" style={layoutStyle}>
+    <main className="derby-screen" data-panel-side={panel.side} style={layoutStyle}>
       <BaseballStage
         language={language}
         label={copy.baseball.stageLabel}

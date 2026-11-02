@@ -1,6 +1,6 @@
 import type { DerbyStep } from '../flow/derbyFlow'
 import type { BattingSide } from '../game/field'
-import type { FreeBand } from '../stage/cameraShots'
+import { type FreeBand, HUD_RESERVE } from '../stage/cameraShots'
 
 // Where the camera panel goes on each screen of a camera run, and how wide it is. While the camera sets up, the
 // mirrored camera is the stage. Through practice and the run the panel hangs in a column under the scoreboard on the
@@ -33,10 +33,10 @@ export const MIN_PANEL_WIDTH = 180
 export const PANEL_EDGE = 16
 
 /**
- * The tallest the panel's 4:3 picture may be, as a share of the screen's height, so on a very wide screen the panel,
- * with its chip above the picture and its line under it, still fits under the HUD and clear of the links below.
+ * The tallest the panel's 4:3 picture may be, as a share of the screen's height, so on a wide screen the panel, with its
+ * chip above the picture and three lines under it, still fits between the scoreboard over it and the screen's bottom.
  */
-export const PANEL_MAX_HEIGHT_SHARE = 0.45
+export const PANEL_MAX_HEIGHT_SHARE = 0.41
 
 export const PANEL_ASPECT = 4 / 3
 
@@ -58,7 +58,14 @@ export type CameraPanelState = {
   size: CameraPanelSize
 }
 
-export type CameraPanelLayout = { placement: CameraPanelPlacement; side: PanelSide; width: number; band: FreeBand }
+/** Where the panel goes and how wide it is, the band it leaves the play, and the scoreboard's room (scoreboardRoom). */
+export type CameraPanelLayout = {
+  placement: CameraPanelPlacement
+  side: PanelSide
+  width: number
+  band: FreeBand
+  scoreboardRoom: number
+}
 
 /**
  * The camera's screen for the derby's step: setting up until practice starts, then the play through practice and the
@@ -115,7 +122,20 @@ export function cameraPanelLayout(
   const width = placement === 'side' ? sidePanelWidth(shownPanelSize(state), viewport) : 0
   const shown = placement === 'side' && width === 0 ? 'hidden' : placement
   const panelSpan = width > 0 ? PANEL_EDGE + width : 0
-  return { placement: shown, side, width, band: freeBand(viewport.width, panelSpan, side) }
+  const band = freeBand(viewport.width, panelSpan, side)
+  return { placement: shown, side, width, band, scoreboardRoom: scoreboardRoom(state, viewport) }
+}
+
+/**
+ * The room (px) along the top of the screen for the scoreboard over the panel's side: from that edge to the batting
+ * shot's pitch line, which stands in the centre of the play's band, less HUD_RESERVE.centre. It is measured beside the
+ * side panel at the size shown, even while the panel is a chip during a chase, so the scores keep their size through a
+ * home run's flight.
+ */
+export function scoreboardRoom(state: CameraPanelState, viewport: Viewport) {
+  const width = sidePanelWidth(shownPanelSize(state), viewport)
+  const panelSpan = width > 0 ? PANEL_EDGE + width : 0
+  return (viewport.width + panelSpan) / 2 - PANEL_EDGE - HUD_RESERVE.centre * viewport.height
 }
 
 export function nextPanelSize(size: CameraPanelSize) {

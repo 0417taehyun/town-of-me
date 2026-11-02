@@ -377,11 +377,16 @@ hidden, remembered in `localStorage`), a corner chip while the camera chases a h
 too, where the design doc hides it, as that screen waits for the visitor's stance (its card, like practice's last one,
 centres in the band the panel leaves, and the screen can turn the camera off). A panel the visitor hid comes back at
 medium while the camera looks for them or a step waits for their stance, so they see the stance they take, and it hides
-below a readable width. The stage centres the play and the HUD its caption and banner in the band the panel leaves free
-(`centreInBand` in `stage/cameraShots.ts`). No key swings and there is no swing button (keys only press the focused
-button, leave with Escape, or resize the camera panel with V, and in a dev build show the diagnostics with D and save
-them with L): the swings are the camera's, which the stage takes before advancing the derby in the same frame, so a
-swing seen a little late is still judged at the moment its frame was taken.
+below a readable width. The stage centres the play and the HUD its title, caption, and banner in the band the panel
+leaves free (`centreInBand` in `stage/cameraShots.ts`). The HUD's pitch dots and scoreboard hang in the top corners
+beside the pitch line, never within `HUD_RESERVE.centre` of it: the dots on the batter's side, and the scoreboard over
+the panel, as large as the room to the line allows (`scoreboardRoom`); the page's links stay along the bottom under the
+batter, so the panel's column runs down to the screen's bottom. The run's caption shows over the play only while it is
+paused for a visitor out of view, since the title shows each outcome; a screen reader hears every caption. No key
+swings and there is no swing button (keys only press the focused button, leave with Escape, or resize the camera panel
+with V, and in a dev build show the diagnostics with D and save them with L): the swings are the camera's, which the
+stage takes before advancing the derby in the same frame, so a swing seen a little late is still judged at the moment
+its frame was taken.
 
 ## Backend (`backend/src`)
 

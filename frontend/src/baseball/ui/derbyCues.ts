@@ -142,6 +142,19 @@ export function outcomeTitle(hud: DerbyHudState): OutcomeTitleId | null {
 /** Practice's caption: before it, a pitch on its way, then the swing's word, or a nudge after a pitch let go by. */
 export type PracticeCaptionId = 'start' | 'coming' | 'letGo' | PracticeFeedback
 
+/** The captions that show over the play: practice's word for a swing, or its nudge after a pitch let go by. */
+export const SHOWN_CAPTIONS: ReadonlySet<CaptionId | PracticeCaptionId> = new Set(['letGo', 'early', 'good', 'late'])
+
+/**
+ * Whether the caption shows over the play rather than only in a screen reader's ear: while practice or the run is
+ * `paused` for a visitor out of view, and for practice's word after each pitch (SHOWN_CAPTIONS). Not while a pitch
+ * comes, so it never covers the pitcher or the pitch, nor for a run's outcome, which the big title shows (outcomeTitle),
+ * nor before the first pitch, which the held stance's big word has just started.
+ */
+export function captionShown(caption: CaptionId | PracticeCaptionId, paused: boolean) {
+  return paused || SHOWN_CAPTIONS.has(caption)
+}
+
 export function practiceCaptionId(hud: DerbyHudState, feedback: PracticeFeedback | null): PracticeCaptionId {
   if (feedback) return feedback
   if (hud.phase === null) return 'start'
@@ -291,6 +304,38 @@ export function stanceTone(caption: TrackerReason | null): CameraTone {
 export function textEms(text: string) {
   const wide = text.match(/[\u1100-\u11ff\u3000-\u9fff\uac00-\ud7af\uff00-\uffef]/gu)?.length ?? 0
   return wide + (text.length - wide) * 0.58
+}
+
+/** The scoreboard's labels' size as a share of its figures' (baseball.css .derby-scoreboard: 6vh to 14vh). */
+export const SCOREBOARD_LABEL_SHARE = 6 / 14
+
+/** A scoreboard box's padding on both sides and its gap to the next box, in its figures' ems (baseball.css). */
+export const SCOREBOARD_BOX_EMS = 0.45
+
+/** A figure on the scoreboard with the label over it. */
+export type ScoreboardStat = { label: string; figure: string }
+
+/**
+ * About how many ems of its figures the scoreboard sets wide, so baseball.css can set them as large as the room beside
+ * the pitch line holds it.
+ */
+export function scoreboardEms(stats: readonly ScoreboardStat[]) {
+  return stats.reduce((sum, stat) => sum + scoreboardBoxEms(stat), 0)
+}
+
+/** A scoreboard box's ems: as wide as its figure or its smaller label, whichever is wider, and its padding. */
+export function scoreboardBoxEms({ label, figure }: ScoreboardStat) {
+  return Math.max(textEms(label) * SCOREBOARD_LABEL_SHARE, figureEms(figure)) + SCOREBOARD_BOX_EMS
+}
+
+/**
+ * About how many ems wide a scoreboard figure sets in its heavy weight, a little over rather than under: a digit about
+ * 0.7, a separator or space about 0.36, and anything else (the meter sign, the dash before a distance) up to one.
+ */
+export function figureEms(figure: string) {
+  const digits = figure.match(/\d/gu)?.length ?? 0
+  const separators = figure.match(/[\s,.]/gu)?.length ?? 0
+  return digits * 0.7 + separators * 0.36 + (figure.length - digits - separators)
 }
 
 /** How long (ms) the big word stays up once the held stance has filled the gauge. */

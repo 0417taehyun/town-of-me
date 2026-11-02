@@ -166,6 +166,12 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   justify-content: flex-start;
   padding: 0 3vw 2vh;
 }
+/* The links stay under the batter, so the camera panel's column on the other side runs down to the screen's bottom. */
+.derby-screen[data-panel-side='left'] .derby-links {
+  right: 0;
+  left: auto;
+  justify-content: flex-end;
+}
 /* An admin's try of next month's rules, kept in sight on every screen of the run. */
 .derby-preview-badge {
   display: inline-flex;
@@ -465,7 +471,7 @@ html[lang='ko'] :is(.baseball-app, .derby-screen) :is(h1, h2) {
   --camera-chip-width: 160px;
   --camera-panel-gap: 1vh;
   position: absolute;
-  top: 15vh;
+  top: 23.5vh;
   display: grid;
   gap: var(--camera-panel-gap);
   width: var(--camera-panel-width);
@@ -705,33 +711,19 @@ html[lang='ko'] .derby-screen .derby-result {
 }
 
 /*
- * The HUD during a run, read from a step back: sizes follow the screen's height, so a laptop at 2 m sees the same
- * angle whatever its size (labels 3vh, figures 7vh, captions up to 8vh, a result's distance 16vh). The top 15% and
- * bottom 8% are HUD_RESERVE in stage/cameraShots.ts, the bands the batting shot leaves free. These sizes are below the
- * design's 2 m targets (text 6vh, cues 9vh, key numbers 14-18vh), which those bands cannot hold without shrinking the
- * play; the UI/UX pass revisits the layout. The result banner sits over the play, so it shows only once the ball is
- * down (derbyCues.ts bannerResult).
+ * The HUD during a run, read from where the visitor bats: its sizes follow the screen's height, so a laptop at 2 m
+ * reads the same whatever its size, at the design's targets (text at least 6vh, cues 9vh, key numbers 14vh). The
+ * batting shot plays between HUD_RESERVE's top and bottom bands (stage/cameraShots.ts), and the HUD's top corners hang
+ * lower only beside the pitch line, never within HUD_RESERVE.centre of it: the pitch dots on the batter's side, the
+ * scoreboard over the camera panel. Over the play shows only what comes once no pitch is on its way: an outcome's
+ * title, the caption while paused or after a practice pitch, and a result's banner once its ball is down.
  */
 .derby-hud {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
-.derby-scoreboard {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 15vh;
-  padding: 0 3vw;
-}
-.derby-stat-group {
-  display: flex;
-  gap: 1.5vw;
-}
+.derby-pitches,
 .derby-stat,
 .derby-caption,
 .derby-banner {
@@ -740,40 +732,49 @@ html[lang='ko'] .derby-screen .derby-result {
   background: var(--surface);
   box-shadow: var(--shadow);
 }
-.derby-stat {
+/* The pitch dots, or practice's count, under their label in the top corner on the batter's side. */
+.derby-pitches {
+  position: absolute;
+  top: 1.5vh;
   display: grid;
   justify-items: center;
-  min-width: 14vh;
-  padding: 1vh 2vh;
+  gap: 0.8vh;
+  padding: 1vh 2vh 1.5vh;
   line-height: 1;
 }
-.derby-stat span {
+.derby-screen[data-panel-side='right'] .derby-pitches {
+  left: var(--camera-panel-edge);
+}
+.derby-screen[data-panel-side='left'] .derby-pitches {
+  right: var(--camera-panel-edge);
+}
+.derby-pitches > span {
   color: var(--muted);
-  font-size: clamp(14px, 3vh, 40px);
+  font-size: max(16px, 6vh);
   font-weight: 700;
 }
-.derby-stat strong {
-  font-size: clamp(28px, 7vh, 96px);
+.derby-pitches > strong {
+  font-size: max(24px, 9vh);
   font-weight: 800;
+  line-height: 0.85;
   white-space: nowrap;
 }
 /*
  * A dot per pitch in place of a count: coral for a home run as its banner, leaf for a hit, grey for a foul, dashed for
- * a strike or a miss, a ring round the one up next. Five to a row, so ten pitches take two rows in the same box.
+ * a strike or a miss, a ring round the one up next. Five to a row, so ten pitches take two rows in the same corner.
  */
-.derby-stat .derby-pitch-dots {
+.derby-pitches .derby-pitch-dots {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 1vh;
-  max-width: calc(5 * 4.4vh + 4 * 1vh);
-  margin-top: 1vh;
+  gap: 0.8vh;
+  max-width: calc(5 * 5vh + 4 * 0.8vh);
 }
 .derby-pitch-dots i {
-  width: 4.4vh;
-  height: 4.4vh;
+  width: 5vh;
+  height: 5vh;
   box-sizing: border-box;
-  border: 0.5vh solid var(--border);
+  border: 0.6vh solid var(--border);
   border-radius: 50%;
 }
 .derby-pitch-dots i[data-dot='current'] {
@@ -795,24 +796,68 @@ html[lang='ko'] .derby-screen .derby-result {
   border-style: dashed;
   border-color: var(--muted);
 }
-.derby-caption {
+/*
+ * The scoreboard over the camera panel: the home runs and their summed distance side by side, each figure 14vh under
+ * its 6vh label, unless the room from the screen's edge to the pitch line (--scoreboard-room, cameraPanelLayout.ts)
+ * holds less of their length (--scoreboard-ems, derbyCues.ts scoreboardEms), as without the panel on a 4:3 screen.
+ * Its sizes are ems of the figures, so it scales as one; the panel under it starts at 23.5vh.
+ */
+.derby-scoreboard {
   position: absolute;
-  top: 2vh;
-  left: var(--play-centre, 50%);
-  padding: 1.2vh 3vh;
-  transform: translateX(-50%);
-  /*
-   * It sizes to the band the camera panel leaves the play (--play-width), so a narrower band, or a 4:3 screen, shrinks
-   * it toward the gap between the scoreboard's ends; it can still overlap (TODO.md).
-   */
-  font-size: clamp(28px, min(8vh, var(--play-width, 100vw) * 0.042), 120px);
-  font-weight: 800;
+  top: 1.5vh;
+  display: flex;
+  gap: 0.15em;
+  font-size: max(16px, min(14vh, var(--scoreboard-room, 50vw) / var(--scoreboard-ems, 6)));
+}
+.derby-screen[data-panel-side='right'] .derby-scoreboard {
+  right: var(--camera-panel-edge);
+}
+.derby-screen[data-panel-side='left'] .derby-scoreboard {
+  left: var(--camera-panel-edge);
+}
+.derby-stat {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 0.03em;
+  padding: 0.07em 0.15em 0.08em;
+  border-radius: 0.17em;
+  line-height: 0.85;
+}
+.derby-stat span {
+  color: var(--muted);
+  font-size: calc(1em * 6 / 14);
+  font-weight: 700;
   line-height: 1;
   white-space: nowrap;
-  /* The band changes under a shown caption as a home run's chase starts and ends, so it glides with the panel. */
-  transition:
-    left var(--ease),
-    font-size var(--ease);
+}
+.derby-stat strong {
+  font-weight: 800;
+  white-space: nowrap;
+}
+/*
+ * The caption over the play when it shows (derbyCues.ts captionShown), where an outcome's title pops up, which it never
+ * shows with: at 9vh, or as large as the play's band holds its length (--caption-ems). Otherwise a screen reader's only.
+ */
+.derby-caption {
+  position: absolute;
+  top: 31%;
+  left: var(--play-centre, 50%);
+  padding: 1.2vh 4vh;
+  font-size: max(16px, min(9vh, (var(--play-width, 100vw) * 0.92 - 8vh) / var(--caption-ems, 6)));
+  font-weight: 800;
+  line-height: 1.1;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+  /* The band changes under a shown caption as the camera panel resizes, so it glides with the panel. */
+  transition: left var(--ease);
+}
+.derby-caption:not([data-shown]) {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 .derby-banner {
   position: absolute;
@@ -842,12 +887,13 @@ html[lang='ko'] .derby-screen .derby-result {
 
 /*
  * The outcome's big word, popping up over the play as it is seen and fading on its own (derbyCues.ts outcomeTitle):
- * gold for a home run, green for a hit. It sits under the top band, above where the chase keeps the ball, as large as
- * the play band allows for its length (--title-ems).
+ * gold for a home run, green for a hit. It sits under the scoreboard, above where the chase keeps the ball, as large as
+ * the play band allows for its length (--title-ems). The caption saying the run is paused stands in its place, so it
+ * goes unseen meanwhile, still fading on its time.
  */
 .derby-outcome-title {
   position: absolute;
-  top: 24%;
+  top: 31%;
   left: var(--play-centre, 50%);
   margin: 0;
   color: var(--cream);
@@ -861,6 +907,9 @@ html[lang='ko'] .derby-screen .derby-result {
   transform: translate(-50%, -50%);
   animation: derby-outcome-title-in 1600ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
   transition: left var(--ease);
+}
+.derby-outcome-title[data-paused] {
+  visibility: hidden;
 }
 .derby-outcome-title[data-outcome='homeRun'] {
   color: #f4c542;

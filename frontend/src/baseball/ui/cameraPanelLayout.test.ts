@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { HUD_RESERVE } from '../stage/cameraShots'
 import {
   type CameraPanelState,
   cameraPanelLayout,
@@ -70,6 +71,17 @@ describe('the camera panel layout', () => {
     const fullWidth = { centre: LAPTOP.width / 2, width: LAPTOP.width }
     expect(cameraPanelLayout({ ...PLAYING, chasing: true }, LAPTOP, 'right').band).toEqual(fullWidth)
     expect(cameraPanelLayout({ ...PLAYING, size: 'off' }, LAPTOP, 'right').band).toEqual(fullWidth)
+  })
+
+  it('keeps the scoreboard over the panel clear of the pitch line, at one size through a home run’s chase', () => {
+    const clear = HUD_RESERVE.centre * LAPTOP.height
+    const right = cameraPanelLayout(PLAYING, LAPTOP, 'right')
+    expect(LAPTOP.width - PANEL_EDGE - right.scoreboardRoom).toBeCloseTo(right.band.centre + clear)
+    const left = cameraPanelLayout(PLAYING, LAPTOP, 'left')
+    expect(PANEL_EDGE + left.scoreboardRoom).toBeCloseTo(left.band.centre - clear)
+    const off = cameraPanelLayout({ ...PLAYING, size: 'off' }, LAPTOP, 'right')
+    expect(LAPTOP.width - PANEL_EDGE - off.scoreboardRoom).toBeCloseTo(off.band.centre + clear)
+    expect(cameraPanelLayout({ ...PLAYING, chasing: true }, LAPTOP, 'right').scoreboardRoom).toBe(right.scoreboardRoom)
   })
 
   it('grows with V, keeps a very wide screen’s picture under the HUD, and hides when too narrow to read', () => {

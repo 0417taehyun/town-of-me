@@ -1,14 +1,15 @@
-import type { Ref } from 'react'
+import type { CSSProperties, Ref } from 'react'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import type { PracticeFeedback } from '../flow/derbyFlow'
-import { type DerbyHudState, practiceCaptionId } from './derbyCues'
+import { captionShown, type DerbyHudState, practiceCaptionId, textEms } from './derbyCues'
 import { StanceGauge } from './StanceGauge'
 
 /**
- * Practice as it plays, read from a step back: which practice pitch this is, and a two- or three-word caption that
- * says, after each swing, only whether it was a bit early, good, or a bit late; never a number, a speed, or a power.
- * The caption is a live region, so a screen reader hears each one; `cameraState`, what the camera panel's chip shows,
- * is another, heard only. While practice is `paused` for a visitor out of view it says practice waits for them.
+ * Practice as it plays, read from a step back: which practice pitch this is, in the top corner on the batter's side,
+ * and over the play a two- or three-word caption that says, after each swing, only whether it was a bit early, good,
+ * or a bit late; never a number, a speed, or a power. The caption is a live region, so a screen reader hears each one,
+ * also those that do not show while a pitch comes (captionShown); `cameraState`, what the camera panel's chip shows, is
+ * another, heard only. While practice is `paused` for a visitor out of view it says practice waits for them.
  */
 export function PracticeView({
   hud,
@@ -26,19 +27,24 @@ export function PracticeView({
   cameraState: string | null
 }) {
   const copy = languageCopy[language].baseball
+  const captionId = practiceCaptionId(hud, feedback)
+  const caption = paused ? copy.hud.paused : copy.practice.captions[captionId]
   return (
     <div className="derby-hud derby-practice">
-      <div className="derby-scoreboard">
-        <p className="derby-stat">
-          <span>{copy.practice.title}</span>
-          <strong>
-            {Math.min(hud.pitchIndex + 1, pitchCount)}/{pitchCount}
-          </strong>
-        </p>
-      </div>
+      <p className="derby-pitches">
+        <span>{copy.practice.title}</span>
+        <strong>
+          {Math.min(hud.pitchIndex + 1, pitchCount)}/{pitchCount}
+        </strong>
+      </p>
       <div className="derby-callout" aria-live="polite" aria-atomic="true">
-        <p className="derby-caption" data-feedback={paused ? undefined : (feedback ?? undefined)}>
-          {paused ? copy.hud.paused : copy.practice.captions[practiceCaptionId(hud, feedback)]}
+        <p
+          className="derby-caption"
+          data-feedback={paused ? undefined : (feedback ?? undefined)}
+          data-shown={captionShown(captionId, paused) || undefined}
+          style={{ '--caption-ems': textEms(caption) } as CSSProperties}
+        >
+          {caption}
         </p>
       </div>
       <p className="derby-camera-state" role="status">
