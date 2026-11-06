@@ -54,9 +54,23 @@ export async function createStore(databaseUrl) {
     return new MemoryStore()
   }
   const pool = new pg.Pool({ connectionString: databaseUrl })
+  pool.on('error', logLostDatabaseConnection)
+  // A connection a request holds has no pool listener, and its loss already fails the request's query; without a
+  // listener of its own, that loss would also end the process as an unhandled `error` event.
+  pool.on('connect', (client) => client.on('error', () => undefined))
   const applied = await applyMigrations(pool, new URL('./migrations/', import.meta.url)).catch(stopWithDatabaseHint)
   if (applied.length) console.log(`Applied migrations: ${applied.join(', ')}`)
   return new PostgresStore(pool)
+}
+
+/**
+ * An idle connection dropped, as a PostgreSQL restart does; the pool opens a new one for the next query. Only the error
+ * code is logged, because a driver error's message and fields can name the host, the user, and the database.
+ */
+export function logLostDatabaseConnection(error) {
+  console.error(
+    `Lost an idle PostgreSQL connection (${error?.code ?? 'no error code'}); the next query opens a new one.`,
+  )
 }
 
 /** A refused connection at startup almost always means PostgreSQL is not running, so say how to fix it. */
