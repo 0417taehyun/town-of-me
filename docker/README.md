@@ -41,3 +41,27 @@ container restarts; `docker compose down -v` deletes it. PostgreSQL is published
 `127.0.0.1:${POSTGRES_PORT:-5432}` for a backend started with `npm run dev`. LinkedIn admin sign-in and OpenRouter
 dialogue drafting are enabled when their variables from the root `.env` are present. A fresh database starts from the fictional
 sample town in `backend/seed/town.json`; sign in at `/admin` to make it your own.
+
+## Deploying
+
+`compose.production.yaml` runs the same images behind a Cloudflare Tunnel. It publishes no port, so the server needs no
+open inbound port, and Cloudflare holds the HTTPS certificate the `__Host-` cookies require. Compose refuses to start
+without a database password, public address, or tunnel token, or without the seed file.
+
+1. Add the domain to Cloudflare and create a tunnel in Zero Trust. Point its public hostname at `http://frontend:80`.
+2. Clone the repository on a server with Docker. Copy `.env.production.example` to `.env.production` and fill it in, and
+   put the private town at `.seed/town.json`. It is read once, while the database has no town; after that `/admin` is
+   the source of truth.
+3. Register `<PUBLIC_ORIGIN>/v1/auth/linkedin/callback` in the LinkedIn app.
+4. Start it, and repeat this after `git pull` to update:
+
+   ```sh
+   docker compose --env-file .env.production -f compose.yaml -f compose.production.yaml up -d --build
+   ```
+
+5. Check that `docker compose … logs frontend` shows visitors' addresses. A private `172.x` address there means
+   `CF-Connecting-IP` is not arriving, and every visitor is sharing one flood-guard counter.
+
+In Cloudflare, keep `/v1/` uncached with a cache rule, and leave Rocket Loader off, since it rewrites script tags under
+the pages' Content Security Policy. Cloudflare compresses with Brotli on its own. Backups are not configured; turning
+them on changes the privacy notice ([backend/README.md](../backend/README.md#data-and-deletion)).

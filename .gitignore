@@ -3,5 +3,6 @@ dist
 *.local
 .DS_Store
 .env
+.env.production
 .seed
 .claude/settings.local.json
