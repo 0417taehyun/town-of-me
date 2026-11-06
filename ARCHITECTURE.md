@@ -143,7 +143,9 @@ browser. Why each rule and number is what it is lives in the commit messages.
   panel.
 - **`board/`:** the monthly board at `/baseball/ranking`, its own lazy chunk (`BoardPage.tsx`): the painted statues in
   one canvas (`BoardPodium.tsx`, `podiumScene.ts`), the list's portraits from one offscreen renderer
-  (`portraitImages.ts`), seasons (`boardSeason.ts`), and what rows show (`boardView.ts`).
+  (`portraitImages.ts`), seasons (`boardSeason.ts`), and what rows show (`boardView.ts`). `?view=hall-of-fame` opens
+  every finished season's statues (`HallOfFamePage.tsx`) behind the same gate; the own card lists the visitor's past
+  statues (`OwnPastSeasons.tsx`).
 - **`devDiagnostics.ts`, `devSeam.ts`:** dev only. D shows the camera's, tracker's, and stance's numbers; L saves the
   last minute per camera frame (upper-body joints, detections, stance), never a picture, on this computer only. The
   seam lets an automated check stand in for a visitor and their swings.

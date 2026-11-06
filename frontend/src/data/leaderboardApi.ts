@@ -1,5 +1,5 @@
 import type { DerbyInputLog, DerbyResult } from '../baseball/game/derbyScore'
-import { requestJson, requireRecord, requireText, responseRecord } from './apiClient'
+import { requestJson, requireList, requireRecord, requireText, responseRecord } from './apiClient'
 import { normalizeLinkedInProfileUrl } from './linkedInProfile'
 import { BASEBALL_DIFFICULTIES, type BallparkRules } from './models'
 import { normalizePlayerProfile, profileAppearance, type PlayerProfile } from './playerProfile'
@@ -15,6 +15,7 @@ const boardPath = '/v1/games/home-run-derby'
 const longestClientRunMs = 600_000
 /** Mirrors the server's one-line board name of 1–24 characters, measured after NFKC. */
 const boardNameLength = 24
+const seasonIdPattern = /^\d{4}-(0[1-9]|1[0-2])$/u
 
 export class LeaderboardRequestError extends Error {
   constructor(readonly status: number) {
@@ -212,7 +213,7 @@ export function parseBoardSeason(value: unknown): BoardSeason {
   const id = requireText(input.id, 'season.id')
   const startsAt = Date.parse(requireText(input.startsAt, 'season.startsAt'))
   const endsAt = Date.parse(requireText(input.endsAt, 'season.endsAt'))
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/u.test(id) || !(startsAt < endsAt)) throw new Error('season is malformed')
+  if (!seasonIdPattern.test(id) || !(startsAt < endsAt)) throw new Error('season is malformed')
   return { id, startsAt, endsAt, final: input.final === true }
 }
 
@@ -238,16 +239,59 @@ export function parseBoard(value: unknown): Board {
 /** This month's statues as the town stands them: the KST month they belong to, and one row for each place held. */
 export type Podium = { season: string; rows: BoardRow[] }
 
-/**
- * The town's statues, read like the board's: a malformed row is dropped, and a place the server sent twice keeps its
- * first row, so two statues never stand on one pedestal. A malformed answer throws, and the town keeps what it had.
- */
+/** Statues read like a board's rows, and a place the server sent twice keeps its first: one statue to a pedestal. */
+export function statueRows(value: unknown): BoardRow[] {
+  const rows = boardRows(value, STATUE_PLACES, true)
+  return rows.filter((row, index) => rows.findIndex(({ rank }) => rank === row.rank) === index)
+}
+
+/** The town's statues (`statueRows`). A malformed answer throws, and the town keeps what it had. */
 export function parsePodium(value: unknown): Podium {
   const input = requireRecord(value, 'podium')
   const season = requireText(requireRecord(input.season, 'podium.season').id, 'podium.season.id')
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/u.test(season)) throw new Error('podium.season is malformed')
-  const rows = boardRows(input.podium, STATUE_PLACES, true)
-  return { season, rows: rows.filter((row, index) => rows.findIndex(({ rank }) => rank === row.rank) === index) }
+  if (!seasonIdPattern.test(season)) throw new Error('podium.season is malformed')
+  return { season, rows: statueRows(input.podium) }
+}
+
+/** A finished season in the hall of fame: its id, and its statues as they stand now. */
+export type HallOfFameSeason = { id: string; champions: BoardRow[] }
+
+/** A season the page can show, or none: one malformed season never costs the visitor the others. */
+export function readableHallOfFameSeason(value: unknown): HallOfFameSeason[] {
+  try {
+    const input = requireRecord(value, 'season')
+    const id = requireText(input.id, 'season.id')
+    return seasonIdPattern.test(id) ? [{ id, champions: statueRows(input.champions) }] : []
+  } catch {
+    return []
+  }
+}
+
+/** Every finished season, in the server's order, newest first. Belongs to no one, so it goes without the cookie. */
+export async function fetchHallOfFame(request: typeof fetch = fetch): Promise<HallOfFameSeason[]> {
+  const payload = await responseRecord(await sendToBoard('/hall-of-fame', { credentials: 'omit' }, request))
+  return requireList(payload.seasons, 'seasons').flatMap(readableHallOfFameSeason)
+}
+
+/** A past season's board whose statues include the visitor's own record. */
+export type OwnStatueBoard = Board & { own: BoardOwnEntry & { rank: number } }
+
+/** Whether the visitor's record stands as a statue here: a place it only would hold if listed does not count. */
+export function holdsOwnStatue(board: Board): board is OwnStatueBoard {
+  const own = board.own
+  return own !== null && own.listed && own.rank !== null && own.rank <= STATUE_PLACES.last
+}
+
+/**
+ * The past seasons where the visitor's record is a statue, newest first. Only a season's board says whose record is
+ * whose, one read a season, so a season without statues is skipped. Any failed read fails all of it: a partial list
+ * would tell the visitor they stand on no pedestal they cannot see.
+ */
+export async function fetchOwnStatues(request: typeof fetch = fetch): Promise<OwnStatueBoard[]> {
+  const seasons = await fetchHallOfFame(request)
+  const standing = seasons.filter(({ champions }) => champions.length > 0)
+  const boards = await Promise.all(standing.map(({ id }) => fetchBoard(id, request)))
+  return boards.filter(holdsOwnStatue)
 }
 
 /**
@@ -350,6 +394,21 @@ export async function updateOwnRecord(choice: ListingChoice, request: typeof fet
 export async function turnOffLinkedIn(season: string, request: typeof fetch = fetch): Promise<void> {
   const path = `/entries/own?season=${encodeURIComponent(season)}`
   await sendToBoard(path, { method: 'PUT', body: JSON.stringify({ linkedIn: null }) }, request)
+}
+
+/** Makes the visitor's statue on past `season` (`YYYY-MM`) an anonymous batter; this month's record stays as it is. */
+export async function anonymizeOwnRecord(season: string, request: typeof fetch = fetch): Promise<void> {
+  const path = `/entries/own?season=${encodeURIComponent(season)}`
+  await sendToBoard(path, { method: 'PUT', body: JSON.stringify({ anonymize: true }) }, request)
+}
+
+/**
+ * Leaves this browser a new visitor, for the next person on a shared device. It clears the cookie shared with the
+ * guestbook, so it lies outside the board's path; the records stay, and this device can no longer change them.
+ */
+export async function forgetVisitor(request: typeof fetch = fetch): Promise<void> {
+  const response = await requestJson('/v1/visitor/forget', { method: 'POST' }, request)
+  if (!response.ok) throw new LeaderboardRequestError(response.status)
 }
 
 /** A season's board (`season` as `YYYY-MM`), or this month's; the visitor's own record comes with it. */

@@ -588,9 +588,66 @@ html[lang='ko'] .board-page {
   justify-content: flex-end;
   gap: 8px;
 }
-.board-own-actions .derby-secondary {
+.board-own-actions .derby-secondary,
+.board-own-past-actions .derby-secondary {
   min-height: 40px;
   padding: 0 16px;
+}
+
+/* The visitor's past statues, along the own card's foot. */
+.board-own-past {
+  grid-column: 1 / -1;
+  padding-top: 8px;
+  border-top: 1px solid var(--board-line);
+}
+.board-own-past summary {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  color: var(--board-heading);
+  font-weight: 800;
+  cursor: pointer;
+}
+.board-own-past-empty {
+  padding: 4px 0 8px;
+  color: var(--board-muted);
+  font-size: 0.9rem;
+}
+.board-own-past-list {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 6px;
+  padding: 0;
+  list-style: none;
+}
+.board-own-past-row {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--board-line);
+  border-radius: 16px;
+  background: var(--board-surface);
+}
+.board-own-past-row b {
+  color: var(--board-heading);
+}
+.board-own-past-record {
+  color: var(--board-plum);
+  font-size: 0.86rem;
+}
+.board-own-past-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+.board-own-past-actions .derby-listing-delete {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.board-own-past-actions .text-button {
+  padding-left: 0;
 }
 
 /* Places 4 to 50. */
@@ -737,6 +794,124 @@ html[lang='ko'] .board-page {
   border-top: 0;
 }
 
+/* The hall of fame: a card for each finished season, its statues small. */
+.board-hall-link {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 0 12px;
+  color: var(--board-sage-ink);
+  font-weight: 800;
+}
+.board-hall-seasons {
+  display: grid;
+  gap: 18px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.board-hall-season,
+.board-hall-empty {
+  padding: 16px 18px 18px;
+  border: 1px solid var(--board-line);
+  border-radius: 28px;
+  background: var(--board-surface);
+  box-shadow: var(--board-shadow-soft);
+}
+.board-hall-empty {
+  margin-top: 18px;
+}
+.board-hall-season-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-bottom: 14px;
+}
+.board-hall-season-head h2 {
+  font-size: 1.2rem;
+}
+.board-hall-season-head a {
+  color: var(--board-sage-ink);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+.board-hall-statues {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.board-hall-statue {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding: 24px 10px 12px;
+  border-radius: 20px;
+  background: var(--board-sunk);
+  text-align: center;
+}
+.board-hall-statue[data-empty] {
+  border: 2px dashed var(--board-line);
+  background: none;
+}
+/* The first column's menu opens toward the page, not off its edge. */
+.board-hall-statue:first-child .board-menu-items {
+  right: auto;
+  left: 0;
+}
+.board-hall-figure {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  margin-bottom: 8px;
+}
+.board-hall-figure .board-portrait {
+  width: 84px;
+  height: 84px;
+  border-radius: 22px 22px 8px 8px;
+}
+.board-hall-statue[data-empty] .board-portrait {
+  background: none;
+  box-shadow: none;
+}
+/* The pedestal a thumbnail stands on, in its place's color, and the same one left bare. */
+.board-hall-pedestal {
+  width: 100px;
+  height: 10px;
+  border-radius: 3px 3px 6px 6px;
+  background: var(--board-medal-3);
+}
+.board-hall-statue[data-rank='1'] .board-hall-pedestal {
+  background: var(--board-medal-1);
+}
+.board-hall-statue[data-rank='2'] .board-hall-pedestal {
+  background: var(--board-medal-2);
+}
+.board-hall-statue[data-empty] .board-hall-pedestal {
+  background: var(--board-line);
+}
+.board-hall-name {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--board-heading);
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-hall-statue[data-empty] .board-hall-name {
+  color: var(--board-muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.board-hall-record {
+  color: var(--board-plum);
+  font-size: 0.84rem;
+}
+
 /* The listing card over the board, as a dialog. */
 .board-dialog {
   position: fixed;
@@ -799,6 +974,16 @@ html[lang='ko'] .board-page {
   }
   .board-podium-canvas {
     height: 360px !important;
+  }
+  .board-hall-statues {
+    grid-template-columns: 1fr;
+  }
+  .board-hall-statue .board-plate-link {
+    justify-content: flex-end;
+  }
+  .board-hall-statue:first-child .board-menu-items {
+    right: 0;
+    left: auto;
   }
 }
 @media (prefers-reduced-motion: reduce) {

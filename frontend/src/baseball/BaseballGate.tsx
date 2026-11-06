@@ -1,12 +1,16 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { usePageLanguage } from '../hooks/usePageLanguage'
+import type { TownSnapshot } from '../data/models'
 import { type AppLanguage, languageCopy } from '../i18n/language'
 import { LanguageSelect } from '../ui/LanguageSelect'
-import { baseballPreview, EXIT_PATHS, isBoardPath } from './baseballRoute'
+import { baseballPreview, EXIT_PATHS, isBoardPath, isHallOfFameView } from './baseballRoute'
 import { useBallparkGate } from './useBallparkGate'
 
 const BaseballApp = lazy(() => import('./BaseballApp').then((module) => ({ default: module.BaseballApp })))
 const BoardPage = lazy(() => import('./board/BoardPage').then((module) => ({ default: module.BoardPage })))
+const HallOfFamePage = lazy(() =>
+  import('./board/HallOfFamePage').then((module) => ({ default: module.HallOfFamePage })),
+)
 
 /**
  * `/baseball` reads the town before anything of the derby loads: while the admin hides the ballpark, only the admin's
@@ -33,8 +37,13 @@ export function BaseballGate({ townId }: { townId: string }) {
   const loading = <BaseballLoading language={language} />
   if (gate.status === 'loading') return loading
   return (
-    <Suspense fallback={loading}>{board ? <BoardPage town={gate.town} /> : <BaseballApp town={gate.town} />}</Suspense>
+    <Suspense fallback={loading}>{board ? <BoardRoute town={gate.town} /> : <BaseballApp town={gate.town} />}</Suspense>
   )
+}
+
+/** The board's address opens a season's board or the hall of fame, both only once the gate is open. */
+export function BoardRoute({ town }: { town: TownSnapshot }) {
+  return isHallOfFameView(window.location.search) ? <HallOfFamePage town={town} /> : <BoardPage town={town} />
 }
 
 export function BaseballLoading({ language }: { language: AppLanguage }) {

@@ -9,6 +9,14 @@ export const BASEBALL_PATH = '/baseball'
 /** The derby's monthly board, under the derby's path so it gets the same strict policy. */
 export const BOARD_PATH = `${BASEBALL_PATH}/ranking`
 
+/** Every finished season's statues, a view of the board's page under the same gate. */
+export const HALL_OF_FAME_PATH = `${BOARD_PATH}?view=hall-of-fame`
+
+/** Whether the board's address asks for the hall of fame rather than a season's board. */
+export function isHallOfFameView(search: string) {
+  return new URLSearchParams(search).get('view') === 'hall-of-fame'
+}
+
 /** Whether the page is the home run derby or its board; a trailing slash matches too, as for `/admin`. */
 export function isBaseballPath(pathname: string) {
   const path = pathname.replace(/\/+$/u, '')

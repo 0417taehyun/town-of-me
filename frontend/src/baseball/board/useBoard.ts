@@ -37,3 +37,29 @@ export function useBoard(season: string | null) {
   const shown = load && (load.key === key || kept) ? load.load : null
   return { load: shown ?? ({ status: 'loading' } as const), reload }
 }
+
+/** Something else the board's page reads: the hall of fame, or the visitor's past statues. */
+export type ReadState<Value> = { status: 'loading' } | { status: 'failed' } | { status: 'ready'; value: Value }
+
+/**
+ * Reads when mounted and again by `reload`, which keeps showing what it has until the new answer arrives. `read` must
+ * be a stable function.
+ */
+export function useRead<Value>(read: () => Promise<Value>) {
+  const [attempt, setAttempt] = useState(0)
+  const [load, setLoad] = useState<ReadState<Value>>({ status: 'loading' })
+
+  useEffect(() => {
+    let active = true
+    void read().then(
+      (value) => active && setLoad({ status: 'ready', value }),
+      () => active && setLoad({ status: 'failed' }),
+    )
+    return () => {
+      active = false
+    }
+  }, [attempt, read])
+
+  const reload = useCallback(() => setAttempt((current) => current + 1), [])
+  return { load, reload }
+}

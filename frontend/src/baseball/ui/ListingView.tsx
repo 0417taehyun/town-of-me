@@ -176,13 +176,41 @@ export function ListingView({
  */
 export function DeleteOwnRecords({ language, onDelete }: { language: AppLanguage; onDelete: () => Promise<void> }) {
   const copy = languageCopy[language].baseball.board
+  return (
+    <ConfirmedAction
+      label={copy.deleteOwn}
+      confirmText={copy.deleteOwnConfirm}
+      confirmLabel={copy.deleteConfirm}
+      keepLabel={copy.keep}
+      failedText={copy.problems.deleteFailed}
+      onConfirm={onDelete}
+    />
+  )
+}
+
+/** Something the visitor cannot take back, done after a second press that first says what it does. */
+export function ConfirmedAction({
+  label,
+  confirmText,
+  confirmLabel,
+  keepLabel,
+  failedText,
+  onConfirm,
+}: {
+  label: string
+  confirmText: string
+  confirmLabel: string
+  keepLabel: string
+  failedText: string
+  onConfirm: () => Promise<void>
+}) {
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
-  const remove = async () => {
+  const confirm = async () => {
     setBusy(true)
     setFailed(false)
-    await onDelete().then(
+    await onConfirm().then(
       () => setConfirming(false),
       () => setFailed(true),
     )
@@ -192,20 +220,20 @@ export function DeleteOwnRecords({ language, onDelete }: { language: AppLanguage
     <div className="derby-listing-delete">
       {confirming ? (
         <>
-          <p role="alert">{copy.deleteOwnConfirm}</p>
-          <button className="derby-secondary" type="button" disabled={busy} onClick={remove}>
-            {copy.deleteConfirm}
+          <p role="alert">{confirmText}</p>
+          <button className="derby-secondary" type="button" disabled={busy} onClick={confirm}>
+            {confirmLabel}
           </button>
           <button className="text-button" type="button" onClick={() => setConfirming(false)}>
-            {copy.keep}
+            {keepLabel}
           </button>
         </>
       ) : (
         <button className="text-button" type="button" onClick={() => setConfirming(true)}>
-          {copy.deleteOwn}
+          {label}
         </button>
       )}
-      {failed && <p role="alert">{copy.problems.deleteFailed}</p>}
+      {failed && <p role="alert">{failedText}</p>}
     </div>
   )
 }

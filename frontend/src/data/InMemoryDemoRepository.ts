@@ -37,6 +37,14 @@ export function readStoredSession(sessionStore: SessionStore | null, townId: str
   }
 }
 
+export function clearStoredSession(sessionStore: SessionStore | null, townId: string) {
+  try {
+    sessionStore?.removeItem(sessionStorageKey(townId))
+  } catch {
+    // Nothing else to reset when browser storage is unavailable.
+  }
+}
+
 export class InMemoryDemoRepository implements DemoRepository {
   private readonly sessions = new Map<string, DemoSession>()
 
@@ -68,10 +76,6 @@ export class InMemoryDemoRepository implements DemoRepository {
 
   async resetSession(townId: string): Promise<void> {
     this.sessions.delete(townId)
-    try {
-      this.sessionStore?.removeItem(sessionStorageKey(townId))
-    } catch {
-      // Nothing else to reset when browser storage is unavailable.
-    }
+    clearStoredSession(this.sessionStore, townId)
   }
 }

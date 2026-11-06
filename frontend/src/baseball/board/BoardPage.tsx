@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   effectiveBallparkRules,
   nextRankingMonth,
@@ -8,12 +8,13 @@ import {
   upcomingBallparkRules,
 } from '../../data/ballparkRules'
 import { homeRunDistanceText, linkedInChipText, recordText, rowName } from '../../data/boardRecord'
-import { getBrowserSessionStore, readStoredSession } from '../../data/InMemoryDemoRepository'
+import { clearStoredSession, getBrowserSessionStore, readStoredSession } from '../../data/InMemoryDemoRepository'
 import {
   type Board,
   type BoardOwnEntry,
   type BoardRow,
   deleteOwnRecords,
+  forgetVisitor,
   type ListingChoice,
   reportBoardEntry,
   type ReportReason,
@@ -29,9 +30,9 @@ import { type AppLanguage, languageCopy, monthName } from '../../i18n/language'
 import { copyText } from '../../scene/webglSupport'
 import { STATUE_RANKS, type StatueRank } from '../../scene/statues/statueFinishes'
 import { LanguageSelect } from '../../ui/LanguageSelect'
-import { BASEBALL_PATH, BOARD_PATH } from '../baseballRoute'
+import { BASEBALL_PATH, BOARD_PATH, HALL_OF_FAME_PATH } from '../baseballRoute'
 import { linkedInStatusText } from '../ui/derbyCues'
-import { DeleteOwnRecords, ListingView } from '../ui/ListingView'
+import { ConfirmedAction, DeleteOwnRecords, ListingView } from '../ui/ListingView'
 import { BoardPodium } from './BoardPodium'
 import { daysUntilSeasonEnds, oldestShownSeason, requestedSeason, seasonSearch } from './boardSeason'
 import {
@@ -45,6 +46,7 @@ import {
   statueLooks,
   takedownHref,
 } from './boardView'
+import { OwnPastSeasons } from './OwnPastSeasons'
 import { usePortrait } from './portraitImages'
 import { useBoard } from './useBoard'
 import '../baseball.css'
@@ -79,19 +81,13 @@ export function BoardPage({ town }: { town: TownSnapshot }) {
       {/* The board keeps names, characters, and statues' links with no end date; nginx sends X-Robots-Tag too. */}
       <meta name="robots" content="noindex, noarchive" />
       <div className="board-column">
-        <nav className="board-topline">
-          <a className="baseball-back" href={BASEBALL_PATH}>
-            <span aria-hidden="true">‹</span> {copy.back}
-          </a>
-          <div className="board-topline-actions">
-            <LanguageSelect language={language} className="baseball-language-select" onChange={setLanguage} />
-            {contactEmail && (
-              <a className="primary-button compact" href={BASEBALL_PATH}>
-                {copy.challenge}
-              </a>
-            )}
-          </div>
-        </nav>
+        <BoardTopline
+          backHref={BASEBALL_PATH}
+          backLabel={copy.back}
+          running={Boolean(contactEmail)}
+          language={language}
+          onLanguage={setLanguage}
+        />
         <SeasonHeading
           town={town}
           season={shownSeason}
@@ -100,19 +96,8 @@ export function BoardPage({ town }: { town: TownSnapshot }) {
           onSeason={(next) => goTo(next === currentSeason ? null : next)}
         />
         {!contactEmail && <p className="board-state">{copy.notRunning}</p>}
-        {contactEmail && load.status === 'loading' && (
-          <div className="board-state" aria-busy="true">
-            <span className="loader" aria-hidden="true" />
-          </div>
-        )}
-        {contactEmail && load.status === 'failed' && (
-          <div className="board-state" role="alert">
-            <p>{copy.loadFailed}</p>
-            <button className="primary-button compact" type="button" onClick={reload}>
-              {languageCopy[language].baseball.board.retry}
-            </button>
-          </div>
-        )}
+        {contactEmail && load.status === 'loading' && <BoardLoading />}
+        {contactEmail && load.status === 'failed' && <BoardLoadFailed language={language} onRetry={reload} />}
         {contactEmail && load.status === 'ready' && (
           <BoardSections
             key={load.board.season.id}
@@ -128,6 +113,57 @@ export function BoardPage({ town }: { town: TownSnapshot }) {
         )}
       </div>
     </main>
+  )
+}
+
+/** The way back, the language, and while the board runs the way to play. */
+export function BoardTopline({
+  backHref,
+  backLabel,
+  running,
+  language,
+  onLanguage,
+}: {
+  backHref: string
+  backLabel: string
+  running: boolean
+  language: AppLanguage
+  onLanguage: (language: AppLanguage) => void
+}) {
+  return (
+    <nav className="board-topline">
+      <a className="baseball-back" href={backHref}>
+        <span aria-hidden="true">‹</span> {backLabel}
+      </a>
+      <div className="board-topline-actions">
+        <LanguageSelect language={language} className="baseball-language-select" onChange={onLanguage} />
+        {running && (
+          <a className="primary-button compact" href={BASEBALL_PATH}>
+            {languageCopy[language].baseball.leaderboard.challenge}
+          </a>
+        )}
+      </div>
+    </nav>
+  )
+}
+
+export function BoardLoading() {
+  return (
+    <div className="board-state" aria-busy="true">
+      <span className="loader" aria-hidden="true" />
+    </div>
+  )
+}
+
+export function BoardLoadFailed({ language, onRetry }: { language: AppLanguage; onRetry: () => void }) {
+  const copy = languageCopy[language].baseball
+  return (
+    <div className="board-state" role="alert">
+      <p>{copy.leaderboard.loadFailed}</p>
+      <button className="primary-button compact" type="button" onClick={onRetry}>
+        {copy.board.retry}
+      </button>
+    </div>
   )
 }
 
@@ -313,7 +349,9 @@ export function BoardSections({
           await turnOffLinkedIn(season.id)
           onReload()
         }}
-      />
+      >
+        <OwnPastSeasons currentSeason={currentSeason} language={language} onChanged={onReload} />
+      </OwnRecordCard>
       <section className="board-list-card" aria-labelledby="board-list-title">
         <div className="board-list-head">
           <h2 id="board-list-title">{season.final ? copy.finalListTitle(month) : copy.listTitle}</h2>
@@ -350,6 +388,9 @@ export function BoardSections({
           </div>
         )}
         <p className="board-tie-rule">{copy.tieRule}</p>
+        <a className="board-hall-link" href={HALL_OF_FAME_PATH}>
+          {copy.hallOfFameLink} <span aria-hidden="true">›</span>
+        </a>
       </section>
       <footer className="board-footer">
         <a href={takedownHref(contactEmail, copy.takedown)}>{copy.takedown}</a>
@@ -358,6 +399,19 @@ export function BoardSections({
           onDelete={async () => {
             await deleteOwnRecords()
             onReload()
+          }}
+        />
+        <ConfirmedAction
+          label={copy.nextPlayer}
+          confirmText={copy.nextPlayerConfirm}
+          confirmLabel={copy.nextPlayerConfirmAction}
+          keepLabel={copy.nextPlayerKeep}
+          failedText={copy.nextPlayerFailed}
+          onConfirm={async () => {
+            await forgetVisitor()
+            // The character this tab plays as holds the name and link too, which the next person must not inherit.
+            clearStoredSession(getBrowserSessionStore(), town.id)
+            window.location.reload()
           }}
         />
       </footer>
@@ -455,23 +509,38 @@ export function BoardPlate({
       <p className="board-plate-record">{recordText(row.homeRuns, row.totalDistanceDm, language)}</p>
       <div className="board-plate-link">
         {row.linkedInProfileUrl && (
-          <a
-            className="board-linkedin"
-            href={row.linkedInProfileUrl}
-            target="_blank"
-            rel="ugc nofollow noopener noreferrer"
-            aria-label={copy.linkedInLabel(name)}
-          >
-            <span className="board-linkedin-icon" aria-hidden="true">
-              in
-            </span>
-            <span className="board-linkedin-handle">{linkedInChipText(row.linkedInProfileUrl)}</span>
-            <span aria-hidden="true">↗</span>
-          </a>
+          <StatueLinkedIn profileUrl={row.linkedInProfileUrl} name={name} language={language} />
         )}
         <RecordMenu row={row} name={name} contactEmail={contactEmail} language={language} />
       </div>
     </li>
+  )
+}
+
+/** A statue's approved LinkedIn link: a chip that says where it leads. */
+export function StatueLinkedIn({
+  profileUrl,
+  name,
+  language,
+}: {
+  profileUrl: string
+  name: string
+  language: AppLanguage
+}) {
+  return (
+    <a
+      className="board-linkedin"
+      href={profileUrl}
+      target="_blank"
+      rel="ugc nofollow noopener noreferrer"
+      aria-label={languageCopy[language].baseball.leaderboard.linkedInLabel(name)}
+    >
+      <span className="board-linkedin-icon" aria-hidden="true">
+        in
+      </span>
+      <span className="board-linkedin-handle">{linkedInChipText(profileUrl)}</span>
+      <span aria-hidden="true">↗</span>
+    </a>
   )
 }
 
@@ -596,6 +665,7 @@ export function OwnRecordCard({
   onOpen,
   onUnlist,
   onLinkedInOff,
+  children,
 }: {
   own: BoardOwnEntry | null
   final: boolean
@@ -604,6 +674,8 @@ export function OwnRecordCard({
   onOpen: () => void
   onUnlist: () => Promise<void>
   onLinkedInOff: () => Promise<void>
+  /** The visitor's past seasons, along the card's foot. */
+  children: ReactNode
 }) {
   const copy = languageCopy[language].baseball
   const boardCopy = copy.leaderboard
@@ -622,6 +694,7 @@ export function OwnRecordCard({
             {boardCopy.challenge}
           </a>
         </div>
+        {children}
       </section>
     )
   const save = async (change: () => Promise<void>) => {
@@ -681,6 +754,7 @@ export function OwnRecordCard({
           </button>
         </div>
       )}
+      {children}
     </section>
   )
 }

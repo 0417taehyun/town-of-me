@@ -1,6 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { DerbyInputLog } from '../baseball/game/derbyScore'
-import { fetchBoard, fetchPodium, rankedRunBody, submitRankedRun, updateOwnRecord } from './leaderboardApi'
+import {
+  anonymizeOwnRecord,
+  fetchBoard,
+  fetchHallOfFame,
+  fetchOwnStatues,
+  fetchPodium,
+  forgetVisitor,
+  rankedRunBody,
+  submitRankedRun,
+  updateOwnRecord,
+} from './leaderboardApi'
 import { appearanceFields, DEFAULT_PLAYER_PROFILE, type PlayerProfile } from './playerProfile'
 
 const visitor: PlayerProfile = {
@@ -32,6 +42,20 @@ const ownEntry = {
   homeRuns: 1,
   totalDistanceDm: 1232,
   rank: 4,
+}
+
+function statueRow(rank: number, fields: Record<string, unknown> = {}) {
+  return {
+    id: `entry-${rank}`,
+    rank,
+    name: null,
+    nameState: 'anonymous',
+    profile: { kind: 'default' },
+    homeRuns: 3,
+    totalDistanceDm: 3601,
+    achievedOn: '2026-11-02',
+    ...fields,
+  }
 }
 
 function sentBody(request: { mock: { calls: Parameters<typeof fetch>[] } }, call = 0) {
@@ -134,23 +158,16 @@ describe('leaderboard API boundary', () => {
   })
 
   it('reads the town’s statues without the visitor cookie, one per place, and refuses an answer it cannot place', async () => {
-    const row = (rank: number, fields: Record<string, unknown> = {}) => ({
-      id: `entry-${rank}`,
-      rank,
-      name: null,
-      nameState: 'anonymous',
-      profile: { kind: 'default' },
-      homeRuns: 3,
-      totalDistanceDm: 3601,
-      achievedOn: '2026-11-02',
-      ...fields,
-    })
     const podium = [
-      row(1, { name: 'Momo', nameState: 'approved', linkedInProfileUrl: 'https://www.linkedin.com/in/example-momo' }),
-      row(1, { id: 'entry-again', name: 'Twice', nameState: 'approved' }),
-      row(2, { linkedInProfileUrl: 'https://www.linkedin.com.example/in/example-pip' }),
-      row(3, { profile: null }),
-      row(4),
+      statueRow(1, {
+        name: 'Momo',
+        nameState: 'approved',
+        linkedInProfileUrl: 'https://www.linkedin.com/in/example-momo',
+      }),
+      statueRow(1, { id: 'entry-again', name: 'Twice', nameState: 'approved' }),
+      statueRow(2, { linkedInProfileUrl: 'https://www.linkedin.com.example/in/example-pip' }),
+      statueRow(3, { profile: null }),
+      statueRow(4),
     ]
     const request = vi.fn<typeof fetch>(async () => Response.json({ season: { id: '2026-11' }, podium }))
     const read = await fetchPodium(false, request)
@@ -165,5 +182,76 @@ describe('leaderboard API boundary', () => {
 
     const unplaced = vi.fn<typeof fetch>(async () => Response.json({ season: { id: 'November' }, podium }))
     await expect(fetchPodium(true, unplaced)).rejects.toThrow()
+  })
+
+  it('reads the hall of fame without the cookie, in the server’s order, dropping only what it cannot show', async () => {
+    const seasons = [
+      {
+        id: '2026-10',
+        champions: [
+          statueRow(1, { linkedInProfileUrl: 'https://www.linkedin.com/in/example-momo' }),
+          statueRow(1, { id: 'entry-again' }),
+          statueRow(2, { linkedInProfileUrl: 'https://www.linkedin.com.example/in/example-pip' }),
+          { rank: 3 },
+        ],
+      },
+      { id: 'October', champions: [statueRow(1)] },
+      { id: '2026-08' },
+    ]
+    const request = vi.fn<typeof fetch>(async () => Response.json({ seasons }))
+    const read = await fetchHallOfFame(request)
+    expect(request.mock.calls[0][0]).toBe('/v1/games/home-run-derby/hall-of-fame')
+    expect(request.mock.calls[0][1]).toMatchObject({ credentials: 'omit' })
+    expect(read.map(({ id }) => id)).toEqual(['2026-10', '2026-08'])
+    expect(read[0].champions.map(({ id, linkedInProfileUrl }) => [id, linkedInProfileUrl])).toEqual([
+      ['entry-1', 'https://www.linkedin.com/in/example-momo'],
+      ['entry-2', null],
+    ])
+    expect(read[1].champions).toEqual([])
+
+    const malformed = vi.fn<typeof fetch>(async () => Response.json({ seasons: 'none' }))
+    await expect(fetchHallOfFame(malformed)).rejects.toThrow()
+  })
+
+  it('finds the visitor’s past statues: listed in the top three, read only from seasons that have statues', async () => {
+    const standing = (id: string) => ({ id, champions: [statueRow(1)] })
+    const ownOn: Record<string, object | null> = {
+      '2026-10': { ...ownEntry, listed: true, rank: 3 },
+      '2026-09': { ...ownEntry, listed: true, rank: 4 },
+      '2026-08': { ...ownEntry, listed: false, rank: 1 },
+      '2026-07': { ...ownEntry, listed: true, rank: null },
+      '2026-06': null,
+    }
+    const seasons = [...Object.keys(ownOn).map(standing), { id: '2026-05', champions: [] }]
+    const request = vi.fn<typeof fetch>(async (input) => {
+      const season = new URL(String(input), 'https://town.example').searchParams.get('season')
+      if (!season) return Response.json({ seasons })
+      const bounds = { id: season, startsAt: `${season}-01T00:00:00Z`, endsAt: `${season}-28T00:00:00Z`, final: true }
+      const own = ownOn[season] && { ...ownOn[season], profile: visitor }
+      return Response.json({ season: bounds, podium: [], ranks: [], own })
+    })
+    const statues = await fetchOwnStatues(request)
+    expect(statues.map(({ season, own }) => [season.id, own.rank])).toEqual([['2026-10', 3]])
+    expect(request.mock.calls.map(([input]) => String(input))).not.toContain(
+      '/v1/games/home-run-derby/leaderboard?season=2026-05',
+    )
+
+    const failing = vi.fn<typeof fetch>(async (input) =>
+      String(input).includes('2026-09') ? new Response(null, { status: 500 }) : request(input),
+    )
+    await expect(fetchOwnStatues(failing)).rejects.toThrow()
+  })
+
+  it('takes down the named season’s statue, and a failed hand-over does not pass for one', async () => {
+    const request = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }))
+    await anonymizeOwnRecord('2026-10', request)
+    expect(request.mock.calls[0][0]).toBe('/v1/games/home-run-derby/entries/own?season=2026-10')
+    expect(sentBody(request, 0)).toEqual({ anonymize: true })
+
+    await forgetVisitor(request)
+    expect(request.mock.calls[1][0]).toBe('/v1/visitor/forget')
+    expect(request.mock.calls[1][1]).toMatchObject({ method: 'POST' })
+    const refused = vi.fn<typeof fetch>(async () => new Response(null, { status: 403 }))
+    await expect(forgetVisitor(refused)).rejects.toThrow()
   })
 })

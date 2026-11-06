@@ -102,6 +102,8 @@ north road.
   stand as statues, which may show your LinkedIn link after you put the given code on your profile. A preview, or a
   run the board cannot be reached for, is not ranked. `See the board` (on the rules card and the result) opens
   `/baseball/ranking`: the statues, places 4 to 50, your own record, and the last twelve months' final boards.
+  `Past seasons · Hall of fame` shows every finished season's statues; your own card can take a past statue down or
+  turn its link off, and `It’s someone else’s turn` leaves this browser a new visitor on a shared device.
 
 | Action                    | Input                                          |
 | ------------------------- | ---------------------------------------------- |
