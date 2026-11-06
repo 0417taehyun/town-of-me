@@ -44,25 +44,19 @@ sample town in `backend/seed/town.json`; sign in at `/admin` to make it your own
 
 ## Deploying
 
-`compose.production.yaml` runs the frontend and backend images behind a Cloudflare Tunnel, with the database outside the
-containers. It publishes no port, so the server needs no open inbound port, and Cloudflare serves the static files from
-its edge and holds the HTTPS certificate the `__Host-` cookies require. Compose refuses to start without the public
-address, database URL, tunnel token, seed file, or database certificate authority.
+`compose.production.yaml` runs everything on one server behind a Cloudflare Tunnel. It publishes no port, so the server
+needs no open inbound port, and Cloudflare serves the static files from its edge and holds the HTTPS certificate the
+`__Host-` cookies require. Compose refuses to start without the database password, public address, tunnel token, or seed
+file.
 
 1. Add the domain to Cloudflare and create a tunnel in Zero Trust. Point its public hostname at `http://frontend:80`.
    Redirect any other hostname, such as `www`, to it, since `PUBLIC_ORIGIN` is the only origin the backend allows.
-2. Create the database, for example Amazon RDS for PostgreSQL 17. Keep it off the public internet, allow port 5432 only
-   from the server's security group, and keep automated backups at 7 days, the period `/privacy` states. The console
-   defaults to 7 days, but the API and CLI to 1.
-3. On a server with 2 GB of memory (building the frontend peaks near 1 GB) and Docker with Compose 2.24 or newer, clone
-   the repository. Copy `.env.production.example` to `.env.production` and fill it in, keeping `sslmode=verify-full`.
-   Put the private town at `.seed/town.json`; it is read once, while the database has no town, and after that `/admin`
-   is the source of truth. Put the database's certificate authority at `.seed/database-ca.pem`; for RDS:
-
-   ```sh
-   curl -o .seed/database-ca.pem https://truststore.pki.rds.amazonaws.com/ap-northeast-2/ap-northeast-2-bundle.pem
-   ```
-
+2. Create a server with 2 GB of memory, for example a Lightsail instance, and leave only SSH open in its firewall.
+   Building the frontend peaks near 1 GB beside the running site, so add 2 GB of swap. Install Docker with Compose 2.24 or
+   newer. Turn on automatic snapshots: they are the database's only backup, keep the latest 7 days, the period `/privacy`
+   states, and are deleted along with the instance.
+3. Clone the repository. Copy `.env.production.example` to `.env.production` and fill it in, and put the private town at
+   `.seed/town.json`. It is read once, while the database has no town; after that `/admin` is the source of truth.
 4. Register `<PUBLIC_ORIGIN>/v1/auth/linkedin/callback` in the LinkedIn app.
 5. Start it, and repeat this after `git pull` to update:
 
@@ -72,6 +66,10 @@ address, database URL, tunnel token, seed file, or database certificate authorit
 
 6. Check that `docker compose … logs frontend` shows visitors' addresses. A private `172.x` address there means
    `CF-Connecting-IP` is not arriving, and every visitor is sharing one flood-guard counter.
+
+Never run `docker compose down -v` on the server: `-v` deletes the database. Containers come back on their own after a
+crash or a reboot, and committed data survives them; only losing the disk means going back to the last snapshot, at most a
+day old.
 
 In Cloudflare, keep `/v1/` uncached with a cache rule, and leave Rocket Loader off, since it rewrites script tags under
 the pages' Content Security Policy. Cloudflare compresses with Brotli on its own. `/privacy` names Cloudflare and AWS and
