@@ -44,24 +44,36 @@ sample town in `backend/seed/town.json`; sign in at `/admin` to make it your own
 
 ## Deploying
 
-`compose.production.yaml` runs the same images behind a Cloudflare Tunnel. It publishes no port, so the server needs no
-open inbound port, and Cloudflare holds the HTTPS certificate the `__Host-` cookies require. Compose refuses to start
-without a database password, public address, or tunnel token, or without the seed file.
+`compose.production.yaml` runs the frontend and backend images behind a Cloudflare Tunnel, with the database outside the
+containers. It publishes no port, so the server needs no open inbound port, and Cloudflare serves the static files from
+its edge and holds the HTTPS certificate the `__Host-` cookies require. Compose refuses to start without the public
+address, database URL, tunnel token, seed file, or database certificate authority.
 
 1. Add the domain to Cloudflare and create a tunnel in Zero Trust. Point its public hostname at `http://frontend:80`.
-2. Clone the repository on a server with Docker. Copy `.env.production.example` to `.env.production` and fill it in, and
-   put the private town at `.seed/town.json`. It is read once, while the database has no town; after that `/admin` is
-   the source of truth.
-3. Register `<PUBLIC_ORIGIN>/v1/auth/linkedin/callback` in the LinkedIn app.
-4. Start it, and repeat this after `git pull` to update:
+   Redirect any other hostname, such as `www`, to it, since `PUBLIC_ORIGIN` is the only origin the backend allows.
+2. Create the database, for example Amazon RDS for PostgreSQL 17. Keep it off the public internet, allow port 5432 only
+   from the server's security group, and keep automated backups at 7 days, the period `/privacy` states. The console
+   defaults to 7 days, but the API and CLI to 1.
+3. On a server with 2 GB of memory (building the frontend peaks near 1 GB) and Docker with Compose 2.24 or newer, clone
+   the repository. Copy `.env.production.example` to `.env.production` and fill it in, keeping `sslmode=verify-full`.
+   Put the private town at `.seed/town.json`; it is read once, while the database has no town, and after that `/admin`
+   is the source of truth. Put the database's certificate authority at `.seed/database-ca.pem`; for RDS:
+
+   ```sh
+   curl -o .seed/database-ca.pem https://truststore.pki.rds.amazonaws.com/ap-northeast-2/ap-northeast-2-bundle.pem
+   ```
+
+4. Register `<PUBLIC_ORIGIN>/v1/auth/linkedin/callback` in the LinkedIn app.
+5. Start it, and repeat this after `git pull` to update:
 
    ```sh
    docker compose --env-file .env.production -f compose.yaml -f compose.production.yaml up -d --build
    ```
 
-5. Check that `docker compose … logs frontend` shows visitors' addresses. A private `172.x` address there means
+6. Check that `docker compose … logs frontend` shows visitors' addresses. A private `172.x` address there means
    `CF-Connecting-IP` is not arriving, and every visitor is sharing one flood-guard counter.
 
 In Cloudflare, keep `/v1/` uncached with a cache rule, and leave Rocket Loader off, since it rewrites script tags under
-the pages' Content Security Policy. Cloudflare compresses with Brotli on its own. Backups are not configured; turning
-them on changes the privacy notice ([backend/README.md](../backend/README.md#data-and-deletion)).
+the pages' Content Security Policy. Cloudflare compresses with Brotli on its own. `/privacy` names Cloudflare and AWS and
+states the backup period and log cap, so changing any of them means changing `privacy` in
+`frontend/src/i18n/language.ts`.

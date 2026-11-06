@@ -1,5 +1,5 @@
-# Deployment over compose.yaml: a public address, required secrets, a private seed, and no published ports, because
-# visitors arrive only through a Cloudflare Tunnel. docker/README.md has the steps.
+# Deployment over compose.yaml: a public address, required secrets, a private seed, an external PostgreSQL such as Amazon
+# RDS, and no published ports, because visitors arrive only through a Cloudflare Tunnel. docker/README.md has the steps.
 #   docker compose --env-file .env.production -f compose.yaml -f compose.production.yaml up -d --build
 x-capped-logs: &capped-logs
   logging:
@@ -9,20 +9,22 @@ x-capped-logs: &capped-logs
       max-file: '3'
 
 services:
+  # The database lives outside these containers, so the local one never starts.
   postgres:
-    <<: *capped-logs
-    ports: !reset []
-    environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}
+    profiles: [local-database]
 
   backend:
     <<: *capped-logs
     restart: unless-stopped
+    depends_on: !reset {}
     ports: !reset []
     environment:
       ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN in .env.production}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env.production}
       FRONTEND_URL: ${PUBLIC_ORIGIN}/admin
       LINKED_IN_REDIRECT_URI: ${PUBLIC_ORIGIN}/v1/auth/linkedin/callback
+      # RDS signs its certificates with Amazon's own authority, which Node does not trust by default.
+      NODE_EXTRA_CA_CERTS: /run/town/database-ca.pem
       OPENROUTER_SITE_URL: ${PUBLIC_ORIGIN}
       TOWN_SEED_PATH: /run/town/town.json
     volumes:
@@ -31,6 +33,12 @@ services:
       - type: bind
         source: ${TOWN_SEED_FILE:-./.seed/town.json}
         target: /run/town/town.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATABASE_CA_FILE:-./.seed/database-ca.pem}
+        target: /run/town/database-ca.pem
         read_only: true
         bind:
           create_host_path: false

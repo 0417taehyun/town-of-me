@@ -34,7 +34,7 @@ what changed.
 - Deploy with `compose.production.yaml` ([docker/README.md](docker/README.md#deploying)); add a deployment workflow if
   updating by hand becomes a chore. After the first deployment, add migrations instead of editing applied ones.
 - `/privacy` publishes the privacy, retention, and asset-credit notices; what is left is a legal check of its wording,
-  and saying there that production caps the nginx access log at 10 MB × 3 files, which the notice says the code does not.
+  including how it names Cloudflare and AWS, which handle visitors' data.
 - Test admin sign-in end to end with the registered LinkedIn redirect URLs. Locally, use `localhost` rather than
   `127.0.0.1` so the cookie host matches.
 - On real desktop and mobile devices, check that admin saves reach visitors, the guestbook write, review, and publish
