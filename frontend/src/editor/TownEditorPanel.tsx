@@ -29,6 +29,7 @@ import { appearanceFields, DEFAULT_PLAYER_PROFILE } from '../data/playerProfile'
 import type { AppLanguage } from '../i18n/language'
 import { languageCopy, monthName } from '../i18n/language'
 import { resolveBallparkPalette } from '../scene/venues/ballpark/ballparkThemes'
+import { getVenueGatePoint } from '../scene/venues/venuePlacements'
 import { AppearanceSection, ColorChoice } from '../ui/CharacterAppearanceControls'
 import {
   duplicateObjects,
@@ -310,11 +311,14 @@ export function BallparkSettingsFields({
   language,
   dirty,
   edit,
+  onView,
 }: {
   town: TownSnapshot
   language: AppLanguage
   dirty: boolean
   edit: Edit
+  /** Moves the editor's camera to the gate, hidden or shown; a hidden ballpark shows only the hedge's closed stretch. */
+  onView: () => void
 }) {
   const copy = languageCopy[language].venues.ballpark
   const ballpark = town.venues.ballpark
@@ -342,13 +346,16 @@ export function BallparkSettingsFields({
         {copy.visible}
       </label>
       <p className="editor-note">{copy.visibleNote}</p>
-      {!ballpark.visible && !dirty && (
-        <div className="editor-actions">
+      <div className="editor-actions">
+        <button className="text-button" type="button" onClick={onView}>
+          {copy.view}
+        </button>
+        {!ballpark.visible && !dirty && (
           <a className="text-button" href={CURRENT_RULES_PREVIEW_PATH}>
             {copy.preview}
           </a>
-        </div>
-      )}
+        )}
+      </div>
       {BALLPARK_COLOR_ROLES.map((role) => (
         <ColorValueField
           key={role}
@@ -1200,6 +1207,7 @@ export function Inspector({
   onShowTownSettings,
   onRemoveObjects,
   onToggleDetails,
+  onViewBallpark,
 }: {
   town: TownSnapshot
   selection: EditorSelection
@@ -1216,6 +1224,7 @@ export function Inspector({
   onShowTownSettings: () => void
   onRemoveObjects: (ids: readonly string[]) => void
   onToggleDetails: () => void
+  onViewBallpark: () => void
 }) {
   const objects = getSelectedObjects(town, selection)
   const object = objects.length === 1 ? objects[0] : undefined
@@ -1279,7 +1288,9 @@ export function Inspector({
         {settingsShown && <TownNameFields town={town} language={language} copy={copy} edit={edit} />}
         {settingsShown && petWalkFields}
         {settingsShown && <TownMovementFields town={town} language={language} copy={copy} edit={edit} />}
-        {settingsShown && <BallparkSettingsFields town={town} language={language} dirty={dirty} edit={edit} />}
+        {settingsShown && (
+          <BallparkSettingsFields town={town} language={language} dirty={dirty} edit={edit} onView={onViewBallpark} />
+        )}
       </div>
     </aside>
   )
@@ -1500,6 +1511,9 @@ export function TownEditorPanel({
           onShowTownSettings={showTownSettings}
           onRemoveObjects={removeSelectedObjects}
           onToggleDetails={() => setDetailsHidden(!detailsHidden)}
+          onViewBallpark={() => {
+            focusTargetRef.current = getVenueGatePoint('ballpark')
+          }}
         />
       </div>
       {(notice || problem) && (

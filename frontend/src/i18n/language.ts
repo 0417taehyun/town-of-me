@@ -1057,6 +1057,7 @@ export const languageCopy = {
         visibleNote:
           'Applies as soon as you save. While it is hidden, visitors cannot open the ballpark, but you can still preview it.',
         preview: 'Preview the ballpark',
+        view: 'View the ballpark',
         colorRoles: { walls: 'Walls', roof: 'Roof', trim: 'Trim', accent: 'Accent' },
         themeColor: 'Use theme color',
         colorsNote: 'Colors apply as soon as you save.',
@@ -2093,6 +2094,7 @@ export const languageCopy = {
         visibleNote:
           '저장하면 바로 적용돼요. 숨겨 두면 방문자는 야구장에 들어갈 수 없고, 관리자만 미리보기로 볼 수 있어요.',
         preview: '야구장 미리보기',
+        view: '구장 보기',
         colorRoles: { walls: '벽', roof: '지붕', trim: '테두리', accent: '강조색' },
         themeColor: '테마 색으로',
         colorsNote: '색은 저장하면 바로 적용돼요.',

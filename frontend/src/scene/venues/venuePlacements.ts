@@ -1,5 +1,5 @@
 import { BASEBALL_PATH } from '../../baseball/baseballRoute'
-import type { TownObject, TownVenues } from '../../data/models'
+import type { TownObject, TownVenues, Vec3 } from '../../data/models'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import { getTownRoads, type TownRoad } from '../objects/roads/roadLayout'
 import type { StatueSpot } from '../playerInteraction'
@@ -33,6 +33,12 @@ export function openVenueIds(venues: TownVenues) {
 
 export function openVenueSlots(venues: TownVenues) {
   return openVenueIds(venues).map((id) => VENUE_SLOTS[VENUE_PLACEMENTS[id].slot])
+}
+
+/** The middle of a venue's gate on the hedge line, whether or not it is shown: where the editor's camera frames it. */
+export function getVenueGatePoint(id: VenueId): Vec3 {
+  const [x, z] = VENUE_SLOTS[VENUE_PLACEMENTS[id].slot].gate
+  return { x, y: 0, z }
 }
 
 /** A shown venue's gate, as the player's prompt offers it: where to stand, what it says, and where it leads. */
