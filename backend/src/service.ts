@@ -428,7 +428,8 @@ export class BackendService {
   /**
    * The visitor lists or unlists this month's record, changes the character and name it shows, or turns its link on or
    * off. A past season's record (`season`) may only be anonymised or have its link turned off, unless its best run
-   * came in after the season ended (`listableAfterSeason`): then it takes the same changes as this month's.
+   * came in after the season ended (`listableAfterSeason`): then it takes the same changes as this month's, and can
+   * still be anonymised, which only a past record offers.
    */
   async updateOwnEntry(
     game: string,
@@ -442,7 +443,8 @@ export class BackendService {
     const board = { game, season: boardSeason(requestedSeason, currentSeason) }
     const at = new Date(now).toISOString()
     const entry = await this.ownEntryOn(board, visitorHash)
-    if (board.season < currentSeason && !(await this.isListableLate(entry, now))) {
+    const pastSeason = board.season < currentSeason
+    if (pastSeason && (input.anonymize === true || !(await this.isListableLate(entry, now)))) {
       return this.saveOwnChanges(entry, pastEntryChanges(entry, parsePastEntryUpdate(input), at))
     }
     const update = parseOwnEntryUpdate(input)

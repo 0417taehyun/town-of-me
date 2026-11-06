@@ -543,6 +543,17 @@ async function checkPastSeason(assert: Assert): Promise<void> {
       unlistedFinal.code === 'INVALID_INPUT',
     "a held run accepted after its season ended may be listed by its visitor until that season's board is final",
   )
+  const takenDownLate = await service.updateOwnEntry(
+    game,
+    heldHash,
+    { anonymize: true },
+    pastMonth,
+    seasonEnd + 3 * day,
+  )
+  assert(
+    takenDownLate.entry.authorName === null && takenDownLate.entry.listed,
+    'a statue still listable after its season can be taken down like any other past statue',
+  )
 }
 
 /** A finished season keeps the first three of its public order, showing only what each owner still shows. */
