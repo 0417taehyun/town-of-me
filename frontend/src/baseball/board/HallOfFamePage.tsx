@@ -142,6 +142,7 @@ export function HallOfFameSeasonCard({
             key={rank}
             rank={rank}
             row={season.champions.find((row) => row.rank === rank) ?? null}
+            season={season.id}
             contactEmail={contactEmail}
             language={language}
           />
@@ -155,11 +156,13 @@ export function HallOfFameSeasonCard({
 export function HallOfFameStatue({
   rank,
   row,
+  season,
   contactEmail,
   language,
 }: {
   rank: StatueRank
   row: BoardRow | null
+  season: string
   contactEmail: string
   language: AppLanguage
 }) {
@@ -183,7 +186,7 @@ export function HallOfFameStatue({
         {row.linkedInProfileUrl && (
           <StatueLinkedIn profileUrl={row.linkedInProfileUrl} name={name} language={language} />
         )}
-        <RecordMenu row={row} name={name} contactEmail={contactEmail} language={language} />
+        <RecordMenu row={row} name={name} season={season} contactEmail={contactEmail} language={language} />
       </div>
     </li>
   )

@@ -333,6 +333,7 @@ export function BoardSections({
               finalMonth={season.final ? month : null}
               shown={shownPlates.has(rank) || reducedMotion}
               challenge={!season.final && !emptyMonth}
+              season={season.id}
               contactEmail={contactEmail}
               language={language}
             />
@@ -385,6 +386,7 @@ export function BoardSections({
                   key={row.id}
                   row={row}
                   own={isOwnRow(row, own) ? own : null}
+                  season={season.id}
                   contactEmail={contactEmail}
                   language={language}
                 />
@@ -494,6 +496,7 @@ export function BoardPlate({
   finalMonth,
   shown,
   challenge,
+  season,
   contactEmail,
   language,
 }: {
@@ -502,6 +505,7 @@ export function BoardPlate({
   finalMonth: string | null
   shown: boolean
   challenge: boolean
+  season: string
   contactEmail: string
   language: AppLanguage
 }) {
@@ -535,7 +539,7 @@ export function BoardPlate({
         {row.linkedInProfileUrl && (
           <StatueLinkedIn profileUrl={row.linkedInProfileUrl} name={name} language={language} />
         )}
-        <RecordMenu row={row} name={name} contactEmail={contactEmail} language={language} />
+        <RecordMenu row={row} name={name} season={season} contactEmail={contactEmail} language={language} />
       </div>
     </li>
   )
@@ -575,11 +579,13 @@ export function StatueLinkedIn({
 export function RecordMenu({
   row,
   name,
+  season,
   contactEmail,
   language,
 }: {
   row: BoardRow
   name: string
+  season: string
   contactEmail: string
   language: AppLanguage
 }) {
@@ -631,7 +637,7 @@ export function RecordMenu({
         <button type="button" onClick={copyNumber}>
           {copy.copyRecordNumber} <code>{number}</code>
         </button>
-        <a href={takedownHref(contactEmail, copy.takedownSubject(number))}>{copy.takedown}</a>
+        <a href={takedownHref(contactEmail, copy.takedownSubject(number, season))}>{copy.takedown}</a>
         <p className="board-menu-done" role="status">
           {done}
         </p>
@@ -650,28 +656,37 @@ export function Portrait({ profile, className }: { profile: PlayerProfile | null
 export function BoardListRow({
   row,
   own,
+  season,
   contactEmail,
   language,
 }: {
   row: BoardRow
   own: BoardOwnEntry | null
+  season: string
   contactEmail: string
   language: AppLanguage
 }) {
   const copy = languageCopy[language].baseball.leaderboard
-  // The visitor sees their own character on their own row, as they posted it, whatever the public sees.
+  // The visitor sees their own character on their own row, as they posted it, whatever the public sees, until a
+  // takedown hides it from everyone.
   const name = own?.name ?? rowName(row, language)
   return (
     <li className="board-row" value={row.rank} data-mine={own ? '' : undefined}>
       <span className="board-row-rank">{row.rank}</span>
-      <Portrait profile={own ? own.profile : row.profile} className="board-portrait" />
+      <Portrait profile={own && !own.takedown ? own.profile : row.profile} className="board-portrait" />
       <span className="board-row-name">
         <span data-placeholder={(!own && row.nameState !== 'approved') || undefined}>{name}</span>
         {own && <span className="board-mine">{copy.mine}</span>}
       </span>
       <span className="board-row-home-runs">{copy.homeRuns(row.homeRuns)}</span>
       <span className="board-row-distance">{homeRunDistanceText(row.totalDistanceDm, language, 1)}</span>
-      <RecordMenu row={row} name={rowName(row, language)} contactEmail={contactEmail} language={language} />
+      <RecordMenu
+        row={row}
+        name={rowName(row, language)}
+        season={season}
+        contactEmail={contactEmail}
+        language={language}
+      />
     </li>
   )
 }
@@ -730,7 +745,7 @@ export function OwnRecordCard({
   const changeable = !final && own.rank !== null
   return (
     <section className="board-own" data-kind={own.listed ? 'listed' : 'unlisted'} aria-labelledby="board-own-title">
-      <Portrait profile={own.profile} className="board-portrait board-own-portrait" />
+      <Portrait profile={own.takedown ? null : own.profile} className="board-portrait board-own-portrait" />
       <div>
         <h2 id="board-own-title">{copy.board.ownTitle}</h2>
         <p className="board-own-title">{ownHeadline(own, final, month, language)}</p>
