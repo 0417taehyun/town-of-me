@@ -7,7 +7,15 @@ import { usePageLanguage } from '../../hooks/usePageLanguage'
 import { type AppLanguage, languageCopy, monthName } from '../../i18n/language'
 import { STATUE_RANKS, type StatueRank } from '../../scene/statues/statueFinishes'
 import { BOARD_PATH } from '../baseballRoute'
-import { BoardLoadFailed, BoardLoading, BoardTopline, Portrait, RecordMenu, StatueLinkedIn } from './BoardPage'
+import {
+  BoardLoadFailed,
+  BoardLoading,
+  BoardNoticeLinks,
+  BoardTopline,
+  Portrait,
+  RecordMenu,
+  StatueLinkedIn,
+} from './BoardPage'
 import { seasonSearch } from './boardSeason'
 import { useRead } from './useBoard'
 import '../baseball.css'
@@ -53,12 +61,17 @@ export function HallOfFamePage({ town }: { town: TownSnapshot }) {
         {contactEmail && load.status === 'loading' && <BoardLoading />}
         {contactEmail && load.status === 'failed' && <BoardLoadFailed language={language} onRetry={reload} />}
         {contactEmail && load.status === 'ready' && (
-          <HallOfFameSeasons
-            seasons={load.value}
-            currentSeason={currentSeason}
-            contactEmail={contactEmail}
-            language={language}
-          />
+          <>
+            <HallOfFameSeasons
+              seasons={load.value}
+              currentSeason={currentSeason}
+              contactEmail={contactEmail}
+              language={language}
+            />
+            <footer className="board-footer">
+              <BoardNoticeLinks contactEmail={contactEmail} language={language} />
+            </footer>
+          </>
         )}
       </div>
     </main>

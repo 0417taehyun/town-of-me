@@ -616,7 +616,7 @@ export const languageCopy = {
         {
           title: 'Guestbook',
           lines: [
-            'A note saves its text (up to 240 characters), the language it was written in, your character’s name (up to 24 characters) and look, and when you wrote it. The LinkedIn address in your character is not saved with it.',
+            'A note saves its text (up to 240 characters), the language it was written in, your character’s name (up to 24 characters) and look, and when you wrote it. The gender identity and LinkedIn address in your character are not saved with it.',
             'Other visitors see a note only after the admin approves it. A changed note waits for approval again.',
             'You can change a note yourself from the same browser for a day after writing it. There is no button to delete one, and notes have no end date, so write to the address above to have one removed.',
           ],
@@ -632,7 +632,7 @@ export const languageCopy = {
         {
           title: 'What stays in your browser',
           lines: [
-            'The character you make (name, look, and any LinkedIn address you enter), where you are in the town, and your language stay in this tab and are gone when you close it.',
+            'The character you make (name, look, any gender identity you give, and any LinkedIn address you enter), where you are in the town, and your language stay in this tab and are gone when you close it.',
             'Photos you take are saved straight to your device and are not sent to the server.',
             'What residents say is already written, so talking with them sends nothing.',
           ],
@@ -673,6 +673,7 @@ export const languageCopy = {
           'If you ask for removal by writing to the address above, the admin takes away the name, LinkedIn link, and character and leaves the record anonymous, with its score and place. A LinkedIn address the admin blocks is kept as a hash so it cannot come back.',
           'Your records are found by the __Host-tom_visitor cookie above. It is also made when a ranked game starts, and if you block it a record cannot be saved. “It’s someone else’s turn” clears only the cookie and this tab’s character: the records stay, and this browser can no longer change them.',
           'Requests to the game’s API write no access log, and the counters that stop request floods exist only in the server’s memory.',
+          'The stadium’s crowd and players take the looks of characters from guestbook notes the admin approved, without their names.',
           'This browser also remembers the camera panel’s size and which month’s statues it has already revealed.',
           'The board’s pages ask search engines not to index them, but that cannot stop a copy someone makes of the screen.',
         ],
@@ -1676,7 +1677,7 @@ export const languageCopy = {
         {
           title: '방명록',
           lines: [
-            '글을 남기면 글(240자까지), 글을 쓴 언어, 캐릭터의 이름(24자까지)과 모습, 쓴 시각을 저장해요. 캐릭터에 적어 둔 LinkedIn 주소는 함께 저장하지 않아요.',
+            '글을 남기면 글(240자까지), 글을 쓴 언어, 캐릭터의 이름(24자까지)과 모습, 쓴 시각을 저장해요. 캐릭터에 넣어 둔 성별 정체성과 LinkedIn 주소는 함께 저장하지 않아요.',
             '글은 관리자가 확인한 뒤에 다른 방문자에게 보여요. 글을 고치면 다시 확인을 거쳐요.',
             '쓴 지 하루 안에는 같은 브라우저에서 직접 고칠 수 있어요. 직접 지우는 버튼은 없고 기간을 정해 지우지도 않으니, 글을 지우고 싶으면 위 주소로 알려 주세요.',
           ],
@@ -1692,7 +1693,7 @@ export const languageCopy = {
         {
           title: '브라우저에만 남는 것',
           lines: [
-            '만든 캐릭터(이름, 모습, 적어 둔 LinkedIn 주소), 마을 안의 위치, 고른 언어는 이 탭에만 저장되고, 탭을 닫으면 사라져요.',
+            '만든 캐릭터(이름, 모습, 넣어 둔 성별 정체성과 LinkedIn 주소), 마을 안의 위치, 고른 언어는 이 탭에만 저장되고, 탭을 닫으면 사라져요.',
             '찍은 사진은 이 기기에 바로 저장되고 서버로 보내지 않아요.',
             '주민이 하는 말은 미리 준비되어 있어서, 대화해도 서버로 보내는 것이 없어요.',
           ],
@@ -1733,6 +1734,7 @@ export const languageCopy = {
           '위 주소로 게시 중단을 요청하면 관리자가 이름, LinkedIn 주소, 캐릭터를 없애고 기록을 익명으로 바꿔요. 점수와 순위는 그대로 남아요. 관리자가 막은 LinkedIn 주소는 다시 쓰이지 않도록 해시로 계속 보관해요.',
           '내 기록은 위에 적은 __Host-tom_visitor 쿠키로 찾아요. 이 쿠키는 순위 경기를 시작할 때도 만들어지고, 막으면 기록을 저장할 수 없어요. ‘다른 사람이 할 차례예요’는 쿠키와 이 탭의 캐릭터만 지워요. 기록은 그대로 남고, 이 브라우저에서는 더 고칠 수 없어요.',
           '경기 API 요청은 접속 기록에 남기지 않고, 과도한 요청을 막는 계수는 서버 메모리에만 있어요.',
+          '경기장의 관중과 선수는 관리자가 확인한 방명록 글의 캐릭터 모습을 빌려 써요. 이름은 쓰지 않아요.',
           '카메라 패널 크기와 어느 달의 동상 등장을 이미 봤는지는 이 브라우저에 남아요.',
           '순위 페이지는 검색엔진에 색인하지 말라고 요청하지만, 화면을 찍어 옮긴 사본까지 막을 수는 없어요.',
         ],

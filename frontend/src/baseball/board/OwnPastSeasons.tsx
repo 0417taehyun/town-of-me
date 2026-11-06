@@ -8,6 +8,8 @@ import { useRead } from './useBoard'
 type PastSeasonsProps = {
   currentSeason: string
   language: AppLanguage
+  /** Goes up when a change outside this list may have changed the statues in it, which reads them again. */
+  revision: number
   /** A statue changed, and the board on the page may show it. */
   onChanged: () => void
 }
@@ -21,7 +23,7 @@ export function OwnPastSeasons(props: PastSeasonsProps) {
   return (
     <details className="board-own-past" onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary>{languageCopy[props.language].baseball.leaderboard.ownPastTitle}</summary>
-      {open && <OwnPastSeasonList {...props} />}
+      {open && <OwnPastSeasonList key={props.revision} {...props} />}
     </details>
   )
 }

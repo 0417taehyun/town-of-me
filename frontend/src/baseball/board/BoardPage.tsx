@@ -269,7 +269,13 @@ export function BoardSections({
   const [revealing, setRevealing] = useState(() => !season.final && podium.length > 0 && !hasSeenReveal(season.id))
   const [shownPlates, setShownPlates] = useState<ReadonlySet<StatueRank>>(() => new Set(revealing ? [] : STATUE_RANKS))
   const [listing, setListing] = useState(false)
+  const [pastSeasonsRead, setPastSeasonsRead] = useState(0)
   const looks = useMemo(() => statueLooks(podium), [podium])
+  // The open list of past statues reads for itself, so a change made outside it has to send it back to the server.
+  const reloadWithPastSeasons = () => {
+    setPastSeasonsRead((current) => current + 1)
+    onReload()
+  }
 
   useEffect(() => {
     if (revealing) noteRevealSeen(season.id)
@@ -348,10 +354,15 @@ export function BoardSections({
         }}
         onLinkedInOff={async () => {
           await turnOffLinkedIn(season.id)
-          onReload()
+          reloadWithPastSeasons()
         }}
       >
-        <OwnPastSeasons currentSeason={currentSeason} language={language} onChanged={onReload} />
+        <OwnPastSeasons
+          currentSeason={currentSeason}
+          language={language}
+          revision={pastSeasonsRead}
+          onChanged={onReload}
+        />
       </OwnRecordCard>
       <section className="board-list-card" aria-labelledby="board-list-title">
         <div className="board-list-head">
@@ -394,14 +405,12 @@ export function BoardSections({
         </a>
       </section>
       <footer className="board-footer">
-        <a href={takedownHref(contactEmail, copy.takedown)}>{copy.takedown}</a>
-        <span aria-hidden="true"> · </span>
-        <PrivacyLink language={language} />
+        <BoardNoticeLinks contactEmail={contactEmail} language={language} />
         <DeleteOwnRecords
           language={language}
           onDelete={async () => {
             await deleteOwnRecords()
-            onReload()
+            reloadWithPastSeasons()
           }}
         />
         <ConfirmedAction
@@ -434,12 +443,24 @@ export function BoardSections({
             onDelete={async () => {
               await deleteOwnRecords()
               setListing(false)
-              onReload()
+              reloadWithPastSeasons()
             }}
             onClose={() => setListing(false)}
           />
         </div>
       )}
+    </>
+  )
+}
+
+/** How to ask for a record's removal, and the privacy notice: the foot of the board and of the hall of fame. */
+export function BoardNoticeLinks({ contactEmail, language }: { contactEmail: string; language: AppLanguage }) {
+  const copy = languageCopy[language].baseball.leaderboard
+  return (
+    <>
+      <a href={takedownHref(contactEmail, copy.takedown)}>{copy.takedown}</a>
+      <span aria-hidden="true"> · </span>
+      <PrivacyLink language={language} />
     </>
   )
 }
