@@ -86,28 +86,28 @@ export function afterSave(state: EditorState, sent: TownSnapshot, saved: TownSna
  * Edits always start from a fresh read of the saved town. When it cannot be read, or does not exist, the editor shows
  * its error state instead of starting from anything else, so it can never overwrite the saved town.
  */
-export function useTownEditor(townId: string | null) {
+export function useTownEditor(enabled: boolean) {
   const [attempt, setAttempt] = useState(0)
   const [state, setState] = useState<EditorState | null>(null)
   const [failedKey, setFailedKey] = useState<string | null>(null)
   const [selection, setSelection] = useState<EditorSelection>(null)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState<EditorNotice | null>(null)
-  const key = townId ? `${townId}:${attempt}` : null
+  const key = enabled ? String(attempt) : null
   const status = editorStatus(key, state, failedKey)
   const dirty = status === 'ready' && state !== null && state.current !== state.base
 
   useEffect(() => {
-    if (!townId || !key) return
+    if (!key) return
     let active = true
-    void fetchTownLayout(townId).then(
+    void fetchTownLayout().then(
       (saved) => active && setState({ key, base: saved, current: saved, history: [] }),
       () => active && setFailedKey(key),
     )
     return () => {
       active = false
     }
-  }, [key, townId])
+  }, [key])
 
   useEffect(() => {
     if (!dirty) return

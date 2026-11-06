@@ -17,9 +17,9 @@ const HallOfFamePage = lazy(() =>
  * preview opens it, and anyone else gets a card in the town's style without the derby's chunk or the camera. Its board
  * (`/baseball/ranking`) opens with the ballpark and has no preview, so nothing ranked shows while it is hidden.
  */
-export function BaseballGate({ townId }: { townId: string }) {
+export function BaseballGate() {
   const [board] = useState(() => isBoardPath(window.location.pathname))
-  const { gate, retry } = useBallparkGate(townId, !board && baseballPreview(window.location.search) !== null)
+  const { gate, retry } = useBallparkGate(!board && baseballPreview(window.location.search) !== null)
   const [language, setLanguage] = usePageLanguage()
   const copy = languageCopy[language]
 

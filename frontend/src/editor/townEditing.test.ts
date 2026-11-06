@@ -182,7 +182,7 @@ describe('town editing', () => {
     const unnamed = updateResident(broken, 'pip', { name: '', linkedInProfileUrl: 'https://example.com/in/pip' })
     const unnamedPet = { ...unnamed, pet: { ...unnamed.pet, name: { ko: '토토', en: '' } } }
     expect(getLayoutProblems(unnamedPet)).toEqual([
-      { id: 'mossbell', problem: 'town-names' },
+      { id: null, problem: 'town-names' },
       { id: 'house-juno', problem: 'owner-name' },
       { id: 'house-pip', problem: 'linkedin' },
       { id: 'pip', problem: 'resident-name' },
@@ -190,8 +190,8 @@ describe('town editing', () => {
     ])
     const owner = { ...SAMPLE_TOWN.owner, introduction: { ko: '안녕하세요', en: ' ' }, contactEmail: 'robin@' }
     expect(getLayoutProblems({ ...SAMPLE_TOWN, owner })).toEqual([
-      { id: 'mossbell', problem: 'owner-introduction' },
-      { id: 'mossbell', problem: 'contact-email' },
+      { id: null, problem: 'owner-introduction' },
+      { id: null, problem: 'contact-email' },
     ])
     const cleared = { ...owner, introduction: { ko: '', en: '' }, contactEmail: ' ' }
     expect(getLayoutProblems({ ...SAMPLE_TOWN, owner: cleared })).toEqual([])

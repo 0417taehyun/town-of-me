@@ -430,7 +430,8 @@ export type LayoutProblemKind =
   | 'resident-texts'
   | 'resident-dialogue'
   | 'owner-questions'
-export type LayoutProblem = { id: string; problem: LayoutProblemKind }
+/** `id` is the object or resident to select to fix it; `null` for what is in the town settings. */
+export type LayoutProblem = { id: string | null; problem: LayoutProblemKind }
 
 const residentProblems: ReadonlySet<LayoutProblemKind> = new Set([
   'resident-name',
@@ -444,11 +445,9 @@ export function isResidentProblem(problem: LayoutProblemKind) {
   return residentProblems.has(problem)
 }
 
-const townProblems: ReadonlySet<LayoutProblemKind> = new Set(['town-names', 'owner-introduction', 'contact-email'])
-
 /** What to select to fix `problem`; null for the owner's and pet's fields, which are in the town settings. */
 export function problemSelection({ id, problem }: LayoutProblem): EditorSelection {
-  if (townProblems.has(problem)) return null
+  if (id === null) return null
   return { kind: isResidentProblem(problem) ? 'resident' : 'object', id }
 }
 
@@ -508,13 +507,13 @@ export function getTownProblems(town: TownSnapshot): LayoutProblemKind[] {
  */
 export function getOwnerQuestionProblems(town: TownSnapshot): LayoutProblem[] {
   const blank = town.owner.questions.some(({ question, answer }) => isBlank(question) || isBlank(answer))
-  return blank ? [{ id: town.owner.residentId ?? town.id, problem: 'owner-questions' }] : []
+  return blank ? [{ id: town.owner.residentId, problem: 'owner-questions' }] : []
 }
 
 /** What the backend would reject, caught before saving so the admin can fix it in place. */
 export function getLayoutProblems(town: TownSnapshot): LayoutProblem[] {
   return [
-    ...getTownProblems(town).map((problem) => ({ id: town.id, problem })),
+    ...getTownProblems(town).map((problem) => ({ id: null, problem })),
     ...getOwnerQuestionProblems(town),
     ...town.objects.flatMap((object) => getObjectProblems(object).map((problem) => ({ id: object.id, problem }))),
     ...town.residents.flatMap((resident) =>

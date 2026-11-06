@@ -21,7 +21,7 @@ const dialogue = {
   ],
 }
 
-const wireTown = (revision = 1) => ({ ...serializeTownLayout(SAMPLE_TOWN), id: SAMPLE_TOWN.id, revision })
+const wireTown = (revision = 1) => ({ ...serializeTownLayout(SAMPLE_TOWN), revision })
 
 const savedResponse = (revision = 3) => ({ town: { ...wireTown(revision), updatedAt: '2026-10-24T00:00:00.000Z' } })
 
@@ -58,7 +58,7 @@ describe('town layout API boundary', () => {
     expect(rose.variant).toBeUndefined()
     expect(neon).toMatchObject({ id: 'lamp-1', type: 'lamp' })
     expect(neon.variant).toBeUndefined()
-    const resaved = parseTownLayout({ ...serializeTownLayout(town), id: town.id, revision: 1 })
+    const resaved = parseTownLayout({ ...serializeTownLayout(town), revision: 1 })
     expect(resaved).toEqual(town)
   })
 
@@ -81,7 +81,7 @@ describe('town layout API boundary', () => {
     })
     expect(town.owner.contactEmail).toBe('robin@example.com')
     expect(town.pet.route).toEqual(route)
-    expect(parseTownLayout({ ...serializeTownLayout(town), id: town.id, revision: 1 })).toEqual(town)
+    expect(parseTownLayout({ ...serializeTownLayout(town), revision: 1 })).toEqual(town)
     const emails = ['robin', 'robin@example', 'ro bin@example.com', `${'r'.repeat(250)}@example.com`, 42]
     const routes = [route.slice(0, 2), [...route, [60, 0]], [...route, [2, '3']], 'loop']
     const withEmail = (contactEmail: unknown) =>
@@ -136,7 +136,7 @@ describe('town layout API boundary', () => {
   it('round-trips whether the ballpark is shown, its look, rules, and scheduled rules, so an admin save keeps them', () => {
     const town = parseTownLayout({ ...wireTown(), venues: { ballpark } })
     expect(town.venues.ballpark).toEqual(ballpark)
-    expect(parseTownLayout({ ...serializeTownLayout(town), id: town.id, revision: 1 })).toEqual(town)
+    expect(parseTownLayout({ ...serializeTownLayout(town), revision: 1 })).toEqual(town)
     expect(parseTownLayout({ ...wireTown(), venues: undefined }).venues).toEqual(DEFAULT_TOWN_VENUES)
   })
 
@@ -175,16 +175,16 @@ describe('town layout API boundary', () => {
 
   it('loads the saved town, and fails instead of falling back to a built-in town when it is missing', async () => {
     const request = vi.fn(async () => Response.json(savedResponse()))
-    const town = await fetchTownLayout('mossbell', request as typeof fetch)
-    expect(request).toHaveBeenCalledWith('/v1/towns/mossbell', {
+    const town = await fetchTownLayout(request as typeof fetch)
+    expect(request).toHaveBeenCalledWith('/v1/town', {
       credentials: 'same-origin',
       headers: { Accept: 'application/json' },
     })
     expect(town.revision).toBe(3)
     const missing = vi.fn(async () => Response.json({ error: { code: 'NOT_FOUND' } }, { status: 404 }))
-    await expect(fetchTownLayout('mossbell', missing as typeof fetch)).rejects.toThrow('404')
+    await expect(fetchTownLayout(missing as typeof fetch)).rejects.toThrow('404')
     const unreachable = vi.fn(async () => new Response('Bad gateway', { status: 502 }))
-    await expect(fetchTownLayout('mossbell', unreachable as typeof fetch)).rejects.toThrow('502')
+    await expect(fetchTownLayout(unreachable as typeof fetch)).rejects.toThrow('502')
   })
 
   it('saves from the loaded revision and surfaces conflicts with their status', async () => {
@@ -196,7 +196,7 @@ describe('town layout API boundary', () => {
     })
     const saved = await saveTownLayout({ ...SAMPLE_TOWN, revision: 3 }, request as typeof fetch)
     expect(saved.revision).toBe(4)
-    expect(request.mock.calls[0][0]).toBe('/v1/admin/towns/mossbell')
+    expect(request.mock.calls[0][0]).toBe('/v1/admin/town')
     expect(request.mock.calls[0][1]).toMatchObject({ method: 'PUT', credentials: 'same-origin' })
     await expect(saveTownLayout({ ...SAMPLE_TOWN, revision: 1 }, request as typeof fetch)).rejects.toEqual(
       new TownSaveError(409),
@@ -218,14 +218,13 @@ describe('town layout API boundary', () => {
     expect(sentSecond.role).toBeNull()
     expect(sentSecond.linkedInProfileUrl).toBeNull()
     expect(sentSecond.dialogue).toBeNull()
-    const loaded = parseTownLayout({ ...serializeTownLayout(town), id: town.id, revision: 2 })
+    const loaded = parseTownLayout({ ...serializeTownLayout(town), revision: 2 })
     expect(loaded.residents[0]).toMatchObject({ dialogue, relationship: first.relationship })
     expect(loaded.residents[1]).toMatchObject({ role: { ko: '', en: '' }, dialogue: null })
     expect(loaded.residents[1].linkedInProfileUrl).toBeUndefined()
     expect(() =>
       parseTownLayout({
         ...serializeTownLayout(town),
-        id: town.id,
         revision: 2,
         residents: [{ ...sentFirst, dialogue: { ...dialogue, aboutOwner: { ko: '좋아요' } } }],
       }),

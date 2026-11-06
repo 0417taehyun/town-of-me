@@ -291,7 +291,6 @@ export function parseTownLayout(value: unknown): TownSnapshot {
   const strayResident = residents.find((resident) => !benchIds.has(resident.benchId))
   if (strayResident) throw new Error(`Resident ${strayResident.id} references an unknown bench`)
   return {
-    id: trimmedText(input.id, 'town.id'),
     name: trimmedText(input.name, 'town.name'),
     owner: parseTownOwner(input.owner, residents),
     pet: parseTownPet(input.pet),
@@ -340,12 +339,10 @@ export function serializeTownLayout(town: TownSnapshot) {
  * The town as saved. There is no built-in town to fall back on: a missing town (404) or an unreachable API rejects,
  * so visitors see the error screen and the editor pauses instead of starting from something else.
  */
-export async function fetchTownLayout(townId: string, request: typeof fetch = fetch): Promise<TownSnapshot> {
-  const response = await requestJson(`/v1/towns/${encodeURIComponent(townId)}`, {}, request)
+export async function fetchTownLayout(request: typeof fetch = fetch): Promise<TownSnapshot> {
+  const response = await requestJson('/v1/town', {}, request)
   if (!response.ok) throw new Error(`Town API returned ${response.status}`)
-  const town = parseTownLayout((await responseRecord(response)).town)
-  if (town.id !== townId) throw new Error(`Town API returned ${town.id} instead of ${townId}`)
-  return town
+  return parseTownLayout((await responseRecord(response)).town)
 }
 
 export class TownSaveError extends Error {
@@ -358,7 +355,7 @@ export class TownSaveError extends Error {
 /** Saves from the revision the editor loaded; a 409 means another save happened since then. */
 export async function saveTownLayout(town: TownSnapshot, request: typeof fetch = fetch): Promise<TownSnapshot> {
   const response = await requestJson(
-    `/v1/admin/towns/${encodeURIComponent(town.id)}`,
+    '/v1/admin/town',
     { method: 'PUT', body: JSON.stringify({ ...serializeTownLayout(town), baseRevision: town.revision }) },
     request,
   )

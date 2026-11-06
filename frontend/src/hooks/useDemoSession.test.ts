@@ -9,14 +9,13 @@ describe('session reset used by the hook', () => {
   it('removes saved state and returns seed defaults', async () => {
     const repository = new InMemoryDemoRepository(async () => SAMPLE_TOWN)
     await repository.saveSession({
-      townId: SAMPLE_TOWN.id,
       playerPosition: { x: 10, y: 2, z: 10 },
       camera: { ...CAMERA_DEFAULTS, fov: 60 },
       ui: { instructionsDismissed: true },
       profile: { ...DEFAULT_PLAYER_PROFILE, name: 'Custom', hat: 'cap' },
     })
     const reset = await resetDemoSession(repository, SAMPLE_TOWN)
-    expect(await repository.getSession(SAMPLE_TOWN.id)).toBeNull()
+    expect(await repository.getSession()).toBeNull()
     expect(reset.playerPosition).toEqual(SAMPLE_TOWN.spawn)
     expect(reset.camera).toEqual(CAMERA_DEFAULTS)
     expect(reset.profile).toEqual(DEFAULT_PLAYER_PROFILE)

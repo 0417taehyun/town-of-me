@@ -50,17 +50,15 @@ const TownEditorScene = lazy(() =>
   import('./editor/TownEditorScene').then((module) => ({ default: module.TownEditorScene })),
 )
 
-const TOWN_ID = 'mossbell'
-
 type HudPanel = 'environment' | 'help' | 'map' | null
 
 /** Picks the page before the town's hooks run. Pages change by full page load, so nginx sends each its own headers. */
 export function App() {
-  if (isBaseballPath(window.location.pathname)) return <BaseballGate townId={TOWN_ID} />
+  if (isBaseballPath(window.location.pathname)) return <BaseballGate />
   if (isPrivacyPath(window.location.pathname))
     return (
       <Suspense fallback={null}>
-        <PrivacyPage townId={TOWN_ID} />
+        <PrivacyPage />
       </Suspense>
     )
   return <TownApp />
@@ -68,12 +66,12 @@ export function App() {
 
 /** The town at `/` and its editor at `/admin`. */
 export function TownApp() {
-  const [repository] = useState(() => new InMemoryDemoRepository((townId) => fetchTownLayout(townId)))
-  const { town, session, error, save, retry } = useDemoSession(repository, TOWN_ID)
+  const [repository] = useState(() => new InMemoryDemoRepository(() => fetchTownLayout()))
+  const { town, session, error, save, retry } = useDemoSession(repository)
   const [adminMode] = useState(() => isAdminPath(window.location.pathname))
   const [loginFailed] = useState(() => new URLSearchParams(window.location.search).get('login') === 'failed')
   const adminAccess = useAdminAccess(adminMode)
-  const editor = useTownEditor(adminAccess.status === 'admin' ? TOWN_ID : null)
+  const editor = useTownEditor(adminAccess.status === 'admin')
   const editorViewCenter = useRef(new Vector3(0, 0, 4))
   const [editorView, setEditorView] = useState<EditorView>('top')
   const [editorCategory, setEditorCategory] = useState<EditorCategory>('buildings')
@@ -188,7 +186,7 @@ export function TownApp() {
     (nextStep: TownGuideStep) => {
       if (!town) return
       setGuideStep(nextStep)
-      void save(createVisitorSession(town.id, playerPosition.current, settings, profile, nextStep))
+      void save(createVisitorSession(playerPosition.current, settings, profile, nextStep))
     },
     [profile, save, settings, town],
   )
@@ -252,7 +250,7 @@ export function TownApp() {
   const enterVenue = useCallback(
     (href: string) => {
       if (!town) return
-      void save(createVisitorSession(town.id, playerPosition.current, settings, profile, guideStep)).finally(() =>
+      void save(createVisitorSession(playerPosition.current, settings, profile, guideStep)).finally(() =>
         window.location.assign(href),
       )
     },
@@ -318,7 +316,7 @@ export function TownApp() {
   const petName = town.pet.name[language]
   const applyProfile = async (nextProfile: PlayerProfile) => {
     const nextGuideStep = entered ? guideStep : 'move'
-    await save(createVisitorSession(town.id, playerPosition.current, settings, nextProfile, nextGuideStep))
+    await save(createVisitorSession(playerPosition.current, settings, nextProfile, nextGuideStep))
     setProfile(nextProfile)
     setGuideStep(nextGuideStep)
     setEntered(true)

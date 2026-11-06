@@ -104,7 +104,6 @@ export function BoardPage({ town }: { town: TownSnapshot }) {
             key={load.board.season.id}
             board={load.board}
             lastSeason={load.lastSeason}
-            town={town}
             contactEmail={contactEmail}
             currentSeason={currentSeason}
             language={language}
@@ -245,7 +244,6 @@ export function SeasonHeading({
 export function BoardSections({
   board,
   lastSeason,
-  town,
   contactEmail,
   currentSeason,
   language,
@@ -254,7 +252,6 @@ export function BoardSections({
 }: {
   board: Board
   lastSeason: Board | null
-  town: TownSnapshot
   contactEmail: string
   currentSeason: string
   language: AppLanguage
@@ -294,7 +291,7 @@ export function BoardSections({
     setShownPlates(new Set(STATUE_RANKS))
   }, [])
   const showPlate = useCallback((rank: StatueRank) => setShownPlates((current) => new Set([...current, rank])), [])
-  const sessionProfile = useMemo(() => readStoredSession(getBrowserSessionStore(), town.id)?.profile ?? null, [town.id])
+  const sessionProfile = useMemo(() => readStoredSession(getBrowserSessionStore())?.profile ?? null, [])
 
   return (
     <>
@@ -424,7 +421,7 @@ export function BoardSections({
           onConfirm={async () => {
             await forgetVisitor()
             // The character this tab plays as holds the name and link too, which the next person must not inherit.
-            clearStoredSession(getBrowserSessionStore(), town.id)
+            clearStoredSession(getBrowserSessionStore())
             window.location.reload()
           }}
         />

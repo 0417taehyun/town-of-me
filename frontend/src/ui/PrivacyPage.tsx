@@ -9,7 +9,7 @@ import { ASSET_CREDITS_PATH, linkedLanguage, privacyFacts } from './privacyNotic
 import './privacy.css'
 
 /** The privacy notice at `/privacy`: plain text in the town's style, reading from this origin only the town itself. */
-export function PrivacyPage({ townId }: { townId: string }) {
+export function PrivacyPage() {
   const [language, setLanguage] = usePageLanguage(() => linkedLanguage(window.location.search) ?? initialLanguage())
   // `undefined` until the read settles, `null` when it failed: the notice still reads without the town.
   const [town, setTown] = useState<TownSnapshot | null | undefined>(undefined)
@@ -22,13 +22,13 @@ export function PrivacyPage({ townId }: { townId: string }) {
 
   useEffect(() => {
     let active = true
-    void fetchTownLayout(townId)
+    void fetchTownLayout()
       .catch(() => null)
       .then((read) => active && setTown(read))
     return () => {
       active = false
     }
-  }, [townId])
+  }, [])
 
   return (
     <main className="privacy-page" tabIndex={0} aria-labelledby="privacy-title">

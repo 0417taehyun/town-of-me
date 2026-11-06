@@ -13,13 +13,7 @@ describe('baseball session', () => {
     expect(needsCharacter(seed)).toBe(true)
     expect(needsCharacter({ ...seed, profile: madeCharacter })).toBe(false)
     expect(needsCharacter({ ...seed, profile: { ...DEFAULT_PLAYER_PROFILE, name: 'Mika' } })).toBe(false)
-    const entered = createVisitorSession(
-      SAMPLE_TOWN.id,
-      SAMPLE_TOWN.spawn,
-      CAMERA_DEFAULTS,
-      DEFAULT_PLAYER_PROFILE,
-      'move',
-    )
+    const entered = createVisitorSession(SAMPLE_TOWN.spawn, CAMERA_DEFAULTS, DEFAULT_PLAYER_PROFILE, 'move')
     expect(needsCharacter(entered)).toBe(false)
   })
 

@@ -7,7 +7,6 @@ import { DEFAULT_PLAYER_PROFILE } from './playerProfile'
 const noTown = () => Promise.reject(new Error('These tests load no town'))
 
 const session = {
-  townId: 'mossbell',
   playerPosition: { x: 1, y: 2, z: 3 },
   camera: { ...CAMERA_DEFAULTS },
   ui: { instructionsDismissed: true },
@@ -22,7 +21,7 @@ describe('InMemoryDemoRepository', () => {
       removeItem: (key: string) => void values.delete(key),
     }
     await new InMemoryDemoRepository(noTown, sessionStore).saveSession(session)
-    expect(await new InMemoryDemoRepository(noTown, sessionStore).getSession('mossbell')).toEqual({
+    expect(await new InMemoryDemoRepository(noTown, sessionStore).getSession()).toEqual({
       ...session,
       profile: DEFAULT_PLAYER_PROFILE,
     })
@@ -31,7 +30,7 @@ describe('InMemoryDemoRepository', () => {
   it("resumes a guide saved at the pet step's old name instead of stalling on an unknown step", async () => {
     const stored = JSON.stringify({ ...session, ui: { instructionsDismissed: true, guideStep: 'toto' } })
     const sessionStore = { getItem: () => stored, setItem: () => undefined, removeItem: () => undefined }
-    const restored = await new InMemoryDemoRepository(noTown, sessionStore).getSession('mossbell')
+    const restored = await new InMemoryDemoRepository(noTown, sessionStore).getSession()
     expect(restored?.ui.guideStep).toBe('pet')
   })
 
@@ -48,23 +47,23 @@ describe('InMemoryDemoRepository', () => {
     await repository.saveSession({ ...session, profile })
     profile.name = 'Changed outside repository'
     profile.colors.skin = '#abcdef'
-    const loaded = await repository.getSession('mossbell')
+    const loaded = await repository.getSession()
     expect(loaded!.profile).toEqual({ ...profile, name: 'Mira', colors: { ...profile.colors, skin: '#583c30' } })
     loaded!.profile!.name = 'Changed read value'
     loaded!.profile!.colors.top = '#abcdef'
-    expect((await repository.getSession('mossbell'))!.profile!.name).toBe('Mira')
-    expect((await repository.getSession('mossbell'))!.profile!.colors.top).toBe(DEFAULT_PLAYER_PROFILE.colors.top)
+    expect((await repository.getSession())!.profile!.name).toBe('Mira')
+    expect((await repository.getSession())!.profile!.colors.top).toBe(DEFAULT_PLAYER_PROFILE.colors.top)
     await repository.saveSession(session)
-    expect((await repository.getSession('mossbell'))!.profile).toEqual(DEFAULT_PLAYER_PROFILE)
+    expect((await repository.getSession())!.profile).toEqual(DEFAULT_PLAYER_PROFILE)
   })
 
   it('returns independent values and resets sessions', async () => {
     const repository: DemoRepository = new InMemoryDemoRepository(noTown)
     await repository.saveSession(session)
-    const loaded = await repository.getSession('mossbell')
+    const loaded = await repository.getSession()
     loaded!.playerPosition.x = 99
-    expect((await repository.getSession('mossbell'))!.playerPosition.x).toBe(1)
-    await repository.resetSession('mossbell')
-    expect(await repository.getSession('mossbell')).toBeNull()
+    expect((await repository.getSession())!.playerPosition.x).toBe(1)
+    await repository.resetSession()
+    expect(await repository.getSession()).toBeNull()
   })
 })

@@ -7,7 +7,6 @@ import { normalizePlayerProfile, type PlayerProfile } from '../data/playerProfil
 
 export function createSeedSession(town: TownSnapshot): DemoSession {
   return {
-    townId: town.id,
     playerPosition: structuredClone(town.spawn),
     camera: { ...CAMERA_DEFAULTS },
     profile: normalizePlayerProfile(undefined),
@@ -17,14 +16,12 @@ export function createSeedSession(town: TownSnapshot): DemoSession {
 
 /** The session of a visitor who has entered the town, saved whenever their character or guide progress changes. */
 export function createVisitorSession(
-  townId: string,
   position: Vec3,
   camera: CameraSettings,
   profile: PlayerProfile,
   guideStep: TownGuideStep,
 ): DemoSession {
   return {
-    townId,
     playerPosition: { x: position.x, y: position.y, z: position.z },
     camera: { ...camera },
     profile,
@@ -33,12 +30,12 @@ export function createVisitorSession(
 }
 
 export async function resetDemoSession(repository: DemoRepository, town: TownSnapshot) {
-  await repository.resetSession(town.id)
+  await repository.resetSession()
   return createSeedSession(town)
 }
 
 /** Loads the town and the visitor's session; after a failure, `retry` loads both again. */
-export function useDemoSession(repository: DemoRepository, townId: string) {
+export function useDemoSession(repository: DemoRepository) {
   const [attempt, setAttempt] = useState(0)
   const [town, setTown] = useState<TownSnapshot | null>(null)
   const [session, setSession] = useState<DemoSession | null>(null)
@@ -46,7 +43,7 @@ export function useDemoSession(repository: DemoRepository, townId: string) {
 
   useEffect(() => {
     let active = true
-    void Promise.all([repository.getTown(townId), repository.getSession(townId)])
+    void Promise.all([repository.getTown(), repository.getSession()])
       .then(([loadedTown, saved]) => {
         if (!active) return
         setTown(loadedTown)
@@ -58,7 +55,7 @@ export function useDemoSession(repository: DemoRepository, townId: string) {
     return () => {
       active = false
     }
-  }, [attempt, repository, townId])
+  }, [attempt, repository])
 
   const retry = useCallback(() => {
     setError(null)

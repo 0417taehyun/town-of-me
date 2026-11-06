@@ -11,20 +11,20 @@ export type BallparkGate =
   | { status: 'open'; town: TownSnapshot }
 
 /** The town, if this page may play it (`ballparkOpens`). */
-export async function readBallparkGate(townId: string, preview: boolean): Promise<BallparkGate> {
-  const town = await fetchTownLayout(townId)
+export async function readBallparkGate(preview: boolean): Promise<BallparkGate> {
+  const town = await fetchTownLayout()
   const open = await ballparkOpens(town.venues.ballpark, preview, getSessionUser)
   return open ? { status: 'open', town } : { status: 'closed' }
 }
 
 /** Reads the town before anything of the derby loads; after a failure, `retry` reads it again. */
-export function useBallparkGate(townId: string, preview: boolean) {
+export function useBallparkGate(preview: boolean) {
   const [attempt, setAttempt] = useState(0)
   const [gate, setGate] = useState<BallparkGate>({ status: 'loading' })
 
   useEffect(() => {
     let active = true
-    void readBallparkGate(townId, preview).then(
+    void readBallparkGate(preview).then(
       (next) => active && setGate(next),
       (reason: unknown) =>
         active &&
@@ -33,7 +33,7 @@ export function useBallparkGate(townId: string, preview: boolean) {
     return () => {
       active = false
     }
-  }, [attempt, preview, townId])
+  }, [attempt, preview])
 
   const retry = useCallback(() => {
     setGate({ status: 'loading' })

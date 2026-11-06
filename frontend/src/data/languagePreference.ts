@@ -3,7 +3,6 @@ import { getBrowserSessionStore } from './InMemoryDemoRepository'
 
 type LanguageStore = Pick<Storage, 'getItem' | 'setItem'>
 
-// Outside the `town-of-me:<townId>` session keys, so no town id can collide with it.
 export const LANGUAGE_PREFERENCE_KEY = 'town-of-me-language'
 
 /**

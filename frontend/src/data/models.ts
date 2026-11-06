@@ -174,7 +174,6 @@ export const TOWN_GROUND_LIMIT = 52
 export const PET_ROUTE_POINTS = { minimum: 3, maximum: 32 } as const
 
 export type TownSnapshot = {
-  id: string
   name: string
   owner: TownOwner
   pet: TownPet
@@ -188,7 +187,6 @@ export type TownSnapshot = {
 }
 
 export type DemoSession = {
-  townId: string
   playerPosition: Vec3
   camera: CameraSettings
   profile?: PlayerProfile

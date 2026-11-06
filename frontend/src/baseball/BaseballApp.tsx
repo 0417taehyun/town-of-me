@@ -118,7 +118,7 @@ const CharacterPreviewCanvas = lazy(() =>
  */
 export function BaseballApp({ town: loadedTown }: { town: TownSnapshot }) {
   const [repository] = useState(() => new InMemoryDemoRepository(async () => loadedTown))
-  const { town, session, save } = useDemoSession(repository, loadedTown.id)
+  const { town, session, save } = useDemoSession(repository)
   const [language, setLanguage] = usePageLanguage()
   // Phones and browsers without WebGL 2 stop here, before a character or the stadium could be made; so does a stadium
   // whose graphics fail or are lost later.
