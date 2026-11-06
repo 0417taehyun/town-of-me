@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import type { Store } from './store.js'
-import { parseTownLayout, townIdentifier } from './town.js'
+import { parseTownLayout } from './town.js'
 import { inputRecord } from './validation.js'
 
 /**
@@ -8,22 +8,20 @@ import { inputRecord } from './validation.js'
  * logs why, so the server still starts.
  */
 export async function seedTown(store: Store, file: string, logger: Pick<Console, 'log' | 'warn'>): Promise<void> {
-  const seededId = await seedMissingTown(store, file).catch((error: unknown) => {
+  const seeded = await seedMissingTown(store, file).catch((error: unknown) => {
     logger.warn(`Town seed ${file} was not applied: ${error instanceof Error ? error.message : 'unknown error'}`)
-    return null
+    return false
   })
-  if (seededId) logger.log(`Seeded town ${seededId} from ${file}`)
+  if (seeded) logger.log(`Seeded the town from ${file}`)
 }
 
 /**
- * Stores the file's town (a layout plus `id`, checked like a save) as revision 1 and returns its id, or returns
- * `null` without touching anything when a town with that id already exists.
+ * Stores the file's town (a layout, checked like a save) as revision 1 and returns `true`, or returns `false` without
+ * touching anything when the store already holds a town. Seed files may carry other keys, such as an old `id`.
  */
-export async function seedMissingTown(store: Store, file: string): Promise<string | null> {
-  const input = inputRecord(JSON.parse(await readFile(file, 'utf8')), 'seed')
-  const id = townIdentifier(input.id, 'id')
-  const layout = parseTownLayout(input)
-  if (await store.getTown(id)) return null
-  await store.saveTown(id, layout, 0)
-  return id
+export async function seedMissingTown(store: Store, file: string): Promise<boolean> {
+  const layout = parseTownLayout(inputRecord(JSON.parse(await readFile(file, 'utf8')), 'seed'))
+  if (await store.getTown()) return false
+  await store.saveTown(layout, 0)
+  return true
 }

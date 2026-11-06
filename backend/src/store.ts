@@ -20,13 +20,13 @@ import type { TownLayout, TownLayoutInput } from './town.js'
 
 export interface Store extends AuthStore {
   getUser(id: string): Promise<LinkedUser | null>
-  /** `null` until the admin saves the town for the first time. */
-  getTown(id: string): Promise<TownLayout | null>
+  /** The deployment's one town; `null` until it is seeded or the admin saves it for the first time. */
+  getTown(): Promise<TownLayout | null>
   /**
    * Replaces the whole layout and increments its revision, but only while `baseRevision` is still current
    * (0 for a town that was never saved); otherwise rejects with CONFLICT and keeps the stored layout.
    */
-  saveTown(id: string, layout: TownLayoutInput, baseRevision: number): Promise<TownLayout>
+  saveTown(layout: TownLayoutInput, baseRevision: number): Promise<TownLayout>
   insertGuestbookEntry(entry: GuestbookEntry): Promise<void>
   /** Newest first; every status when `status` is omitted. */
   listGuestbookEntries(options: { status?: GuestbookStatus; limit: number }): Promise<GuestbookEntry[]>
@@ -124,7 +124,7 @@ interface SessionRow {
 
 export class MemoryStore implements Store {
   readonly users = new Map<string, LinkedUser>()
-  readonly towns = new Map<string, TownLayout>()
+  private town: TownLayout | null = null
   readonly guestbookEntries = new Map<string, GuestbookEntry>()
   readonly transactions = new Map<string, AuthTransaction>()
   readonly sessions = new Map<string, SessionRow>()
@@ -207,21 +207,19 @@ export class MemoryStore implements Store {
     return this.users.get(id) ?? null
   }
 
-  async getTown(id: string): Promise<TownLayout | null> {
-    const town = this.towns.get(id)
-    return town ? structuredClone(town) : null
+  async getTown(): Promise<TownLayout | null> {
+    return structuredClone(this.town)
   }
 
-  async saveTown(id: string, layout: TownLayoutInput, baseRevision: number): Promise<TownLayout> {
-    const currentRevision = this.towns.get(id)?.revision ?? 0
+  async saveTown(layout: TownLayoutInput, baseRevision: number): Promise<TownLayout> {
+    const currentRevision = this.town?.revision ?? 0
     if (currentRevision !== baseRevision) throw new DomainError('CONFLICT', 'The town changed since it was loaded')
     const town: TownLayout = {
       ...structuredClone(layout),
-      id,
       revision: currentRevision + 1,
       updatedAt: new Date().toISOString(),
     }
-    this.towns.set(id, town)
+    this.town = town
     return structuredClone(town)
   }
 

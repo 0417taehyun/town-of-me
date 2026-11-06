@@ -1,14 +1,19 @@
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
 import pg from 'pg'
 import {
   applyMigrations,
   DomainError,
+  MemoryStore,
   parseCharacterAppearance,
   parseGuestbookInput,
   parseTownLayout,
   parseTownVenues,
   PostgresStore,
+  seedMissingTown,
   seedTown,
   type EntrySettlement,
   type FinishedRun,
@@ -34,7 +39,8 @@ async function rejection(action: () => Promise<unknown>): Promise<unknown> {
 
 /** A town save replaces the whole layout, keeps its order and type-specific fields, and refuses stale revisions. */
 async function checkTownStore(store: Store, assert: Assert): Promise<void> {
-  assert((await store.getTown('contract-town')) === null, 'an unsaved town does not exist')
+  const seeded = await store.getTown()
+  assert(seeded, 'the seed check leaves a town')
   const lantern = { id: 'lantern-0', type: 'paperLantern', variant: 'tall-red', position: { x: 4, y: 3, z: 4 } }
   const venues = {
     ballpark: {
@@ -51,9 +57,10 @@ async function checkTownStore(store: Store, assert: Assert): Promise<void> {
     venues,
     objects: [...sampleTownLayout.objects, lantern],
   })
-  const first = await store.saveTown('contract-town', layout, 0)
-  assert(first.revision === 1 && first.id === 'contract-town', 'the first save creates revision 1')
-  const firstLoaded = await store.getTown('contract-town')
+  const first = await store.saveTown(layout, seeded.revision)
+  assert(first.revision === seeded.revision + 1 && !('id' in first), 'a save advances the revision and names no town')
+  const firstLoaded = await store.getTown()
+  assert(firstLoaded && !('id' in firstLoaded), 'a read names no town')
   assert(
     isDeepStrictEqual(firstLoaded?.movement, layout.movement) &&
       isDeepStrictEqual(firstLoaded?.owner, layout.owner) &&
@@ -77,8 +84,13 @@ async function checkTownStore(store: Store, assert: Assert): Promise<void> {
     loadedLantern?.type === lantern.type && loadedLantern.variant === lantern.variant,
     'an object kind the backend does not know keeps its type and variant',
   )
-  const stale = await rejection(() => store.saveTown('contract-town', layout, 0))
+  const stale = await rejection(() => store.saveTown(layout, seeded.revision))
   assert(stale instanceof DomainError && stale.code === 'CONFLICT', 'a save from an old revision is refused')
+  const anotherFirst = await rejection(() => store.saveTown(layout, 0))
+  assert(
+    anotherFirst instanceof DomainError && anotherFirst.code === 'CONFLICT',
+    'a first save is refused once a town exists',
+  )
 
   const road = layout.objects.find(({ type }) => type === 'road')
   const bench = layout.objects.find(({ type }) => type === 'bench')
@@ -114,10 +126,13 @@ async function checkTownStore(store: Store, assert: Assert): Promise<void> {
       ...layout.objects.filter((object) => object !== house),
     ],
   }
-  const second = await store.saveTown('contract-town', edited, first.revision)
-  assert(second.revision === 2, 'each save advances the revision')
-  const loaded = await store.getTown('contract-town')
-  assert(loaded?.revision === 2 && loaded.objects.length === edited.objects.length, 'the latest layout is returned')
+  const second = await store.saveTown(edited, first.revision)
+  assert(second.revision === first.revision + 1, 'each save advances the revision')
+  const loaded = await store.getTown()
+  assert(
+    loaded?.revision === second.revision && loaded.objects.length === edited.objects.length,
+    'the latest layout is returned',
+  )
   assert(
     isDeepStrictEqual(loaded.movement, edited.movement) &&
       isDeepStrictEqual(loaded.owner, edited.owner) &&
@@ -157,8 +172,8 @@ async function checkTownStore(store: Store, assert: Assert): Promise<void> {
       isDeepStrictEqual(resident.dialogue, layout.residents[0]?.dialogue),
     'residents round-trip with their appearance, route, bench, profile, and dialogue',
   )
-  await store.saveTown('contract-town', { ...edited, residents: [] }, 2)
-  assert((await store.getTown('contract-town'))?.residents.length === 0, 'a save removes residents left out of it')
+  await store.saveTown({ ...edited, residents: [] }, second.revision)
+  assert((await store.getTown())?.residents.length === 0, 'a save removes residents left out of it')
 }
 
 /** Behavior every Store implementation must share, so MemoryStore stays a faithful stand-in for PostgreSQL. */
@@ -223,8 +238,8 @@ export async function checkStoreContract(store: Store, assert: Assert): Promise<
   assert((await store.getUser(crypto.randomUUID())) === null, 'unknown users must resolve to null')
 
   await checkAdminEmailStore(store, identity, assert)
-  await checkTownStore(store, assert)
   await checkTownSeed(store, assert)
+  await checkTownStore(store, assert)
 
   await checkGuestbookStore(store, assert)
   await checkRunStore(store, assert)
@@ -282,20 +297,38 @@ async function checkAdminEmailStore(store: Store, identity: VerifiedLinkedInIden
   )
 }
 
+/** Writes `town` as a private seed would be, with an `id` key, and hands its path to `work`. */
+async function withSeedFile(town: unknown, work: (file: string) => Promise<void>): Promise<void> {
+  const directory = await mkdtemp(join(tmpdir(), 'town-seed-'))
+  try {
+    const file = join(directory, 'town.json')
+    await writeFile(file, JSON.stringify(town))
+    await work(file)
+  } finally {
+    await rm(directory, { recursive: true })
+  }
+}
+
 /** The sample town fills a missing town once and never overwrites the admin's edits. */
 async function checkTownSeed(store: Store, assert: Assert): Promise<void> {
+  assert((await store.getTown()) === null, 'an unsaved town does not exist')
+  assert(await seedMissingTown(new MemoryStore(), seedFile), 'the sample seed file loads')
   const warnings: string[] = []
   const logger = { log: () => undefined, warn: (message: string) => void warnings.push(message) }
-  await seedTown(store, seedFile, logger)
-  const seeded = await store.getTown('mossbell')
+  const sample = JSON.parse(await readFile(seedFile, 'utf8')) as Record<string, unknown>
+  await withSeedFile({ ...sample, id: 'Any Old Id!' }, (file) => seedTown(store, file, logger))
+  const seeded = await store.getTown()
   assert(
     seeded?.revision === 1 && seeded.owner.name.en === 'Robin' && warnings.length === 0,
-    'the sample town seeds a missing town as revision 1',
+    'a seed file with an id key seeds a missing town as revision 1',
   )
-  await store.saveTown('mossbell', { ...seeded, name: 'Edited Mossbell' }, 1)
+  await store.saveTown({ ...seeded, name: 'Edited Mossbell' }, 1)
   await seedTown(store, seedFile, logger)
-  const kept = await store.getTown('mossbell')
-  assert(kept?.revision === 2 && kept.name === 'Edited Mossbell', 'seeding never overwrites an existing town')
+  const kept = await store.getTown()
+  assert(
+    kept?.revision === 2 && kept.name === 'Edited Mossbell' && warnings.length === 0,
+    'seeding quietly leaves an existing town as it is',
+  )
   await seedTown(store, `${seedFile}.missing`, logger)
   assert(
     warnings.some((warning) => warning.includes('town.json.missing')),
@@ -894,6 +927,105 @@ async function checkVisitorRace(store: Store, assert: Assert): Promise<void> {
   )
 }
 
+/**
+ * A database filled while towns were addressed by id: its town reads and saves under the id it has, seeding adds no
+ * second one, and a database holding several reads and saves the same one and loses none.
+ */
+async function checkTownUnderAnyId(pool: pg.Pool, assert: Assert): Promise<void> {
+  const store = new PostgresStore(pool)
+  const layout = parseTownLayout(sampleTownLayout)
+  const isConflict = (error: unknown) => error instanceof DomainError && error.code === 'CONFLICT'
+  const rowsOf = async (query: string) => JSON.stringify((await pool.query(query)).rows)
+  const townRows = () => rowsOf('SELECT id, name, revision FROM towns ORDER BY id')
+  const insertTown = async (id: string, name: string, revision: number) => {
+    await pool.query(
+      `INSERT INTO towns (id, name, spawn, movement, owner, pet, venues, revision)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        id,
+        name,
+        JSON.stringify(layout.spawn),
+        JSON.stringify(layout.movement),
+        JSON.stringify(layout.owner),
+        JSON.stringify(layout.pet),
+        JSON.stringify(layout.venues),
+        revision,
+      ],
+    )
+    await pool.query(
+      `INSERT INTO town_objects (town_id, id, sort_order, type, position_x, position_y, position_z)
+       VALUES ($1, 'old-bench', 0, 'bench', 0, 0, 0)`,
+      [id],
+    )
+    await pool.query(
+      `INSERT INTO town_residents (town_id, id, sort_order, name, appearance, route, bench_object_id, seat_index)
+       VALUES ($1, 'old-resident', 0, 'Fern', $2, '[]', 'old-bench', 0)`,
+      [id, JSON.stringify(layout.residents[0]?.appearance)],
+    )
+  }
+  const logger = { log: () => undefined, warn: () => undefined }
+
+  await pool.query('DELETE FROM towns')
+  await insertTown('old-town', 'Old Town', 4)
+  const read = await store.getTown()
+  assert(
+    read?.name === 'Old Town' &&
+      read.revision === 4 &&
+      read.objects[0]?.id === 'old-bench' &&
+      read.residents[0]?.id === 'old-resident',
+    'a town stored under any id reads with its objects and residents',
+  )
+  await seedTown(store, seedFile, logger)
+  await withSeedFile({ ...sampleTownLayout, id: 'old-town' }, (file) => seedTown(store, file, logger))
+  await withSeedFile({ ...sampleTownLayout, id: 'new-town' }, (file) => seedTown(store, file, logger))
+  assert(
+    (await townRows()) === JSON.stringify([{ id: 'old-town', name: 'Old Town', revision: 4 }]),
+    'seeding adds no town to a database holding one, nor changes it, whatever id the seed names',
+  )
+  assert(isConflict(await rejection(() => store.saveTown(layout, 0))), 'a first save adds no second town')
+  assert(isConflict(await rejection(() => store.saveTown(layout, 3))), 'a stale save is refused under any id')
+  const saved = await store.saveTown(layout, 4)
+  assert(
+    saved.revision === 5 && (await townRows()) === JSON.stringify([{ id: 'old-town', name: layout.name, revision: 5 }]),
+    'a save advances the town under the id it has',
+  )
+  const savedChildren = await rowsOf(
+    `SELECT town_id, count(*)::int FROM (SELECT town_id FROM town_objects UNION ALL SELECT town_id FROM town_residents) AS child
+     GROUP BY town_id`,
+  )
+  assert(
+    savedChildren === JSON.stringify([{ town_id: 'old-town', count: layout.objects.length + layout.residents.length }]),
+    "a save replaces the objects and residents under the town's id",
+  )
+
+  await insertTown('stale-copy', 'Stale Copy', 2)
+  assert((await store.getTown())?.name === layout.name, 'a database holding several reads the most edited')
+  await store.saveTown({ ...layout, name: 'Saved Again' }, 5)
+  assert(
+    (await townRows()) ===
+      JSON.stringify([
+        { id: 'old-town', name: 'Saved Again', revision: 6 },
+        { id: 'stale-copy', name: 'Stale Copy', revision: 2 },
+      ]),
+    'a save goes to the town that reads, and leaves the others as they are',
+  )
+  assert(
+    (await rowsOf(`SELECT count(*)::int FROM town_objects WHERE town_id = 'stale-copy'`)) ===
+      JSON.stringify([{ count: 1 }]),
+    "a save leaves the other towns' objects",
+  )
+
+  await pool.query('DELETE FROM towns')
+  const raced = await Promise.allSettled([store.saveTown(layout, 0), store.saveTown(layout, 0)])
+  const refused = raced.filter(({ status }) => status === 'rejected') as PromiseRejectedResult[]
+  assert(
+    refused.length === 1 &&
+      isConflict(refused[0]?.reason) &&
+      (await rowsOf('SELECT count(*)::int FROM towns')) === JSON.stringify([{ count: 1 }]),
+    'two first saves at once make one town, and the other hears the town changed',
+  )
+}
+
 /** Runs the contract in a throwaway schema so a developer database can double as the test database. */
 export async function checkPostgresStoreContract(connectionString: string | undefined, assert: Assert): Promise<void> {
   if (!connectionString) {
@@ -922,7 +1054,7 @@ export async function checkPostgresStoreContract(connectionString: string | unde
       `UPDATE towns SET owner = owner - 'introduction' - 'contactEmail' - 'residentId' - 'questions', pet = pet - 'route',
          venues = '{}'`,
     )
-    const earlier = await new PostgresStore(pool).getTown('mossbell')
+    const earlier = await new PostgresStore(pool).getTown()
     assert(
       earlier?.owner.introduction === null &&
         earlier.owner.contactEmail === null &&
@@ -937,6 +1069,7 @@ export async function checkPostgresStoreContract(connectionString: string | unde
       }),
       'a town saved before venues existed keeps the ballpark hidden, with the default look and rules',
     )
+    await checkTownUnderAnyId(pool, assert)
   } finally {
     await pool.end()
     await administration.query(`DROP SCHEMA ${schema} CASCADE`)

@@ -24,8 +24,6 @@ import {
 /** The one ranked game: the derby at the ballpark of the town the site serves. */
 export const homeRunDerby = {
   id: 'home-run-derby',
-  // Mirrors frontend/src/App.tsx TOWN_ID: the frontend plays the ballpark of this town.
-  townId: 'mossbell',
 } as const
 
 /** The farthest a home run can carry (dm): a dead-on swing at full power with the bat level with the ball. */

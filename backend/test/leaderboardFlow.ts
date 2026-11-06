@@ -125,7 +125,7 @@ export function leaderboardHarness() {
       owner: { ...sampleTownLayout.owner, contactEmail },
       venues: { ballpark },
     })
-    await store.saveTown('mossbell', layout, (await store.getTown('mossbell'))?.revision ?? 0)
+    await store.saveTown(layout, (await store.getTown())?.revision ?? 0)
   }
 
   return { store, service, send, setBallpark }

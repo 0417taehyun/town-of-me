@@ -5,7 +5,6 @@ import { guestbookEntryNotFound, isRevisable, parseGuestbookInput, type Guestboo
 import {
   assertRankedGame,
   derbyRunFlags,
-  homeRunDerby,
   judgeDerbyRun,
   minimumRunMs,
   parseDerbySubmission,
@@ -120,8 +119,8 @@ export class BackendService {
     return actor.kind === 'linked' ? this.store.getUser(actor.userId) : Promise.resolve(null)
   }
 
-  async getTown(townId: string): Promise<TownLayout> {
-    const town = await this.store.getTown(townId)
+  async getTown(): Promise<TownLayout> {
+    const town = await this.store.getTown()
     if (!town) throw new DomainError('NOT_FOUND', 'Town not found')
     return town
   }
@@ -132,21 +131,21 @@ export class BackendService {
    * request arrives, so a save that commits in the first moment of a month may still settle against the month before;
    * that window is accepted.
    */
-  async saveTown(actor: Actor, townId: string, input: Record<string, unknown>, now = Date.now()): Promise<TownLayout> {
+  async saveTown(actor: Actor, input: Record<string, unknown>, now = Date.now()): Promise<TownLayout> {
     assertAdmin(actor)
     const baseRevision = input.baseRevision
     if (typeof baseRevision !== 'number' || !Number.isInteger(baseRevision) || baseRevision < 0) {
       throw new DomainError('INVALID_INPUT', 'baseRevision must be a non-negative integer')
     }
     const layout = parseTownLayout(input)
-    const stored = await this.store.getTown(townId)
+    const stored = await this.store.getTown()
     // A stale tab hears CONFLICT before its schedule is compared with newer work. A save that lands after this read
     // still moves the revision, so the store refuses this one rather than overwrite it.
     if ((stored?.revision ?? 0) !== baseRevision) {
       throw new DomainError('CONFLICT', 'The town changed since it was loaded')
     }
     const ballpark = settleBallparkSettings(layout.venues.ballpark, stored?.venues.ballpark ?? null, rankingMonth(now))
-    return this.store.saveTown(townId, { ...layout, venues: { ...layout.venues, ballpark } }, baseRevision)
+    return this.store.saveTown({ ...layout, venues: { ...layout.venues, ballpark } }, baseRevision)
   }
 
   /** Drafts a resident's lines for the admin to review; nothing is stored until the admin saves the town. */
@@ -349,7 +348,7 @@ export class BackendService {
   /** The town whose ballpark plays `game`, while the admin shows it: a hidden ballpark neither issues nor records runs. */
   async openBallparkTown(game: string): Promise<TownLayout> {
     assertRankedGame(game)
-    const town = await this.store.getTown(homeRunDerby.townId)
+    const town = await this.store.getTown()
     if (!town?.venues.ballpark.visible) throw new DomainError('NOT_CONFIGURED', 'The ballpark is not open')
     return town
   }
@@ -486,7 +485,7 @@ export class BackendService {
 
   /** A link the town shows already, or one a takedown blocked, cannot be claimed. */
   async assertLinkAllowed(link: LinkedInLink): Promise<void> {
-    const town = await this.store.getTown(homeRunDerby.townId)
+    const town = await this.store.getTown()
     if (isTownProfile(town, link.profileId) || (await this.store.isLinkBlocked(await linkBlockHash(link.profileId)))) {
       throw new DomainError('INVALID_INPUT', 'This link cannot be used')
     }
@@ -501,7 +500,7 @@ export class BackendService {
   /** The board's name check, against the stored town and the board's approved names. */
   async nameStatusOn(board: BoardKey, visitorHash: string, name: string | null): Promise<'pending' | 'rejected'> {
     if (name === null) return 'pending'
-    const [town, entries] = await Promise.all([this.store.getTown(homeRunDerby.townId), this.store.listEntries(board)])
+    const [town, entries] = await Promise.all([this.store.getTown(), this.store.listEntries(board)])
     return leaderboardNameStatus(name, {
       reserved: reservedNameForms(town),
       taken: takenNameForms(entries, visitorHash),
@@ -580,7 +579,7 @@ export class BackendService {
       requestedSeason === null
         ? [currentSeason, previousRankingMonth(currentSeason)]
         : [boardSeason(requestedSeason, currentSeason)]
-    const town = await this.store.getTown(homeRunDerby.townId)
+    const town = await this.store.getTown()
     const boards = await Promise.all(seasons.map((season) => this.reviewBoard({ game, season })))
     return reviewQueue(boards, { town, currentSeason, now })
   }
@@ -616,10 +615,7 @@ export class BackendService {
     assertRankedGame(game)
     const season = boardSeason(requestedSeason, rankingMonth(now))
     const wanted = new Set(parseRecordIds(ids))
-    const [town, entries] = await Promise.all([
-      this.store.getTown(homeRunDerby.townId),
-      this.store.listEntries({ game, season }),
-    ])
+    const [town, entries] = await Promise.all([this.store.getTown(), this.store.listEntries({ game, season })])
     const found = entries.filter((entry) => wanted.has(entry.id))
     return Object.fromEntries(found.map((entry) => [entry.id, overlapWarnings(entry, entries, town)]))
   }

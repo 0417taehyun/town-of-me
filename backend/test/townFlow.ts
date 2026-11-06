@@ -135,7 +135,7 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
 
   function save(body: unknown, cookie: string, headers: Record<string, string> = { Origin: origin }) {
     return api(
-      new Request(`${origin}/v1/admin/towns/mossbell`, {
+      new Request(`${origin}/v1/admin/town`, {
         method: 'PUT',
         headers: { ...headers, Cookie: cookie, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -144,7 +144,7 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
   }
 
   async function load(): Promise<Response> {
-    return api(new Request(`${origin}/v1/towns/mossbell`))
+    return api(new Request(`${origin}/v1/town`))
   }
 
   const member = await signedIn('town-member')
@@ -373,10 +373,6 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
       secondResident.dialogue === null,
     'a resident may have no texts or dialogue yet',
   )
-  assert(
-    (await api(new Request(`${origin}/v1/towns/Not_A_Town`))).status === 404,
-    'malformed town ids do not reach the store',
-  )
 
   const source = {
     name: 'Maple',
@@ -412,11 +408,12 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
       JSON.stringify(sourcesSeen[0]) === JSON.stringify(source),
     "the draft is generated from only the name, role, relationship, reference, and owner's name",
   )
-  await checkBallparkRuleSchedule(store, assert)
+  await checkBallparkRuleSchedule(assert)
 }
 
 /** The ballpark rules change only between KST months, and the server decides which rules are in effect. */
-async function checkBallparkRuleSchedule(store: MemoryStore, assert: Assert): Promise<void> {
+async function checkBallparkRuleSchedule(assert: Assert): Promise<void> {
+  const store = new MemoryStore()
   const service = new BackendService(store)
   const admin = { kind: 'linked', userId: 'schedule-admin', role: 'admin' } as const
   // 23:59:59 on December 31 in Seoul, which keeps no daylight saving time.
@@ -424,10 +421,10 @@ async function checkBallparkRuleSchedule(store: MemoryStore, assert: Assert): Pr
   // Midnight on January 1 in Seoul, while UTC and the Americas are still in December.
   const firstSecondOfJanuary = Date.parse('2025-12-31T15:00:00Z')
   const january = { fromMonth: '2026-01', rules: { pitchCount: 7, difficulty: 'hard' } }
-  const saveIn = (townId: string, ballpark: Record<string, unknown>, baseRevision: number, now: number) =>
-    service.saveTown(admin, townId, { ...sampleTownLayout, venues: { ballpark }, baseRevision }, now)
+  const saveIn = (townService: BackendService, ballpark: Record<string, unknown>, baseRevision: number, now: number) =>
+    townService.saveTown(admin, { ...sampleTownLayout, venues: { ballpark }, baseRevision }, now)
   const save = (ballpark: Record<string, unknown>, baseRevision: number, now: number) =>
-    saveIn('rulebook', ballpark, baseRevision, now)
+    saveIn(service, ballpark, baseRevision, now)
   const refusalCode = (ballpark: Record<string, unknown>, baseRevision: number, now: number) =>
     save(ballpark, baseRevision, now).then(
       () => null,
@@ -470,7 +467,7 @@ async function checkBallparkRuleSchedule(store: MemoryStore, assert: Assert): Pr
     'the rules a save sends, as a stale editor tab would, never change the rules in effect',
   )
   const api = createApi({ service, authStore: store, allowedOrigins: new Set([origin]), frontendUrl: origin })
-  const read = await api(new Request(`${origin}/v1/towns/rulebook`))
+  const read = await api(new Request(`${origin}/v1/town`))
   assert(
     isDeepStrictEqual(((await read.json()) as { town: { venues: { ballpark: unknown } } }).town.venues.ballpark, {
       visible: false,
@@ -537,27 +534,29 @@ async function checkBallparkRuleSchedule(store: MemoryStore, assert: Assert): Pr
 
   // Two months ahead, as a server that let any later month be scheduled could have stored.
   const march = { fromMonth: '2026-03', rules: { pitchCount: 8, difficulty: 'hard' } }
-  await store.saveTown(
-    'earlier-schedule',
+  const earlierStore = new MemoryStore()
+  await earlierStore.saveTown(
     parseTownLayout({ ...sampleTownLayout, venues: { ballpark: { scheduledRules: march } } }),
     0,
   )
-  const resent = await saveIn('earlier-schedule', { scheduledRules: march }, 1, lastSecondOfDecember)
+  const resent = await saveIn(new BackendService(earlierStore), { scheduledRules: march }, 1, lastSecondOfDecember)
   assert(
     isDeepStrictEqual(resent.venues.ballpark.scheduledRules, march),
     'a stored schedule sent back unchanged is kept, even for a month a new schedule could not start in',
   )
 
-  await saveIn('unsent-schedule', { scheduledRules: january }, 0, lastSecondOfDecember)
-  const promotedUnsent = await saveIn('unsent-schedule', {}, 1, firstSecondOfJanuary)
+  const unsent = new BackendService(new MemoryStore())
+  await saveIn(unsent, { scheduledRules: january }, 0, lastSecondOfDecember)
+  const promotedUnsent = await saveIn(unsent, {}, 1, firstSecondOfJanuary)
   assert(
     isDeepStrictEqual(promotedUnsent.venues.ballpark.rules, january.rules) &&
       !('scheduledRules' in promotedUnsent.venues.ballpark),
     'from the first second of its KST month, a save that leaves the schedule out still promotes it into the rules',
   )
 
-  await saveIn('cancelled-schedule', { scheduledRules: january }, 0, lastSecondOfDecember)
-  const cancelled = await saveIn('cancelled-schedule', {}, 1, lastSecondOfDecember)
+  const cancelledTown = new BackendService(new MemoryStore())
+  await saveIn(cancelledTown, { scheduledRules: january }, 0, lastSecondOfDecember)
+  const cancelled = await saveIn(cancelledTown, {}, 1, lastSecondOfDecember)
   assert(
     !('scheduledRules' in cancelled.venues.ballpark),
     'before its KST month comes, a save that leaves the schedule out cancels it',

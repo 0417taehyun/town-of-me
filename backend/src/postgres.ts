@@ -38,6 +38,9 @@ import {
 } from './town.js'
 
 const migrationLockKey = 7_301_202_610
+// The deployment's one town, under whatever id its database holds it. A database that somehow holds several keeps them
+// all, and reads and saves both take the most edited, so they always agree.
+const currentTownId = 'SELECT id FROM towns ORDER BY revision DESC, updated_at DESC, id LIMIT 1'
 // The first key of the two-key advisory locks that serialize one visitor's runs and records (`lockVisitorGame`).
 const visitorGameLockSpace = 7_301_203
 
@@ -266,24 +269,23 @@ export class PostgresStore implements Store {
   }
 
   /** One statement, so the objects and residents always come from the same committed save. */
-  async getTown(id: string): Promise<TownLayout | null> {
+  async getTown(): Promise<TownLayout | null> {
     const { rows } = await this.pool.query<TownRow>(
       `SELECT town.*,
          COALESCE((SELECT jsonb_agg(to_jsonb(object) ORDER BY object.sort_order)
                    FROM town_objects object WHERE object.town_id = town.id), '[]') AS objects,
          COALESCE((SELECT jsonb_agg(to_jsonb(resident) ORDER BY resident.sort_order)
                    FROM town_residents resident WHERE resident.town_id = town.id), '[]') AS residents
-       FROM towns town WHERE town.id = $1`,
-      [id],
+       FROM towns town WHERE town.id = (${currentTownId})`,
     )
     return mapFirstRow(rows, toTown)
   }
 
-  async saveTown(id: string, layout: TownLayoutInput, baseRevision: number): Promise<TownLayout> {
+  async saveTown(layout: TownLayoutInput, baseRevision: number): Promise<TownLayout> {
     return inTransaction(this.pool, async (client) => {
-      const saved = await claimTownRevision(client, id, layout, baseRevision)
-      await client.query('DELETE FROM town_residents WHERE town_id = $1', [id])
-      await client.query('DELETE FROM town_objects WHERE town_id = $1', [id])
+      const saved = await claimTownRevision(client, layout, baseRevision)
+      await client.query('DELETE FROM town_residents WHERE town_id = $1', [saved.id])
+      await client.query('DELETE FROM town_objects WHERE town_id = $1', [saved.id])
       await client.query(
         `INSERT INTO town_objects
          (town_id, id, sort_order, type, position_x, position_y, position_z, rotation, scale, color, properties)
@@ -294,7 +296,7 @@ export class PostgresStore implements Store {
            position_z double precision, rotation double precision, scale double precision, color text,
            properties jsonb
          )`,
-        [id, JSON.stringify(layout.objects.map(toTownObjectRecord))],
+        [saved.id, JSON.stringify(layout.objects.map(toTownObjectRecord))],
       )
       await client.query(
         `INSERT INTO town_residents
@@ -308,9 +310,9 @@ export class PostgresStore implements Store {
            seat_index integer, start_seated boolean, role jsonb, relationship jsonb,
            linkedin_profile_url text, reference jsonb, dialogue jsonb
          )`,
-        [id, JSON.stringify(layout.residents.map(toTownResidentRecord))],
+        [saved.id, JSON.stringify(layout.residents.map(toTownResidentRecord))],
       )
-      return { ...structuredClone(layout), id, revision: saved.revision, updatedAt: saved.updated_at.toISOString() }
+      return { ...structuredClone(layout), revision: saved.revision, updatedAt: saved.updated_at.toISOString() }
     })
   }
 
@@ -942,15 +944,16 @@ export function toGuestbookEntry(row: GuestbookRow): GuestbookEntry {
   }
 }
 
-/** Inserts the first revision or advances the current one; the row lock serializes concurrent saves. */
+/**
+ * Inserts the first revision or advances the current one; the row lock serializes concurrent saves. The first town
+ * takes the column's default id, so two first saves at once collide on the primary key rather than make a second town.
+ */
 export async function claimTownRevision(
   client: PoolClient,
-  id: string,
   layout: TownLayoutInput,
   baseRevision: number,
-): Promise<{ revision: number; updated_at: Date }> {
+): Promise<{ id: string; revision: number; updated_at: Date }> {
   const townFields = [
-    id,
     layout.name,
     JSON.stringify(layout.spawn),
     JSON.stringify(layout.movement),
@@ -960,16 +963,17 @@ export async function claimTownRevision(
   ]
   const { rows } =
     baseRevision === 0
-      ? await client.query<{ revision: number; updated_at: Date }>(
-          `INSERT INTO towns (id, name, spawn, movement, owner, pet, venues, revision)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, 1)
-           ON CONFLICT (id) DO NOTHING RETURNING revision, updated_at`,
+      ? await client.query<{ id: string; revision: number; updated_at: Date }>(
+          `INSERT INTO towns (name, spawn, movement, owner, pet, venues, revision)
+           SELECT $1, $2::jsonb, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, 1
+           WHERE NOT EXISTS (SELECT 1 FROM towns)
+           ON CONFLICT (id) DO NOTHING RETURNING id, revision, updated_at`,
           townFields,
         )
-      : await client.query<{ revision: number; updated_at: Date }>(
-          `UPDATE towns SET name = $2, spawn = $3, movement = $4, owner = $5, pet = $6, venues = $7,
+      : await client.query<{ id: string; revision: number; updated_at: Date }>(
+          `UPDATE towns SET name = $1, spawn = $2, movement = $3, owner = $4, pet = $5, venues = $6,
              revision = revision + 1, updated_at = now()
-           WHERE id = $1 AND revision = $8 RETURNING revision, updated_at`,
+           WHERE id = (${currentTownId}) AND revision = $7 RETURNING id, revision, updated_at`,
           [...townFields, baseRevision],
         )
   const saved = rows[0]
@@ -1013,7 +1017,6 @@ export function toTownResidentRecord(resident: TownLayoutInput['residents'][numb
 
 export function toTown(row: TownRow): TownLayout {
   return {
-    id: row.id,
     name: row.name,
     owner: { introduction: null, contactEmail: null, residentId: null, questions: [], ...row.owner },
     pet: { route: null, ...row.pet },

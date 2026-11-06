@@ -148,7 +148,6 @@ export interface TownVenues {
 }
 
 export interface TownLayout {
-  id: string
   name: string
   owner: TownOwner
   pet: TownPet
@@ -167,9 +166,7 @@ export type TownLayoutInput = Pick<
   'name' | 'owner' | 'pet' | 'spawn' | 'movement' | 'venues' | 'objects' | 'residents'
 >
 
-export const townIdPattern = '[a-z0-9][a-z0-9-]{0,63}'
-
-const townIdentifierPattern = new RegExp(`^${townIdPattern}$`, 'u')
+const townIdentifierPattern = /^[a-z0-9][a-z0-9-]{0,63}$/u
 const kindPattern = /^[a-z][A-Za-z0-9]{0,31}$/u
 const variantPattern = /^[a-z][A-Za-z0-9-]{0,31}$/u
 // The playable ground ends at the boundary walls (±53), which bounds the spawn, roads, and resident routes.

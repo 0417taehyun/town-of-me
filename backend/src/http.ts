@@ -22,7 +22,6 @@ import {
 } from './leaderboard.js'
 import { reviewedEntry, reviewedRun, type EntryReviewAction } from './leaderboardReview.js'
 import { BackendService, type Leaderboard, type RunOutcome } from './service.js'
-import { townIdPattern } from './town.js'
 import { decodeComponent, inputRecord, invalidInput } from './validation.js'
 
 const sessionCookie = '__Host-tom_session'
@@ -186,11 +185,9 @@ const routes: readonly Route[] = [
   route('POST', `/v1/admin/games/(${gameId})/runs/rejection`, async ({ request, pathId, actor, dependencies }) =>
     json(await dependencies.service.rejectListedRuns(await actor(), pathId, await objectBody(request))),
   ),
-  route('GET', `/v1/towns/(${townIdPattern})`, async ({ pathId, dependencies }) =>
-    json({ town: await dependencies.service.getTown(pathId) }),
-  ),
-  route('PUT', `/v1/admin/towns/(${townIdPattern})`, async ({ request, pathId, actor, dependencies }) =>
-    json({ town: await dependencies.service.saveTown(await actor(), pathId, await objectBody(request)) }),
+  route('GET', '/v1/town', async ({ dependencies }) => json({ town: await dependencies.service.getTown() })),
+  route('PUT', '/v1/admin/town', async ({ request, actor, dependencies }) =>
+    json({ town: await dependencies.service.saveTown(await actor(), await objectBody(request)) }),
   ),
   route('POST', '/v1/admin/resident-dialogues', async ({ request, actor, dependencies }) =>
     json({ dialogue: await dependencies.service.draftResidentDialogue(await actor(), await objectBody(request)) }),

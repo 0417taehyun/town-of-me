@@ -20,7 +20,8 @@ browser ── frontend (Vite, React, React Three Fiber) ── /v1 ──▶ ba
 
 ## What lives where
 
-Nothing personal is in the repository. A fork changes its owner, pet, residents, and references at `/admin`.
+Nothing personal is in the repository. A fork changes its owner, pet, residents, and references at `/admin`. Each
+deployment is one town: no code, URL, or response names it.
 
 | Data                                                                                                                           | Stored in                                                  | Changed by                      |
 | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- | ------------------------------- |
@@ -233,7 +234,7 @@ server.mjs (Node runtime: .env, store, seeding, HTTP)
 | `admins.ts`, `auth.ts`         | Admin emails, sessions, and setting the role from the admin list at every sign-in. |
 | `linkedin.ts`                  | LinkedIn OIDC adapter (ID tokens verified with `jose`).                            |
 | `openrouter.ts`                | Resident dialogue drafts; output validated like a town save.                       |
-| `seed.ts`                      | Stores the seed town at startup when no town with its id exists.                   |
+| `seed.ts`                      | Stores the seed town at startup when the store holds no town.                      |
 | `validation.ts`                | Shared input helpers; every request body passes through them.                      |
 | `derbyJudge/`                  | Copy of the frontend's `baseball/game/` judge: scores a run again from its log.    |
 | `homeRunDerby.ts`              | The ranked derby: its result's shape, the server's score, and the review checks.   |
@@ -246,10 +247,10 @@ Tests run with `npm test` through `test/run.ts`. `test/storeContract.ts` runs th
 
 ## Main flows
 
-- **Visit:** `GET /v1/towns/:id` → `townApi.ts` parses it (unknown kinds and variants dropped) → the scene chunk draws
+- **Visit:** `GET /v1/town` → `townApi.ts` parses it (unknown kinds and variants dropped) → the scene chunk draws
   it. A failed request shows `Try again`; there is no built-in town.
 - **Edit:** LinkedIn sign-in → session cookie → `/admin` loads the saved town → edits stay local → `PUT
-/v1/admin/towns/:id` with the revision it loaded (a stale revision gets `409`).
+/v1/admin/town` with the revision it loaded (a stale revision gets `409`).
 - **Guestbook:** anyone writes one note a day per browser cookie; notes stay pending until an admin approves them.
 - **Ranked run:** the derby asks for a run (rules for the KST month, a seed) → plays it → sends the raw swing numbers
   → the server scores them again and keeps the visitor's best record for the month the run was issued in. A listed

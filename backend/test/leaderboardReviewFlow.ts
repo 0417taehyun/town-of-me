@@ -883,7 +883,7 @@ async function checkTownLinkWarning(assert: Assert): Promise<void> {
   assert(!(await warningsOf('warned-owner')).includes('town-link'), 'a link the town does not show raises no warning')
   const residents = [{ ...sampleTownLayout.residents[0], linkedInProfileUrl: 'https://linkedin.com/in/FERN-sample' }]
   const layout = parseTownLayout({ ...sampleTownLayout, residents, venues: { ballpark: { visible: true } } })
-  await store.saveTown('mossbell', layout, (await store.getTown('mossbell'))?.revision ?? 0)
+  await store.saveTown(layout, (await store.getTown())?.revision ?? 0)
   assert(
     (await warningsOf('warned-owner')).includes('town-link') &&
       !(await warningsOf('warned-other')).includes('town-link'),

@@ -95,8 +95,8 @@ Create a handler with `createApi({ service, authStore, linkedInOidc, allowedOrig
 - `POST /v1/games/:game/runs` and `POST /v1/games/:game/runs/:id/result` start and record a ranked run, `GET /v1/games/:game/leaderboard`, `GET /v1/games/:game/podium`, and `GET /v1/games/:game/hall-of-fame` read the monthly board, its statues, and every finished season's statues, `PUT` and `DELETE /v1/games/:game/entries/own` change or delete the visitor's records, and `POST /v1/games/:game/entries/:id/report` reports one; see [Ranked runs](#ranked-runs)
 - `POST /v1/visitor/forget` clears this browser's visitor cookie and returns `204`; see [Ranked runs](#ranked-runs)
 - `GET /v1/admin/games/:game/review`, `GET /v1/admin/games/:game/entries`, `GET /v1/admin/games/:game/runs/:id`, and the `/v1/admin/games/:game/entries/:id/…` and `/v1/admin/games/:game/runs/…` actions review the boards for an admin session; see [Board review](#board-review)
-- `GET /v1/towns/:id` returns `{ town }` with `revision`, or `404` when no such town exists
-- `PUT /v1/admin/towns/:id` with `{ baseRevision, name, owner, pet, spawn, movement, venues, objects, residents }` replaces the town for an admin session (`401` signed out, `403` otherwise) and returns the saved `{ town }`; `baseRevision` is `0` for the first save
+- `GET /v1/town` returns the deployment's one `{ town }` with `revision`, or `404` until it has one
+- `PUT /v1/admin/town` with `{ baseRevision, name, owner, pet, spawn, movement, venues, objects, residents }` replaces the town for an admin session (`401` signed out, `403` otherwise) and returns the saved `{ town }`; `baseRevision` is `0` for the first save
 - `POST /v1/admin/resident-dialogues` with `{ name, role, relationship, reference, owner }` (`owner` is the owner's `{ ko, en }` name) returns a drafted `{ dialogue }` for an admin session without storing it; the admin saves it with the town
 - `GET /v1/admin/admins` returns `{ admins: [{ email, createdAt }], currentEmail }` sorted by email, where `currentEmail` is the signed-in admin's own address; `POST /v1/admin/admins` with `{ email }` returns `201 { admin }` (`409` if listed, `400` if invalid), and the account becomes admin at its next sign-in; `DELETE /v1/admin/admins/:email` returns `204` and demotes and signs out that email's users at once, or `409` for the admin's own email or the last listed one and `404` when it is not listed. All three need an admin session. Emails are stored trimmed and lowercase, at most 254 characters, shaped like `name@example.com`
 
@@ -110,7 +110,7 @@ Visitors no longer sign in, so the guestbook is anonymous and moderated:
 
 ## Ranked runs
 
-The home run derby (`home-run-derby`, the ballpark of the `mossbell` town the frontend plays) keeps a monthly board.
+The home run derby (`home-run-derby`, the ballpark of the deployment's town) keeps a monthly board.
 Its season is the KST (UTC+9) calendar month written `YYYY-MM`, and a run belongs to the season it was issued in,
 whenever its result arrives. Any other game id returns `404`. The client never sends a score anyone keeps: the server
 judges the run again with `src/derbyJudge/`, the frontend judge's copy (`test/derbyJudgeVectors.json` holds both to
@@ -261,11 +261,11 @@ When `OPENROUTER_API_KEY` is present, the server injects an OpenRouter resident-
 
 ## Town seed
 
-At startup the server stores the town in `seed/town.json` (a fictional sample: a layout plus `id`, validated like a save) as revision 1 when no town with that `id` exists; it never overwrites an existing town. `TOWN_SEED_PATH` replaces the file and is resolved against the repository root, like the root `.env`. A missing or invalid file is logged and the server starts without it. With `MemoryStore`, this gives every restart the sample town.
+At startup the server stores the town in `seed/town.json` (a fictional sample: a layout, validated like a save; any other key, such as an old `id`, is ignored) as revision 1 when the database holds no town; it never overwrites an existing town. `TOWN_SEED_PATH` replaces the file and is resolved against the repository root, like the root `.env`. A missing or invalid file is logged and the server starts without it. With `MemoryStore`, this gives every restart the sample town.
 
 ## Data and deletion
 
-Before the first deployment the schema lives in one squashed `001_initial.sql`; after a deployment, add new numbered files instead of editing applied ones. When `DATABASE_URL` is set, the server uses `PostgresStore` and applies pending files from [`migrations/`](migrations/) in name order at startup. Applied files are recorded in `schema_migrations`, all pending files run in one transaction, and an advisory lock serializes instances that start together. Without `DATABASE_URL`, the server warns and uses `MemoryStore`. Both stores implement the `Store` contract in `src/store.ts` with parameterized SQL and transactions on the PostgreSQL side. Localized JSON objects store both `ko` and `en`, enforced by database checks. Public guestbook reads must always require `status = 'approved'`.
+The schema lives in numbered files in [`migrations/`](migrations/); add a new numbered file for a change instead of editing an applied one. A deployment holds one town, in the `towns` table under whatever `id` its database gave it; no route or response names it. When `DATABASE_URL` is set, the server uses `PostgresStore` and applies pending files from [`migrations/`](migrations/) in name order at startup. Applied files are recorded in `schema_migrations`, all pending files run in one transaction, and an advisory lock serializes instances that start together. Without `DATABASE_URL`, the server warns and uses `MemoryStore`. Both stores implement the `Store` contract in `src/store.ts` with parameterized SQL and transactions on the PostgreSQL side. Localized JSON objects store both `ko` and `en`, enforced by database checks. Public guestbook reads must always require `status = 'approved'`.
 
 The repository configures no database backups. Whoever turns on volume snapshots or `pg_dump` must add how long backups are kept to the notice at `/privacy` (`privacy` in `frontend/src/i18n/language.ts`), because a record someone deleted stays in a backup for that long. Restoring one brings back whatever was taken down or deleted after it was made, so before the restored database takes traffic, handle the takedown requests in the operator's mailbox again. A visitor's own deletion leaves nothing to replay, since the server keeps no trace of who asked; the notice must say those can come back too.
 
