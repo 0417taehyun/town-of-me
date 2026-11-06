@@ -5,10 +5,6 @@ what changed.
 
 ## Town and editor
 
-- Before setting `town.venues.ballpark.visible` to true, build the admin's board review tab beside `GuestbookReview`
-  in the editor. Only the backend routes (`/v1/admin/games/:game/...`) exist, so until then names stay "reviewing",
-  LinkedIn links cannot be approved, and disqualifying, taking down, or accepting a held run takes raw API calls, while
-  the privacy notice's derby section promises those checks and takedowns.
 - Editor phase 2: a scatter tool that fills an area with trees, flowers, grass, birds, or clouds at a chosen density
   (as OpenRCT2's scenery scatter tool does), and an area tool that clears one category.
 - Let route handles (residents' and the pet's) move with the keyboard, not only by dragging.

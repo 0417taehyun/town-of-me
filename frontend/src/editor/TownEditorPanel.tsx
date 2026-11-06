@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState, type MutableRefObject, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useEffectEvent, useState, type MutableRefObject, type ReactNode } from 'react'
 import { MathUtils, type Vector3 } from 'three'
 import { CURRENT_RULES_PREVIEW_PATH, NEXT_RULES_PREVIEW_PATH } from '../baseball/baseballRoute'
 import {
@@ -31,6 +31,7 @@ import { languageCopy, monthName } from '../i18n/language'
 import { resolveBallparkPalette } from '../scene/venues/ballpark/ballparkThemes'
 import { getVenueGatePoint } from '../scene/venues/venuePlacements'
 import { AppearanceSection, ColorChoice } from '../ui/CharacterAppearanceControls'
+import { CloseButton } from '../ui/CloseButton'
 import {
   duplicateObjects,
   getRemovalBlocks,
@@ -106,6 +107,18 @@ import type { TownEditor } from './useTownEditor'
 import { getPetBlockedLegs, getResidentBlockedLegs } from './walkCrossings'
 
 type Copy = (typeof languageCopy)[AppLanguage]['editor']
+
+// In its own chunk, so the editor's first load carries none of the derby. No error boundary stands above the panel, so
+// a chunk that fails to load (a deploy replaced it) must not take unsaved edits down with it. The try covers the whole
+// load: Vite preloads the chunk's styles before `import()` runs, outside any `.then` chained on it.
+const BoardReview = lazy(async () => {
+  try {
+    const { BoardReview: LoadedBoardReview } = await import('./BoardReview')
+    return { default: LoadedBoardReview }
+  } catch {
+    return { default: BoardReviewUnavailable }
+  }
+})
 type Edit = TownEditor['edit']
 
 const seatOptions = [1, 2].map((seats) => ({ value: seats, label: String(seats) }))
@@ -1296,6 +1309,19 @@ export function Inspector({
   )
 }
 
+export function BoardReviewUnavailable({ language, onClose }: { language: AppLanguage; onClose: () => void }) {
+  const copy = languageCopy[language].boardReview
+  return (
+    <div className="panel-scrim guestbook-review-scrim" role="presentation">
+      <section className="guestbook-review" role="alertdialog" aria-modal="true" aria-labelledby="board-review-failure">
+        <CloseButton autoFocus onClick={onClose} label={copy.close} />
+        <h2>{copy.title}</h2>
+        <p id="board-review-failure">{copy.unavailable}</p>
+      </section>
+    </div>
+  )
+}
+
 export function TownEditorPanel({
   language,
   editor,
@@ -1328,7 +1354,7 @@ export function TownEditorPanel({
   const copy = languageCopy[language].editor
   const adminCopy = languageCopy[language].admin
   const { edit, selection, select, undo, notice } = editor
-  const [dialog, setDialog] = useState<'guestbook' | 'admins' | null>(null)
+  const [dialog, setDialog] = useState<'guestbook' | 'board' | 'admins' | null>(null)
   const [detailsHidden, setDetailsHidden] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   // Choosing anything to edit, here or on the map, closes the town settings.
@@ -1472,6 +1498,9 @@ export function TownEditorPanel({
           <button className="text-button" type="button" onClick={() => setDialog('guestbook')}>
             {languageCopy[language].review.open}
           </button>
+          <button className="text-button" type="button" onClick={() => setDialog('board')}>
+            {languageCopy[language].boardReview.open}
+          </button>
           <button className="text-button" type="button" onClick={() => setDialog('admins')}>
             {languageCopy[language].admins.open}
           </button>
@@ -1544,6 +1573,11 @@ export function TownEditorPanel({
         <span className="editor-hint-touch">{view === 'visitor' ? copy.touchVisitorControls : copy.touchControls}</span>
       </p>
       {dialog === 'guestbook' && <GuestbookReview language={language} onClose={() => setDialog(null)} />}
+      {dialog === 'board' && (
+        <Suspense fallback={null}>
+          <BoardReview language={language} onClose={() => setDialog(null)} />
+        </Suspense>
+      )}
       {dialog === 'admins' && <AdminEmails language={language} onClose={() => setDialog(null)} />}
     </div>
   )

@@ -154,6 +154,10 @@ the role again on every save.
   saved, `Try next month's rules` plays them at `/baseball?rules=next`. Both previews open in the same tab and are never
   ranked.
 - **Guestbook review:** approve or delete notes, waiting ones first.
+- **Derby review:** the home-run derby's queue, most urgent first: approve or reject names and records, disqualify and
+  undo, check a link's code, settle reports, hide a character, take a record down, and accept or dismiss held runs.
+  `Find a record` reaches any record by season and record number or name, which is how a takedown email gets handled.
+  It loads in its own chunk when opened, and with the ballpark hidden the queue is simply empty.
 - **Admins:** add an email (it gets the editor at its next sign-in) or remove one (its sessions end at once). Your own
   email and the last one cannot be removed.
 - **Keys:** `Delete`/`Backspace` removes the selection (several objects ask first), `⌘/Ctrl+Z` undoes, and `Escape`

@@ -1,0 +1,210 @@
+/* The board review dialog widens the guestbook review's: it carries a table per run. Lives in the dialog's own chunk. */
+.guestbook-review.board-review {
+  width: min(960px, 100%);
+}
+.board-review h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+.board-review-group,
+.board-review-find {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.board-review-find {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.board-review-find-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.board-review-find-fields label {
+  display: grid;
+  flex: 1 1 200px;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.board-review-find-fields input {
+  width: 100%;
+  min-height: 34px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  font-weight: 400;
+}
+.board-review-count {
+  color: var(--muted);
+  font-weight: 500;
+}
+.board-review-item {
+  min-width: 0;
+}
+.board-review-item time {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+.board-review-marks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+}
+.board-review-mark {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(67, 80, 73, 0.09);
+  font-size: 0.68rem;
+}
+.board-review-mark.is-warning {
+  background: #f8e4b9;
+  color: #6f4a06;
+}
+.board-review-label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+.board-review-public {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.board-review-public-text {
+  display: grid;
+  flex: 1;
+  gap: 4px;
+  min-width: 0;
+}
+.board-review-portrait {
+  display: block;
+  flex: none;
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  background: rgba(67, 80, 73, 0.09);
+}
+.board-review-name {
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+.board-review-link {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+.board-review-link-id {
+  font-size: 1.2rem;
+  overflow-wrap: anywhere;
+}
+.board-review-link a {
+  font-size: 0.74rem;
+}
+.board-review-raw {
+  color: var(--muted);
+  font-size: 0.68rem;
+  overflow-wrap: anywhere;
+}
+.board-review-warnings {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #fbf0d8;
+  color: #6f4a06;
+  font-size: 0.78rem;
+  list-style: none;
+}
+.board-review-neighbours {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin: 0;
+  padding: 0;
+  font-size: 0.78rem;
+  list-style: none;
+}
+.board-review-neighbours .is-self {
+  font-weight: 700;
+}
+.board-review-reports {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  font-size: 0.8rem;
+  list-style: none;
+}
+.board-review-reports li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
+}
+.board-review-run,
+.board-review-best {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 0.8rem;
+}
+.board-review-best summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.board-review-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px 12px;
+  margin: 0;
+}
+.board-review-facts dt {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+.board-review-facts dd {
+  margin: 0;
+}
+.board-review-table {
+  overflow-x: auto;
+}
+.board-review-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+.board-review-table th,
+.board-review-table td {
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+}
+.board-review-table th:nth-child(2),
+.board-review-table td:nth-child(2),
+.board-review-table th:nth-child(8),
+.board-review-table td:nth-child(8) {
+  text-align: left;
+}
+.board-review-actions {
+  display: grid;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.board-review-check {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 0.74rem;
+}
