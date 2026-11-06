@@ -29,7 +29,6 @@ import { OwnerIntroduction } from './ui/OwnerIntroduction'
 import { EnvironmentTuner, HelpPanel, Hud } from './ui/TownHud'
 import { VirtualStick } from './ui/TouchControls'
 import { TownLoadingScreen } from './ui/TownLoadingScreen'
-import { TownMapPanel } from './ui/TownMapPanel'
 import { isBaseballPath } from './baseball/baseballRoute'
 import { BaseballGate } from './baseball/BaseballGate'
 import { isPrivacyPath } from './ui/privacyNotice'
@@ -41,6 +40,8 @@ const CharacterCreator = lazy(() =>
 )
 const GuestbookBoard = lazy(() => import('./ui/GuestbookPanel').then((module) => ({ default: module.GuestbookBoard })))
 const StatueCard = lazy(() => import('./ui/StatueCard').then((module) => ({ default: module.StatueCard })))
+// Its own chunk, so the ballpark's layout, which it reads for a shown gate, stays out of the entry every page loads.
+const TownMapPanel = lazy(() => import('./ui/TownMapPanel').then((module) => ({ default: module.TownMapPanel })))
 const AdminGate = lazy(() => import('./editor/AdminGate').then((module) => ({ default: module.AdminGate })))
 const TownEditorPanel = lazy(() =>
   import('./editor/TownEditorPanel').then((module) => ({ default: module.TownEditorPanel })),
@@ -505,12 +506,14 @@ export function TownApp() {
             />
           )}
           {hudPanel === 'map' && (
-            <TownMapPanel
-              language={language}
-              town={town}
-              playerPosition={playerPosition}
-              onClose={() => setHudPanel(null)}
-            />
+            <Suspense fallback={null}>
+              <TownMapPanel
+                language={language}
+                town={town}
+                playerPosition={playerPosition}
+                onClose={() => setHudPanel(null)}
+              />
+            </Suspense>
           )}
           {guestbookOpen && (
             <Suspense
