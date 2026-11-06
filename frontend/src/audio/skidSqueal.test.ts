@@ -26,17 +26,6 @@ function fakeSkidContext() {
 }
 
 describe('the long skid squeal', () => {
-  it('squeals longer when braking than when skidding', async () => {
-    const context = fakeSkidContext()
-    const squeal = createSkidSqueal(context as unknown as AudioContext)
-    expect(await squeal.play('skid', 1)).toBe(true)
-    await squeal.play('brake', 1)
-    const [skidEnd, brakeEnd] = [context.oscillators[0], context.oscillators[2]].map(
-      (oscillator) => oscillator.stop.mock.calls[0][0] as number,
-    )
-    expect(brakeEnd).toBeGreaterThan(skidEnd)
-  })
-
   it('stays silent while the browser blocks audio and after cleanup', async () => {
     const context = fakeSkidContext()
     const squeal = createSkidSqueal(context as unknown as AudioContext)

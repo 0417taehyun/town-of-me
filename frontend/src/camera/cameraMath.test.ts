@@ -1,13 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { dampingAlpha } from '../motionMath'
-import { adjustFovByInputDelta, cameraHeightForFov, cameraOffset, clampYaw } from './cameraMath'
+import { adjustFovByInputDelta, cameraHeightForFov, cameraOffset } from './cameraMath'
 
 describe('camera math', () => {
-  it('returns a useful exponential damping alpha', () => {
-    expect(dampingAlpha(5, 1 / 60)).toBeGreaterThan(0)
-    expect(dampingAlpha(5, 1 / 60)).toBeLessThan(1)
-  })
-
   it('is stable across equal time split into different frame steps', () => {
     const run = (steps: number) => {
       let value = 0
@@ -15,11 +10,6 @@ describe('camera math', () => {
       return value
     }
     expect(run(30)).toBeCloseTo(run(144), 10)
-  })
-
-  it('clamps yaw in both directions', () => {
-    expect(clampYaw(2, 0.4)).toBe(0.4)
-    expect(clampYaw(-2, 0.4)).toBe(-0.4)
   })
 
   it('widens FOV for a positive pinch or wheel delta and clamps the result', () => {

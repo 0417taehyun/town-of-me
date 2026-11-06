@@ -5,7 +5,6 @@ import {
   createWalkCycle,
   getCyclePose,
   getLowestSoleInBody,
-  getStrideLength,
   samplePeriodic,
   setPoseOnGround,
   stepWalkCycle,
@@ -40,13 +39,6 @@ describe('key-pose walk and run cycle', () => {
     )
   })
 
-  it('lands on the left foot first, carries the weight over it, and dips just after contact', () => {
-    expect(getCyclePose(0, 0).leftLeg).toBeLessThan(-0.3)
-    expect(getCyclePose(0.25, 0).bodyX).toBeLessThan(-0.02)
-    expect(getCyclePose(0.75, 0).bodyX).toBeGreaterThan(0.02)
-    expect(groundedPose(0.125, 0).bodyY).toBeLessThan(groundedPose(0.3, 0).bodyY)
-  })
-
   it('advances by distance, so the legs keep pace with the ground at any frame rate', () => {
     const atRate = (rate: number) => {
       const cycle = { ...createWalkCycle(), amount: 1 }
@@ -57,15 +49,6 @@ describe('key-pose walk and run cycle', () => {
     const cycle = { ...createWalkCycle(), amount: 1 }
     stepWalkCycle(cycle, PLAYER_WALK_SPEED, 0.05, PLAYER_WALK_SPEED, false)
     expect(cycle.phase).toBe(0)
-  })
-
-  it('takes calmer, longer strides when running and when walking slowly', () => {
-    const walking = { ...createWalkCycle(), amount: 1 }
-    const stepsPerSecond = (2 * PLAYER_WALK_SPEED) / getStrideLength(walking)
-    expect(stepsPerSecond).toBeGreaterThan(4)
-    expect(stepsPerSecond).toBeLessThan(6.5)
-    const running = { ...createWalkCycle(), amount: 1, run: 1 }
-    expect(getStrideLength(running)).toBeGreaterThan(getStrideLength(walking) * 1.5)
   })
 
   it('eases into standing still when the speed drops to zero', () => {

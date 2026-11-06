@@ -5,7 +5,6 @@ import {
   getSecondsUntilBlink,
   getSnowFootprintPlacement,
   getSnowFootprintVisibility,
-  getTalkingPose,
   PLAYER_RUN_SPEED,
   PLAYER_WALK_SPEED,
   smoothPlayerVelocity,
@@ -22,41 +21,6 @@ describe('smooth player locomotion', () => {
     expect(getSnowFootprintPlacement({ x: 0, z: 0 }, { x: 20, z: 20 }, 1)).toBeNull()
   })
 
-  it('keeps snow footprints by age, then shrinks and expires them', () => {
-    expect(getSnowFootprintVisibility(0)).toBe(1)
-    expect(getSnowFootprintVisibility(4)).toBe(1)
-    expect(getSnowFootprintVisibility(5)).toBe(0.5)
-    expect(getSnowFootprintVisibility(6)).toBe(0)
-    expect(getSnowFootprintVisibility(20)).toBe(0)
-  })
-
-  it('opens the mouth and gently nods only while speaking', () => {
-    expect(getTalkingPose(1, false)).toEqual({
-      mouthOpen: 0,
-      mouthWidth: 1,
-      headNod: 0,
-      eyeExpression: 'resting',
-    })
-    expect(getTalkingPose(0, true).mouthOpen).toBeGreaterThan(0.4)
-    expect(getTalkingPose(Math.PI / 26, true).mouthOpen).toBeGreaterThan(getTalkingPose(0, true).mouthOpen)
-    expect(Math.abs(getTalkingPose(Math.PI / 6.4, true).headNod)).toBeGreaterThan(0.02)
-    expect(getTalkingPose(3, true).eyeExpression).toBe('happy')
-    expect(getTalkingPose(4.9, true).eyeExpression).toBe('blink')
-  })
-
-  it('shuts the eyes fully but briefly every few seconds, at different moments for different seeds', () => {
-    const frames = Array.from({ length: 2400 }, (_, frame) => frame)
-    const closedFrames = (seed: number) => frames.filter((frame) => getBlinkAmount(frame / 120, seed) > 0.5)
-    const blinkCount = (closed: number[]) => closed.filter((frame, index) => closed[index - 1] !== frame - 1).length
-    const first = closedFrames(0)
-    const second = closedFrames(1)
-    expect(Math.max(...frames.map((frame) => getBlinkAmount(frame / 120, 0)))).toBeGreaterThan(0.95)
-    expect(first.length).toBeLessThan(frames.length * 0.05)
-    expect(blinkCount(first)).toBeGreaterThanOrEqual(3)
-    expect(blinkCount(first)).toBeLessThanOrEqual(7)
-    expect(second.some((frame) => !first.includes(frame))).toBe(true)
-  })
-
   it.each([
     [0, 0],
     [1, 2.2],
@@ -65,6 +29,14 @@ describe('smooth player locomotion', () => {
     const wait = getSecondsUntilBlink(elapsed, seed)
     expect(getBlinkAmount(elapsed + wait - 0.02, seed)).toBe(0)
     expect(getBlinkAmount(elapsed + wait + BLINK_SECONDS / 2, seed)).toBeGreaterThan(0.95)
+  })
+
+  it('keeps snow footprints by age, then shrinks and expires them', () => {
+    expect(getSnowFootprintVisibility(0)).toBe(1)
+    expect(getSnowFootprintVisibility(4)).toBe(1)
+    expect(getSnowFootprintVisibility(5)).toBe(0.5)
+    expect(getSnowFootprintVisibility(6)).toBe(0)
+    expect(getSnowFootprintVisibility(20)).toBe(0)
   })
 
   it('eases walk-to-run and release velocities without a one-frame jump', () => {

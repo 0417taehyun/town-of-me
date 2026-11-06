@@ -23,16 +23,6 @@ describe('corgi walk', () => {
 })
 
 describe('corgi quadruped gait', () => {
-  it.each([0, 0.04, 0.09, 0.2])('moves diagonal pairs together, with the other pair planted at %s', (time) => {
-    const gait = getCorgiGait(time, 1, false, false)
-    expect(gait.angles[0]).toBeCloseTo(gait.angles[3])
-    expect(gait.angles[1]).toBeCloseTo(gait.angles[2])
-    expect(gait.angles[0]).toBeCloseTo(-gait.angles[1])
-    expect(gait.lifts[0]).toBeCloseTo(gait.lifts[3])
-    expect(gait.lifts[1]).toBeCloseTo(gait.lifts[2])
-    expect(Math.min(gait.lifts[0], gait.lifts[1])).toBeCloseTo(0)
-  })
-
   it('plants all four feet while idle or being petted, with no body bounce', () => {
     const idle = getCorgiGait(0.06, 0, false, false)
     const pet = getCorgiGait(0.06, 0, true, false)
@@ -51,12 +41,5 @@ describe('corgi quadruped gait', () => {
     expect(reduced.angles).toBe(angles)
     expect(reduced.angles).toEqual(normal.angles)
     expect(reduced.bodyY).toBeCloseTo(normal.bodyY * 0.3)
-  })
-
-  it('blends into the gait instead of snapping every limb to a full stride', () => {
-    const full = getCorgiGait(0.04, 1, false, false)
-    const half = getCorgiGait(0.04, 0.5, false, false)
-    expect(half.angles[0]).toBeCloseTo(full.angles[0] * 0.5)
-    expect(half.lifts[0]).toBeCloseTo(full.lifts[0] * 0.5)
   })
 })

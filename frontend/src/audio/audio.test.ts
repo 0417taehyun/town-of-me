@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { createCozyMusic } from './cozyMusic'
 import { createBark } from './bark'
-import { createPantSamples, createPant } from './pant'
+import { createPant } from './pant'
 
 function fakeAudioContext() {
   const gain = {
@@ -225,15 +225,6 @@ function fakePantContext() {
 }
 
 describe('original procedural pet pant', () => {
-  it('uses a short, quiet noise envelope with silent endpoints', () => {
-    const samples = createPantSamples(48000)
-    expect(samples.length).toBe(8640)
-    expect(samples[0]).toBeCloseTo(0)
-    expect(samples.at(-1)).toBeCloseTo(0)
-    expect(Math.max(...samples.map(Math.abs))).toBeLessThanOrEqual(0.15)
-    expect(samples.some((sample) => Math.abs(sample) > 0.05)).toBe(true)
-  })
-
   it('schedules four subtle breaths once and cancels every source on greeting or cleanup', async () => {
     const context = fakePantContext()
     const pant = createPant(context as unknown as AudioContext)

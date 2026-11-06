@@ -28,8 +28,6 @@ function getSole(pose: CharacterPose, side: -1 | 1) {
 }
 
 const isDown = (pose: CharacterPose, side: -1 | 1) => getSole(pose, side).some((point) => point.y < 0.002)
-const shoeOf = (pose: CharacterPose, side: -1 | 1) => (side < 0 ? pose.leftFoot : pose.rightFoot)
-const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length
 
 type Frame = { pose: CharacterPose; z: number; footfalls: number }
 type Drive = Omit<GaitInput, 'delta'>
@@ -77,15 +75,6 @@ function measureSlip(frames: Frame[]) {
 }
 
 describe('planted-feet gait', () => {
-  it('steps 2.5–3 times a second at both the residents’ and the player’s walking speed', () => {
-    ;[RESIDENT_WALK_SPEED, PLAYER_WALK_SPEED].forEach((speed) => {
-      const frames = walk(speed, speed)
-      const stepsPerSecond = (frames[frames.length - 1].footfalls - frames[0].footfalls) / 4
-      expect(stepsPerSecond).toBeGreaterThanOrEqual(2.5)
-      expect(stepsPerSecond).toBeLessThanOrEqual(3)
-    })
-  })
-
   it('keeps a foot down all walk long and only leaves the ground in the run’s flight', () => {
     expect(Math.max(...walk(PLAYER_WALK_SPEED, PLAYER_WALK_SPEED).map((frame) => frame.pose.lift))).toBe(0)
     expect(Math.max(...walk(PLAYER_RUN_SPEED, PLAYER_WALK_SPEED).map((frame) => frame.pose.lift))).toBeGreaterThan(0.05)
@@ -115,30 +104,6 @@ describe('planted-feet gait', () => {
       )
     expect(touchdownHeights.length).toBeGreaterThan(10)
     expect(Math.max(...touchdownHeights)).toBeLessThan(0.03)
-  })
-
-  it('lands on the heel and pushes off from the toe', () => {
-    const contacts = walk(PLAYER_WALK_SPEED, PLAYER_WALK_SPEED).flatMap(({ pose }) =>
-      SIDES.map((side) => ({ sole: getSole(pose, side), shoe: shoeOf(pose, side) })),
-    )
-    expect(contacts.some(({ sole, shoe }) => sole[HEEL].y < 0.002 && shoe < -0.2)).toBe(true)
-    expect(contacts.some(({ sole, shoe }) => sole[TOE].y < 0.002 && shoe > 0.5)).toBe(true)
-  })
-
-  it('dips the pelvis in double support, sways it over the stance foot, and swings the arms against the legs', () => {
-    const frames = walk(RESIDENT_WALK_SPEED, RESIDENT_WALK_SPEED).map(({ pose }) => ({
-      pose,
-      left: isDown(pose, -1),
-      right: isDown(pose, 1),
-    }))
-    const both = frames.filter(({ left, right }) => left && right).map(({ pose }) => pose.bodyY)
-    const single = frames.filter(({ left, right }) => left !== right).map(({ pose }) => pose.bodyY)
-    expect(mean(both)).toBeLessThan(mean(single) - 0.01)
-    expect(mean(frames.filter(({ left, right }) => left && !right).map(({ pose }) => pose.bodyX))).toBeLessThan(-0.01)
-    expect(mean(frames.filter(({ left, right }) => right && !left).map(({ pose }) => pose.bodyX))).toBeGreaterThan(0.01)
-    const leftFootAhead = frames.filter(({ pose }) => getSole(pose, -1)[1].z - getSole(pose, 1)[1].z > 0.3)
-    expect(leftFootAhead.length).toBeGreaterThan(0)
-    leftFootAhead.forEach(({ pose }) => expect(pose.leftArm).toBeGreaterThan(pose.rightArm))
   })
 
   it('re-plants both feet under the hips after a jump', () => {

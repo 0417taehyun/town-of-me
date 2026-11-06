@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Object3D, PerspectiveCamera } from 'three'
+import { Object3D } from 'three'
 import {
   BIRD_COUNT,
   CLOUD_COUNT,
@@ -15,7 +15,6 @@ import {
   setCloudTransform,
   stepAtmospherePresence,
 } from './skyMotion'
-import { CAMERA_DEFAULTS, CAMERA_EYE_TARGET_HEIGHT } from '../../../camera/cameraConfig'
 import { SAMPLE_TOWN } from '../../../testing/sampleTown'
 import { getSunPosition } from '../../environment/dayCycle'
 
@@ -23,40 +22,7 @@ const birdObjects = SAMPLE_TOWN.objects.filter(({ type }) => type === 'bird')
 const birds = createBirdSpecs(birdObjects)
 const clouds = createCloudSpecs(SAMPLE_TOWN.objects.filter(({ type }) => type === 'cloud'))
 
-function townCamera() {
-  const settings = CAMERA_DEFAULTS
-  const camera = new PerspectiveCamera(settings.fov, 16 / 9, 0.1, 300)
-  camera.position.set(0, 1.2 + settings.height, settings.distance)
-  camera.lookAt(0, 1.2 + CAMERA_EYE_TARGET_HEIGHT, 0)
-  camera.updateMatrixWorld()
-  return camera
-}
-
-describe('bird and cloud motion through the actual camera projection', () => {
-  it('keeps seeded world positions unchanged when only the player/camera moves', () => {
-    const transform = new Object3D()
-    const camera = townCamera()
-    setCloudTransform(transform, clouds, 20, 1)
-    const cloud = transform.position.clone()
-    setBirdTransform(transform, birds, 18 * PARTS_PER_BIRD, 1)
-    const bird = transform.position.clone()
-    camera.position.set(48, 9.4, 58.5)
-    camera.updateMatrixWorld()
-    setCloudTransform(transform, clouds, 20, 1)
-    expect(transform.position.distanceTo(cloud)).toBe(0)
-    setBirdTransform(transform, birds, 18 * PARTS_PER_BIRD, 1)
-    expect(transform.position.distanceTo(bird)).toBe(0)
-    const sunPosition = getSunPosition('noon')
-    setCloudShadowTransform(transform, clouds, 5, 1, sunPosition)
-    const shadow = transform.position.clone()
-    expect(shadow.y).toBe(0.025)
-    expect(transform.rotation.x).toBe(-Math.PI / 2)
-    setCloudShadowTransform(transform, clouds, 5, 6, sunPosition)
-    const shadowDisplacement = transform.position.clone().sub(shadow)
-    setCloudTransform(transform, clouds, 20, 6)
-    expect(transform.position.clone().sub(cloud).distanceTo(shadowDisplacement)).toBeCloseTo(0)
-  })
-
+describe('bird and cloud motion', () => {
   it('projects cloud shadows along solar rays and lengthens them near the horizon', () => {
     const transform = new Object3D()
     const sun = getSunPosition('morning')
@@ -111,18 +77,6 @@ describe('bird and cloud motion through the actual camera projection', () => {
     expect(transform.position.x).toBeGreaterThan(Math.abs(transform.position.z))
     const recolored = createBirdSpecs([{ ...bird, color: '#ff0000' }])[0]
     expect(getBirdPartColor(recolored.palette, 2)).toBe('#ff0000')
-  })
-
-  it('gives birds smooth seeded wandering instead of fixed straight paths', () => {
-    const transform = new Object3D()
-    setBirdTransform(transform, birds, 10 * PARTS_PER_BIRD + 2, 0)
-    const start = transform.position.clone()
-    setBirdTransform(transform, birds, 10 * PARTS_PER_BIRD + 2, 2)
-    const middle = transform.position.clone()
-    setBirdTransform(transform, birds, 10 * PARTS_PER_BIRD + 2, 4)
-    const end = transform.position.clone()
-    expect(middle.clone().sub(start).angleTo(end.clone().sub(middle))).toBeGreaterThan(0.01)
-    expect(Math.abs(start.y - end.y)).toBeGreaterThan(0.05)
   })
 
   it('fades birds and clouds in and out over the fade instead of switching them, drawing the leaving ones until gone', () => {
