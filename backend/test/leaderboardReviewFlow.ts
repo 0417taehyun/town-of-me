@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from 'node:util'
 import {
+  dismissedRunsLimit,
   DomainError,
   forgetQuietReporters,
   hashToken,
@@ -118,6 +119,7 @@ export async function checkLeaderboardReviewFlow(assert: Assert): Promise<void> 
   checkReportCounter(assert)
   await checkReviewActions(assert)
   await checkBoardRecords(assert)
+  await checkListedDismissal(assert)
   await checkTakedownAndErasure(assert)
   await checkPastSeason(assert)
   await checkHallOfFame(assert)
@@ -510,6 +512,43 @@ async function checkBoardRecords(assert: Assert): Promise<void> {
     run.result?.pitches.some((pitch) => pitch.power !== null && pitch.power > 0),
     "a record's best run shows the admin the power visitors never see",
   )
+}
+
+/** The bulk dismissal takes the runs the admin saw listed, and nothing that arrived after the list loaded. */
+async function checkListedDismissal(assert: Assert): Promise<void> {
+  const { store, send, member, play, act, review } = await reviewHarness()
+  const claimedFalsely = { claimed: { homeRuns: 0, totalDistanceDm: 0 } }
+  const first = await play('bulk-first', [12, null, null, null, null], claimedFalsely)
+  const second = await play('bulk-second', [12, null, null, null, null], claimedFalsely)
+  const late = await play('bulk-late', [12, null, null, null, null], claimedFalsely)
+  const listed = [first.run.id, second.run.id]
+
+  const path = `/v1/admin/games/${game}/runs/rejection`
+  assert(
+    (await send('POST', path, { body: { runIds: listed }, cookie: member })).status === 403,
+    'a member cannot dismiss runs',
+  )
+  const tooMany = Array.from({ length: dismissedRunsLimit + 1 }, () => first.run.id)
+  const refused = [{ scope: 'no-history' }, { runIds: [] }, { runIds: ['not-a-run'] }, { runIds: tooMany }]
+  for (const body of refused) {
+    assert(
+      (await act('runs/rejection', body)).status === 400,
+      `dismissing with ${JSON.stringify(body).slice(0, 40)} is refused`,
+    )
+  }
+  assert(
+    (await store.listRunsForReview({ game, season: first.run.season })).length === 3,
+    'a refused dismissal dismisses nothing',
+  )
+
+  const answer = (await (await act('runs/rejection', { runIds: listed })).json()) as { rejected: number }
+  const waiting = (await review()).flatMap(({ runs }) => runs.map(({ id }) => id))
+  assert(
+    answer.rejected === 2 && waiting.join() === late.run.id,
+    'only the listed runs are dismissed; one that arrived after the list loaded still waits',
+  )
+  const again = (await (await act('runs/rejection', { runIds: listed })).json()) as { rejected: number }
+  assert(again.rejected === 0, 'runs no longer waiting are not counted')
 }
 
 /** Past seasons stay as they are, but a past statue's link stays only while its owner keeps it on. */

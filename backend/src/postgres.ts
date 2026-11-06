@@ -628,6 +628,15 @@ export class PostgresStore implements Store {
     return mapFirstRow(rows, toGameRun)
   }
 
+  async rejectRuns(game: string, ids: readonly string[], reviewedAt: string): Promise<number> {
+    const { rowCount } = await this.pool.query(
+      `UPDATE minigame_runs SET reviewed_at = $3
+       WHERE game = $1 AND id = ANY($2::uuid[]) AND status = 'flagged' AND reviewed_at IS NULL`,
+      [game, ids, reviewedAt],
+    )
+    return rowCount ?? 0
+  }
+
   async addReport(report: EntryReport): Promise<void> {
     await this.pool.query(
       `INSERT INTO minigame_reports (id, entry_id, target, reason, created_at, resolved_at, resolution)

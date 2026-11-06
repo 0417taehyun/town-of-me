@@ -243,8 +243,9 @@ shows it: a record changed since is `409` and stays as it is. Each answers `{ en
 - `POST …/runs/:id/acceptance` with `{ updatedAt }`, the visitor's record as read (`null` when they had none), scores a
   held run as if it had scored at once and settles the record, approved; a past season's run only until a week after
   the season ended. `POST …/runs/:id/rejection` dismisses one; it stays stored. Both answer `{ run }` (acceptance also
-  `entry`), and a run that is not waiting is `409`. `POST …/runs/rejection` with `{ season?, scope: 'no-history' }`
-  dismisses the held runs of visitors with two runs or fewer on that board and returns `{ season, rejected }`.
+  `entry`), and a run that is not waiting is `409`. `POST …/runs/rejection` with `{ runIds }` (1–1000 ids)
+  dismisses those that are still waiting, in one step, and returns `{ rejected }`, how many that was: only the runs the
+  admin saw listed, since a dismissal cannot be undone and a run may arrive after the list loaded.
 
 ## OpenRouter dialogue drafts
 

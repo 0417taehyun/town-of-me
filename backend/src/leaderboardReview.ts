@@ -18,7 +18,7 @@ import {
 } from './leaderboard.js'
 import { comparisonForm, isTownProfile, profileIdOf, townNames } from './leaderboardIdentity.js'
 import { nextRankingMonth, rankingMonthStart, type TownLayout } from './town.js'
-import { invalidInput, matchingText, oneOf } from './validation.js'
+import { inputList, invalidInput, matchingText, oneOf } from './validation.js'
 
 // The admin's side of the monthly boards: the review queue, what each action on a record changes, and the reports
 // visitors send. A statue stands without anyone's check, so the queue puts what visitors already see first, and every
@@ -36,6 +36,9 @@ const hourMs = 60 * 60_000
 /** Names this many places either side, so names that read as a sentence together are seen together. */
 const neighbourDistance = 3
 const versionPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u
+const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u
+/** How many held runs one dismissal may name: a flood takes a few clicks, each one request. */
+export const dismissedRunsLimit = 1000
 const nameDecisions = ['approve', 'reject'] as const
 const linkedInDecisions = ['code-verified', 'reject'] as const
 
@@ -122,6 +125,13 @@ export const reviewChecks: ReadonlyArray<readonly [ReviewKind, (subject: ReviewS
 /** The admin's version of a record, as they read it; nothing else is accepted, so a stale tab gets `409`. */
 export function versionInput(value: unknown, field: string): string {
   return matchingText(value, versionPattern, field, "the record's updatedAt as it was read")
+}
+
+/** The held runs an admin dismisses together: the ones they saw listed, whatever else has arrived since. */
+export function parseRunIds(value: unknown): string[] {
+  return inputList(value, 'runIds', dismissedRunsLimit, 1).map((id) =>
+    matchingText(id, idPattern, 'runIds', 'a list of run ids'),
+  )
 }
 
 /** The queue across `boards`, one item per visitor and board, most urgent first. */

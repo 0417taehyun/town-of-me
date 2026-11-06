@@ -179,7 +179,7 @@ const routes: readonly Route[] = [
     return json({ run: reviewedRun(await dependencies.service.rejectHeldRun(await actor(), game, runId), null) })
   }),
   route('POST', `/v1/admin/games/(${gameId})/runs/rejection`, async ({ request, pathId, actor, dependencies }) =>
-    json(await dependencies.service.rejectRunsWithoutHistory(await actor(), pathId, await objectBody(request))),
+    json(await dependencies.service.rejectListedRuns(await actor(), pathId, await objectBody(request))),
   ),
   route('GET', `/v1/towns/(${townIdPattern})`, async ({ pathId, dependencies }) =>
     json({ town: await dependencies.service.getTown(pathId) }),

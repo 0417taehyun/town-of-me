@@ -50,10 +50,10 @@ import {
   forgetQuietReporters,
   fromVersion,
   heldRunCandidate,
-  isNewVisitor,
   listableAfterSeason,
   parseEntryReport,
   parseReportResolution,
+  parseRunIds,
   previousRankingMonth,
   recentReports,
   reportedChanges,
@@ -686,22 +686,15 @@ export class BackendService {
     return rejected
   }
 
-  /** Dismisses the held runs of visitors with no history on the season's board, a flood's usual shape. */
-  async rejectRunsWithoutHistory(actor: Actor, game: string, input: Record<string, unknown>, now = Date.now()) {
+  /**
+   * Dismisses the held runs the admin listed, in one step, a flood's usual answer. Naming them means a run that arrived
+   * after the list loaded stays waiting, since a dismissal cannot be undone; any no longer waiting are not counted.
+   */
+  async rejectListedRuns(actor: Actor, game: string, input: Record<string, unknown>, now = Date.now()) {
     assertAdmin(actor)
     assertRankedGame(game)
-    if (input.scope !== 'no-history') throw new DomainError('INVALID_INPUT', 'scope must be no-history')
-    const board = { game, season: boardSeason(input.season ?? null, rankingMonth(now)) }
-    const [runs, counts] = await Promise.all([
-      this.store.listRunsForReview(board),
-      this.store.countRunsByVisitor(board),
-    ])
-    const newVisitors = new Set(counts.filter(isNewVisitor).map(({ visitorHash }) => visitorHash))
-    const reviewedAt = new Date(now).toISOString()
-    const dismissed = await Promise.all(
-      runs.filter((run) => newVisitors.has(run.visitorHash)).map((run) => this.store.rejectRun(run.id, reviewedAt)),
-    )
-    return { season: board.season, rejected: dismissed.filter((run) => run !== null).length }
+    const runIds = parseRunIds(input.runIds)
+    return { rejected: await this.store.rejectRuns(game, runIds, new Date(now).toISOString()) }
   }
 
   /** A held run nobody has reviewed; any other run is `409`, and another game's is not found. */

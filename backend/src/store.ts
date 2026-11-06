@@ -93,6 +93,8 @@ export interface Store extends AuthStore {
   ): Promise<{ run: GameRun; settlement: EntrySettlement } | null>
   /** Marks a held run nobody has reviewed as reviewed, still held as evidence; `null` when it is not waiting. */
   rejectRun(id: string, reviewedAt: string): Promise<GameRun | null>
+  /** `rejectRun` for those of `ids` that are the game's and still waiting, in one step; answers how many they were. */
+  rejectRuns(game: string, ids: readonly string[], reviewedAt: string): Promise<number>
   addReport(report: EntryReport): Promise<void>
   /** Every report on the board's records, open or resolved, oldest first. */
   listReports(board: BoardKey): Promise<EntryReport[]>
@@ -403,6 +405,15 @@ export class MemoryStore implements Store {
     const rejected = { ...run, reviewedAt }
     this.gameRuns.set(id, rejected)
     return structuredClone(rejected)
+  }
+
+  async rejectRuns(game: string, ids: readonly string[], reviewedAt: string): Promise<number> {
+    const listed = new Set(ids)
+    const waiting = [...this.gameRuns.values()].filter(
+      (run) => listed.has(run.id) && run.game === game && run.status === 'flagged' && run.reviewedAt === null,
+    )
+    waiting.forEach((run) => this.gameRuns.set(run.id, { ...run, reviewedAt }))
+    return waiting.length
   }
 
   async addReport(report: EntryReport): Promise<void> {

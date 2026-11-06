@@ -11,6 +11,7 @@ import {
   PostgresStore,
   seedTown,
   type EntrySettlement,
+  type FinishedRun,
   type GameRun,
   type LeaderboardEntry,
   type SettleEntry,
@@ -705,6 +706,7 @@ async function checkModerationStore(store: Store, assert: Assert): Promise<void>
       (await store.listRunsForReview(board)).length === 0,
     'a dismissed run stays held as evidence and leaves the queue once',
   )
+  await checkListedDismissal(store, flagged, reviewedAt, assert)
   const counts = await store.countRunsByVisitor(board)
   assert(
     isDeepStrictEqual(
@@ -771,6 +773,36 @@ async function checkModerationStore(store: Store, assert: Assert): Promise<void>
       (await store.getEntry(unlisted.id)) !== null,
     "a visitor's deletion removes their runs, records, and the reports on them in every season, and no one else's",
   )
+}
+
+/** Dismissing a list takes only what is listed, still waiting, and of the game, and says how many that was. */
+async function checkListedDismissal(
+  store: Store,
+  flagged: FinishedRun,
+  reviewedAt: string,
+  assert: Assert,
+): Promise<void> {
+  const season = '2026-04'
+  const finished = async (visitorHash: string, outcome: FinishedRun, game = runGame) => {
+    const run = { ...issuedRun(visitorHash, season), game }
+    await store.issueRun(run)
+    await store.finishRun(run.id, visitorHash, outcome, null)
+    return run
+  }
+  const listed = await finished('dismissal-listed', flagged)
+  const late = await finished('dismissal-late', flagged)
+  const scored = await finished('dismissal-scored', scoredRun)
+  const otherGame = await finished('dismissal-other', flagged, 'another-game')
+  const named = [listed.id, scored.id, otherGame.id, crypto.randomUUID()]
+  assert(
+    (await store.rejectRuns(runGame, named, reviewedAt)) === 1 &&
+      (await store.getRun(listed.id))?.reviewedAt === reviewedAt &&
+      (await store.getRun(late.id))?.reviewedAt === null &&
+      (await store.getRun(scored.id))?.reviewedAt === null &&
+      (await store.getRun(otherGame.id))?.reviewedAt === null,
+    'a listed dismissal takes only the listed runs that wait, of that game, and leaves a run it did not name',
+  )
+  assert((await store.rejectRuns(runGame, [listed.id], reviewedAt)) === 0, 'a run is dismissed only once')
 }
 
 /** The visitor's record as it stands, or `entry` when there is none yet. */
