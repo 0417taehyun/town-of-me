@@ -600,6 +600,88 @@ export const languageCopy = {
       evening: 'Evening',
     },
     seasons: { spring: 'Spring', summer: 'Summer', autumn: 'Autumn', winter: 'Winter' },
+    privacy: {
+      documentTitle: 'Privacy notice · Town of Me',
+      eyebrow: 'Town notice',
+      title: 'Privacy notice',
+      linkDescription: 'Privacy notice, opens in a new tab',
+      intro: 'What this town receives, where it keeps it, and how it can be removed.',
+      operatorTitle: 'Who runs this town',
+      operator: (name: string) => `${name} runs this town.`,
+      operatorFallback: 'The town’s owner runs this town.',
+      contact:
+        'For questions, or to see, correct, or remove what the town holds about you, or to stop its use, write to',
+      contactFallback: 'No contact address is listed yet.',
+      sections: [
+        {
+          title: 'Guestbook',
+          lines: [
+            'A note saves its text (up to 240 characters), the language it was written in, your character’s name (up to 24 characters) and look, and when you wrote it. The LinkedIn address in your character is not saved with it.',
+            'Other visitors see a note only after the admin approves it. A changed note waits for approval again.',
+            'You can change a note yourself from the same browser for a day after writing it. There is no button to delete one, and notes have no end date, so write to the address above to have one removed.',
+          ],
+        },
+        {
+          title: 'Cookies',
+          lines: [
+            '__Host-tom_visitor: a random value made when you first leave a note, which lets this browser find and change your note. It lasts 365 days, and the server stores only its hash. If you block it you can still leave a note, but not change it later.',
+            '__Host-tom_session (30 days) and __Host-tom_oauth (10 minutes): only for someone signing in to the town’s editor.',
+            'There are no advertising or analytics cookies or scripts.',
+          ],
+        },
+        {
+          title: 'What stays in your browser',
+          lines: [
+            'The character you make (name, look, and any LinkedIn address you enter), where you are in the town, and your language stay in this tab and are gone when you close it.',
+            'Photos you take are saved straight to your device and are not sent to the server.',
+            'What residents say is already written, so talking with them sends nothing.',
+          ],
+        },
+        {
+          title: 'Residents',
+          lines: [
+            'Residents are people added by the admin to introduce the town’s owner. Their name, role, relationship with the owner, what they wrote about the owner, and any LinkedIn link are public to every visitor.',
+            'When the admin drafts a resident’s lines with AI, that resident’s name, role, relationship, and what they wrote, along with the owner’s name, go to OpenRouter (openrouter.ai), an outside service. Visitors’ notes and characters are not sent.',
+            'Visitors hear a draft only after the admin has read and saved it.',
+          ],
+        },
+        {
+          title: 'Signing in to the editor',
+          lines: [
+            'Visitors never sign in. LinkedIn sign-in exists only for the town’s editor.',
+            'Signing in saves the account id, name, email address, and profile picture address LinkedIn provides, and whether the email is on the admin list decides who may edit. These have no end date, so write to the address above to have them removed.',
+          ],
+        },
+        {
+          title: 'Server logs',
+          lines: [
+            'For each request, the web server (nginx) writes an access log with the IP address, time, requested address, response code and size, previous page, and browser details.',
+            'The site’s code sets no period for deleting this log; it depends on how the server is set up.',
+            'IP addresses are not saved in the database.',
+          ],
+        },
+      ],
+      ballpark: {
+        title: 'Home Run Derby and its board',
+        lines: [
+          'The camera picture is processed on this device only. Camera video, body joint positions, and motion recordings are never sent or stored.',
+          'When a game ends, your batting side, your practice numbers, four numbers for each pitch (contact time, swing start time, speed, and height difference), and your character’s name and look are sent. The server works out the score again from these numbers and keeps them with the record. Ranked games have no sign-in.',
+          'Others see only records you choose to post. A name shows after the admin checks it; left empty, the record shows as an anonymous batter without your character. A record you do not post stays hidden from others but remains on the server. Your age is not asked.',
+          'A top 3 record stands as a statue right away, with no check first, and also stands in the town for that month. Each finished season’s top 3 stay in the hall of fame. Once you post, your next records from this browser are posted too.',
+          'A LinkedIn address is optional. It shows only on your statue, after you put a code on your profile and the admin checks it, and never in the board’s list.',
+          'Records have no end date. “Delete my records” removes this browser’s records and game numbers of every season at once, and turning LinkedIn off removes that address at once.',
+          'If you ask for removal by writing to the address above, the admin takes away the name, LinkedIn link, and character and leaves the record anonymous, with its score and place. A LinkedIn address the admin blocks is kept as a hash so it cannot come back.',
+          'Your records are found by the __Host-tom_visitor cookie above. It is also made when a ranked game starts, and if you block it a record cannot be saved. “It’s someone else’s turn” clears only the cookie and this tab’s character: the records stay, and this browser can no longer change them.',
+          'Requests to the game’s API write no access log, and the counters that stop request floods exist only in the server’s memory.',
+          'This browser also remembers the camera panel’s size and which month’s statues it has already revealed.',
+          'The board’s pages ask search engines not to index them, but that cannot stop a copy someone makes of the screen.',
+        ],
+      },
+      creditsTitle: 'Asset credits',
+      credits: 'Where the site’s models, sounds, and fonts come from, and their licenses:',
+      creditsLink: 'asset credits',
+      back: 'Back to the town',
+    },
     baseball: {
       documentTitle: 'Home Run Derby · Town of Me',
       title: 'Home Run Derby',
@@ -1571,6 +1653,87 @@ export const languageCopy = {
       evening: '저녁',
     },
     seasons: { spring: '봄', summer: '여름', autumn: '가을', winter: '겨울' },
+    privacy: {
+      documentTitle: '개인정보 처리방침 · Town of Me',
+      eyebrow: '마을 안내',
+      title: '개인정보 처리방침',
+      linkDescription: '개인정보 처리방침, 새 창에서 열려요',
+      intro: '이 마을이 어떤 정보를 받고, 어디에 두고, 어떻게 지울 수 있는지 적었어요.',
+      operatorTitle: '운영자와 연락처',
+      operator: (name: string) => `이 마을을 운영하는 사람은 ${name}님이에요.`,
+      operatorFallback: '이 마을은 마을 주인이 운영해요.',
+      contact: '궁금한 점이 있거나 내 정보를 보고, 고치고, 지우거나, 처리를 멈추고 싶다면 이메일로 알려 주세요:',
+      contactFallback: '연락처가 아직 적혀 있지 않아요.',
+      sections: [
+        {
+          title: '방명록',
+          lines: [
+            '글을 남기면 글(240자까지), 글을 쓴 언어, 캐릭터의 이름(24자까지)과 모습, 쓴 시각을 저장해요. 캐릭터에 적어 둔 LinkedIn 주소는 함께 저장하지 않아요.',
+            '글은 관리자가 확인한 뒤에 다른 방문자에게 보여요. 글을 고치면 다시 확인을 거쳐요.',
+            '쓴 지 하루 안에는 같은 브라우저에서 직접 고칠 수 있어요. 직접 지우는 버튼은 없고 기간을 정해 지우지도 않으니, 글을 지우고 싶으면 위 주소로 알려 주세요.',
+          ],
+        },
+        {
+          title: '쿠키',
+          lines: [
+            '__Host-tom_visitor: 방명록에 처음 글을 남길 때 만드는 무작위 값이에요. 이 브라우저에서 내 글을 다시 찾아 고칠 수 있게 해 주고, 365일 동안 유지돼요. 서버에는 이 값의 해시만 저장해요. 쿠키를 막아도 글은 남길 수 있지만 나중에 고칠 수는 없어요.',
+            '__Host-tom_session(30일)과 __Host-tom_oauth(10분): 마을 편집 화면에 로그인하는 사람에게만 쓰여요.',
+            '광고나 방문 통계를 위한 쿠키와 스크립트는 없어요.',
+          ],
+        },
+        {
+          title: '브라우저에만 남는 것',
+          lines: [
+            '만든 캐릭터(이름, 모습, 적어 둔 LinkedIn 주소), 마을 안의 위치, 고른 언어는 이 탭에만 저장되고, 탭을 닫으면 사라져요.',
+            '찍은 사진은 이 기기에 바로 저장되고 서버로 보내지 않아요.',
+            '주민이 하는 말은 미리 준비되어 있어서, 대화해도 서버로 보내는 것이 없어요.',
+          ],
+        },
+        {
+          title: '주민',
+          lines: [
+            '주민은 마을 주인을 소개하려고 관리자가 등록한 사람들이에요. 이름, 역할, 마을 주인과의 관계, 마을 주인에 대해 쓴 글, LinkedIn 주소(있다면)는 모든 방문자에게 공개돼요.',
+            '관리자가 주민의 대사 초안을 AI로 만들 때는 그 주민의 이름, 역할, 관계, 쓴 글과 마을 주인의 이름을 외부 서비스인 OpenRouter(openrouter.ai)로 보내요. 방문자의 글이나 캐릭터는 보내지 않아요.',
+            '초안은 관리자가 읽고 저장한 뒤에야 방문자에게 들려요.',
+          ],
+        },
+        {
+          title: '편집 화면 로그인',
+          lines: [
+            '방문자는 로그인하지 않아요. LinkedIn 로그인은 마을 편집 화면에만 있어요.',
+            '로그인하면 LinkedIn이 알려 주는 계정 식별자, 이름, 이메일 주소, 프로필 사진 주소를 저장하고, 이메일이 관리자 목록에 있는지로 편집 권한을 정해요. 기간을 정해 지우지 않으니, 지우고 싶으면 위 주소로 알려 주세요.',
+          ],
+        },
+        {
+          title: '서버 기록',
+          lines: [
+            '웹 서버(nginx)는 요청마다 IP 주소, 시각, 요청한 주소, 응답 코드와 크기, 이전 페이지 주소, 브라우저 정보를 접속 기록으로 남겨요.',
+            '사이트 코드에는 이 기록을 지우는 기간이 정해져 있지 않고, 서버 설정에 따라 달라져요.',
+            'IP 주소를 데이터베이스에 저장하지는 않아요.',
+          ],
+        },
+      ],
+      ballpark: {
+        title: '홈런 더비와 순위표',
+        lines: [
+          '카메라 화면은 이 기기 안에서만 처리돼요. 카메라 영상, 관절 좌표, 동작 기록은 서버로 보내지도, 저장하지도 않아요.',
+          '경기가 끝나면 타석 방향, 연습 숫자, 공마다 스윙 숫자 네 개(맞힌 시각, 스윙을 시작한 시각, 속도, 높이 차이)와 캐릭터의 이름, 모습을 보내요. 서버는 이 숫자로 점수를 다시 계산해 기록과 함께 저장해요. 순위 경기에는 로그인이 없어요.',
+          '직접 올린 기록만 다른 사람에게 보여요. 이름은 관리자가 확인한 뒤에 보이고, 이름을 비우면 캐릭터 없이 ‘익명 타자’로 올라요. 올리지 않은 기록은 다른 사람에게 보이지 않지만 서버에는 남아요. 나이는 묻지 않아요.',
+          '1–3위 기록은 확인 없이 바로 동상으로 서고, 그달 동안 마을에도 서요. 끝난 시즌의 위 셋은 명예의 전당에 남아요. 한 번 올리면 이 브라우저의 다음 기록도 이어서 올라가요.',
+          'LinkedIn 주소는 선택이에요. 프로필에 코드를 넣고 관리자가 확인한 뒤에 내 동상에만 보이고, 순위 목록에는 보이지 않아요.',
+          '기록은 기간을 정해 지우지 않아요. ‘내 기록 지우기’를 누르면 이 브라우저의 모든 시즌 기록과 경기 숫자가 바로 지워지고, LinkedIn을 끄면 그 주소가 바로 지워져요.',
+          '위 주소로 게시 중단을 요청하면 관리자가 이름, LinkedIn 주소, 캐릭터를 없애고 기록을 익명으로 바꿔요. 점수와 순위는 그대로 남아요. 관리자가 막은 LinkedIn 주소는 다시 쓰이지 않도록 해시로 계속 보관해요.',
+          '내 기록은 위에 적은 __Host-tom_visitor 쿠키로 찾아요. 이 쿠키는 순위 경기를 시작할 때도 만들어지고, 막으면 기록을 저장할 수 없어요. ‘다른 사람이 할 차례예요’는 쿠키와 이 탭의 캐릭터만 지워요. 기록은 그대로 남고, 이 브라우저에서는 더 고칠 수 없어요.',
+          '경기 API 요청은 접속 기록에 남기지 않고, 과도한 요청을 막는 계수는 서버 메모리에만 있어요.',
+          '카메라 패널 크기와 어느 달의 동상 등장을 이미 봤는지는 이 브라우저에 남아요.',
+          '순위 페이지는 검색엔진에 색인하지 말라고 요청하지만, 화면을 찍어 옮긴 사본까지 막을 수는 없어요.',
+        ],
+      },
+      creditsTitle: '자산 출처',
+      credits: '이 사이트에 쓰인 모델, 소리, 글꼴의 출처와 라이선스는 여기에서 볼 수 있어요(영어):',
+      creditsLink: '자산 출처',
+      back: '마을로 돌아가기',
+    },
     baseball: {
       documentTitle: '홈런 더비 · Town of Me',
       title: '홈런 더비',

@@ -30,6 +30,7 @@ import { type AppLanguage, languageCopy, monthName } from '../../i18n/language'
 import { copyText } from '../../scene/webglSupport'
 import { STATUE_RANKS, type StatueRank } from '../../scene/statues/statueFinishes'
 import { LanguageSelect } from '../../ui/LanguageSelect'
+import { PrivacyLink } from '../../ui/PrivacyLink'
 import { BASEBALL_PATH, BOARD_PATH, HALL_OF_FAME_PATH } from '../baseballRoute'
 import { linkedInStatusText } from '../ui/derbyCues'
 import { ConfirmedAction, DeleteOwnRecords, ListingView } from '../ui/ListingView'
@@ -394,6 +395,8 @@ export function BoardSections({
       </section>
       <footer className="board-footer">
         <a href={takedownHref(contactEmail, copy.takedown)}>{copy.takedown}</a>
+        <span aria-hidden="true"> · </span>
+        <PrivacyLink language={language} />
         <DeleteOwnRecords
           language={language}
           onDelete={async () => {

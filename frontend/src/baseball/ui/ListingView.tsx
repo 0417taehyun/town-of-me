@@ -4,6 +4,7 @@ import { linkedInAddressText, normalizeLinkedInProfileUrl } from '../../data/lin
 import type { PlayerProfile } from '../../data/playerProfile'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import { copyText } from '../../scene/webglSupport'
+import { PrivacyLink } from '../../ui/PrivacyLink'
 import { type ListingFailure, listingChoice, type ListingForm, listingProblem, saveFailure } from '../flow/rankedRun'
 import { recordText } from '../../data/boardRecord'
 import { linkedInStatusText } from './derbyCues'
@@ -164,6 +165,7 @@ export function ListingView({
           ))}
         </ul>
         <p>{copy.dataNotice}</p>
+        <PrivacyLink language={language} />
       </details>
       <DeleteOwnRecords language={language} onDelete={onDelete} />
     </section>

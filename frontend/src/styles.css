@@ -1463,6 +1463,14 @@ input[type='range']::-webkit-slider-thumb {
 .guestbook-form .primary-button {
   min-height: 40px;
 }
+.guestbook-privacy {
+  margin: 12px 0 0;
+  text-align: center;
+}
+.privacy-link {
+  color: var(--leaf-dark);
+  font-size: 0.8rem;
+}
 .guestbook-rules,
 .guestbook-own {
   margin: 14px 0 0;

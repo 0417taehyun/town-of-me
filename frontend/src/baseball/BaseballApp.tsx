@@ -28,6 +28,7 @@ import { useReducedMotion } from '../hooks/useReducedMotion'
 import { type AppLanguage, languageCopy, monthName } from '../i18n/language'
 import { resolveBallparkPalette } from '../scene/venues/ballpark/ballparkThemes'
 import { LanguageSelect } from '../ui/LanguageSelect'
+import { PrivacyLink } from '../ui/PrivacyLink'
 import {
   type BaseballExit,
   baseballExit,
@@ -595,6 +596,9 @@ export function DerbyScreen({
               {copy.baseball.leaderboard.viewBoard} <span aria-hidden="true">›</span>
             </a>
           )}
+          <p className="derby-privacy">
+            <PrivacyLink language={language} />
+          </p>
           {preview === 'next' && (
             <p className="baseball-note derby-preview-note">
               {upcoming

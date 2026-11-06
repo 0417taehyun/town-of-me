@@ -32,7 +32,9 @@ import { TownLoadingScreen } from './ui/TownLoadingScreen'
 import { TownMapPanel } from './ui/TownMapPanel'
 import { isBaseballPath } from './baseball/baseballRoute'
 import { BaseballGate } from './baseball/BaseballGate'
+import { isPrivacyPath } from './ui/privacyNotice'
 
+const PrivacyPage = lazy(() => import('./ui/PrivacyPage').then((module) => ({ default: module.PrivacyPage })))
 const TownScene = lazy(() => import('./scene/TownScene').then((module) => ({ default: module.TownScene })))
 const CharacterCreator = lazy(() =>
   import('./ui/CharacterCreator').then((module) => ({ default: module.CharacterCreator })),
@@ -54,6 +56,12 @@ type HudPanel = 'environment' | 'help' | 'map' | null
 /** Picks the page before the town's hooks run. Pages change by full page load, so nginx sends each its own headers. */
 export function App() {
   if (isBaseballPath(window.location.pathname)) return <BaseballGate townId={TOWN_ID} />
+  if (isPrivacyPath(window.location.pathname))
+    return (
+      <Suspense fallback={null}>
+        <PrivacyPage townId={TOWN_ID} />
+      </Suspense>
+    )
   return <TownApp />
 }
 

@@ -37,7 +37,8 @@ what changed.
 - Choose hosting, database, and secret management; add deployment workflows once a target exists. After the first
   deployment, add migrations instead of editing applied ones.
 - Before going public, settle the API domain, HTTPS and cookies, CORS or a same-origin proxy, CDN bypass for `/v1/`,
-  and Brotli, and publish privacy, retention, and asset-credit notices.
+  and Brotli. `/privacy` now publishes the privacy, retention, and asset-credit notices; what is left is a legal check
+  of its wording and a retention limit for the nginx access log, which it says the code does not set.
 - Test admin sign-in end to end with the registered LinkedIn redirect URLs. Locally, use `localhost` rather than
   `127.0.0.1` so the cookie host matches.
 - On real desktop and mobile devices, check that admin saves reach visitors, the guestbook write, review, and publish

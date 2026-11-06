@@ -270,6 +270,9 @@ a.derby-secondary {
 .derby-board-link:hover {
   text-decoration: underline;
 }
+.derby-privacy {
+  margin: 10px 0 0;
+}
 /* The visitor's own character, the one at the plate, with its name, in a row no taller than a few lines. */
 .derby-batter {
   display: grid;

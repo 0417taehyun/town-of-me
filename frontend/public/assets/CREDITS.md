@@ -25,8 +25,8 @@ buildings, trees, flowers, birds, music, and voices) is original procedural work
   description were verified on October 4, 2026.
 - **MediaPipe models:** the Apache-2.0 text is kept beside them in [`models/LICENSE.txt`](models/LICENSE.txt). The pose
   model's card (BlazePose GHUM 3D) names that license, and TensorFlow publishes EfficientDet-Lite0 under it; both were
-  checked, and the files compared with a fresh download, on October 31, 2026. They are for `/baseball` only, which
-  loads them from this origin. A model that changes gets a new file name.
+  checked, and the files compared with a fresh download, on October 31, 2026. The app loads them from this origin. A
+  model that changes gets a new file name.
 - **Pretendard:** Copyright (c) 2021, Kil Hyung-jin (https://github.com/orioncactus/pretendard), with Reserved Font
   Name 'Pretendard'. [`Pretendard-LICENSE.txt`](Pretendard-LICENSE.txt) keeps the license text with that notice and
   those of the fonts Pretendard is built on (Inter, Adobe's Source Han Sans, and M PLUS 1p). It is the package's

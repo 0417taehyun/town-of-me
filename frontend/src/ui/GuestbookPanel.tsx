@@ -10,6 +10,7 @@ import { GraphicsCanvas } from '../scene/GraphicsCanvas'
 import { ProceduralCharacter } from '../scene/characters/ProceduralCharacter'
 import { CloseButton } from './CloseButton'
 import { initialGuestbookMessage, sendFailure, sendFeedback, type SendState } from './guestbookSending'
+import { PrivacyLink } from './PrivacyLink'
 import { useGuestbook } from './useGuestbook'
 
 export interface GuestbookBoardProps {
@@ -198,6 +199,9 @@ export function GuestbookPanel({
             {revising ? copy.reviseNote : `${copy.leaveNote} · ${currentProfile.name}`}
           </button>
         )}
+        <p className="guestbook-privacy">
+          <PrivacyLink language={language} />
+        </p>
       </section>
     </div>
   )

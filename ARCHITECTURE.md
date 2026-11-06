@@ -46,7 +46,7 @@ skids, ballpark themes, and color roles need no backend change.
 | `data/`            | Models, the untrusted API boundary (`townApi.ts`), API clients, the tab's session and language.     |
 | `scene/`           | Everything drawn with Three.js (see below). Loaded as a lazy chunk.                                 |
 | `editor/`          | The admin editor: panels, gestures, history, admin list, guestbook review. Loaded only on `/admin`. |
-| `ui/`              | DOM overlays: entry, HUD, dialogue, guestbook, map, character creator.                              |
+| `ui/`              | DOM overlays: entry, HUD, dialogue, guestbook, map, character creator. The `/privacy` page.         |
 | `baseball/`        | The derby at `/baseball`, a lazy chunk; only its gate and `baseballRoute.ts` are in the main chunk. |
 | `camera/`          | Camera defaults and pure camera math.                                                               |
 | `audio/`           | Procedural music, voices, footsteps, skid squeal, derby sounds, and the bark sample.                |
