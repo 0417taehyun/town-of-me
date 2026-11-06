@@ -3,7 +3,7 @@ import { distanceText, recordText } from '../../data/boardRecord'
 import type { LinkedInStatus } from '../../data/leaderboardApi'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import type { CameraStateId } from '../cameraTracking'
-import type { DerbyStep, PracticeFeedback } from '../flow/derbyFlow'
+import { type DerbyFlow, offersMorePractice, type PracticeFeedback } from '../flow/derbyFlow'
 import type { BoardLine } from '../flow/rankedRun'
 import { STANCE_HOLD_RULES, type StanceNeed } from '../flow/stanceHold'
 import type { DerbyPhase } from '../game/derby'
@@ -345,12 +345,12 @@ export function figureEms(figure: string) {
 /** How long (ms) the big word stays up once the held stance has filled the gauge. */
 export const HELD_WORD_MS = 1300
 
-/** The big word as the held stance fills the gauge on `step`, saying what it starts; null on a step that waits for none. */
-export function heldStanceWord(step: DerbyStep, language: AppLanguage) {
+/** The big word as the held stance fills the gauge at `flow`, saying what it starts; null on a step that waits for none. */
+export function heldStanceWord(flow: Pick<DerbyFlow, 'step' | 'practice'>, language: AppLanguage) {
   const words = languageCopy[language].baseball.flow.held
-  if (step === 'setup') return words.practice
-  if (step === 'practiceDone') return words.play
-  return step === 'result' ? words.again : null
+  if (flow.step === 'setup' || offersMorePractice(flow)) return words.practice
+  if (flow.step === 'practiceDone') return words.play
+  return flow.step === 'result' ? words.again : null
 }
 
 /**

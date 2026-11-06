@@ -1,6 +1,7 @@
 import type { CSSProperties, Ref } from 'react'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import type { PracticeFeedback } from '../flow/derbyFlow'
+import { MORE_PRACTICE_SCHEDULE } from '../game/pitchSchedule'
 import { captionShown, type DerbyHudState, practiceCaptionId, textEms } from './derbyCues'
 import { StanceGauge } from './StanceGauge'
 
@@ -55,11 +56,11 @@ export function PracticeView({
 }
 
 /**
- * The step after practice: practice is done, and holding the batting stance fills `gauge` and plays ball, as the
- * button does, which has focus so Enter or Space presses it; `stanceNeed` says what the hold waits for. Unless
- * practice `timed` the visitor's swings (game/calibration.ts findsUsualTiming), it says the runs take no usual timing
- * off, though practice showed its first swings on their own timing. `cameraState` is the camera panel chip's words,
- * heard only.
+ * The step after practice: practice is done, and holding the batting stance fills `gauge` and goes on, as the main
+ * button does, which has focus so Enter or Space presses it; `stanceNeed` says what the hold waits for. Going on plays
+ * ball, unless practice did not `timed` the visitor's swings (game/calibration.ts findsUsualTiming): then it is more
+ * practice, and another button plays on anyway, on the note that the runs take no usual timing off and are not ranked.
+ * `cameraState` is the camera panel chip's words, heard only.
  */
 export function PracticeDoneView({
   gauge,
@@ -67,25 +68,33 @@ export function PracticeDoneView({
   timed,
   language,
   cameraState,
-  onPlay,
+  onGo,
+  onPlayAnyway,
 }: {
   gauge: Ref<HTMLDivElement>
   stanceNeed: string | null
   timed: boolean
   language: AppLanguage
   cameraState: string | null
-  onPlay: () => void
+  onGo: () => void
+  onPlayAnyway: () => void
 }) {
   const copy = languageCopy[language].baseball
+  const hint = timed ? copy.flow.toPlay : copy.practice.toMorePractice(MORE_PRACTICE_SCHEDULE.length)
   return (
     <section className="baseball-card derby-practice-done" aria-labelledby="derby-practice-done-title">
-      <h1 id="derby-practice-done-title">{copy.practice.doneTitle}</h1>
+      <h1 id="derby-practice-done-title">{timed ? copy.practice.doneTitle : copy.practice.doneTitleUntimed}</h1>
       <p className="baseball-note">{timed ? copy.practice.doneNote : copy.practice.doneNoteUntimed}</p>
-      <StanceGauge ref={gauge} label={copy.flow.stance} hint={copy.flow.toPlay} need={stanceNeed} />
+      <StanceGauge ref={gauge} label={copy.flow.stance} hint={hint} need={stanceNeed} />
       <div className="derby-actions">
-        <button className="primary-button" type="button" autoFocus onClick={onPlay}>
-          {copy.flow.playBall}
+        <button className="primary-button" type="button" autoFocus onClick={onGo}>
+          {timed ? copy.flow.playBall : copy.practice.morePractice}
         </button>
+        {!timed && (
+          <button className="derby-secondary" type="button" onClick={onPlayAnyway}>
+            {copy.practice.playAnyway}
+          </button>
+        )}
       </div>
       <p className="derby-camera-state" role="status">
         {cameraState}

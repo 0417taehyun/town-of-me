@@ -96,6 +96,8 @@ north road.
   seconds, or press the step's button; the line under the ring says what it still waits for.
 - **Practice:** five pitches tell each swing only `A bit early`, `Good`, or `A bit late`, against your own usual
   timing, and set the runs' timing.
+- **Too few swings counted:** with fewer than three valid practice swings, the stance hold or the main button throws
+  three more practice pitches, as often as you like; `Play ball anyway` plays on, unranked and on the standard timing.
 - **Away:** practice and a run pause between pitches while you are out of the camera's view.
 - **Monthly board:** each run after practice is ranked when the board answers; the result says your place, and
   `Show me on the board` posts it, with your name once the admin checks it, or as an anonymous batter. The top three

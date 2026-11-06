@@ -15,6 +15,12 @@ export const PRACTICE_SCHEDULE: readonly ScheduledPitch[] = (
 ).map((type) => ({ type, target: { x: 0, y: STRIKE_ZONE.center } }))
 
 /**
+ * More practice after too few swings counted: one pitch of each type. With the valid swings kept from before, fewer
+ * than a calibration needs, it stays within the practice samples the board takes (backend/src/homeRunDerby.ts).
+ */
+export const MORE_PRACTICE_SCHEDULE: readonly ScheduledPitch[] = PRACTICE_SCHEDULE.slice(0, 3)
+
+/**
  * `count` pitches (3 or more) with every type at least once. A server replaying the run must draw in the same order:
  * the extra types, then the shuffle, then each pitch's height and side.
  */

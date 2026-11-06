@@ -18,20 +18,24 @@ import { betweenPitches, type DerbyHudState, hudAfterEvent, judgedResult, NEW_RU
 import { AWAY_HOLD_MS, nextSight, type Sight, UNSEEN } from '../vision/poseLoop'
 import {
   createDerbyRun,
+  createMorePracticeRun,
   createPracticeRun,
   type DerbyFlow,
   type DerbyPlays,
   type DerbyStep,
   derbyStep,
   flowAfterEvent,
+  offersMorePractice,
   pausedForAway,
   practiceFeedback,
   practiceResultSample,
+  runFlow,
   setupFlow,
   shownPracticeFeedback,
   shownRun,
   stanceWait,
   startedFlow,
+  startsRun,
 } from './derbyFlow'
 
 const FRAME_MS = 1000 / 60
@@ -42,6 +46,7 @@ const hardBallpark: BallparkSettings = { ...ballpark, rules: { pitchCount: 5, di
 const october = new Date('2026-10-20T03:00:00Z')
 const plays: DerbyPlays = {
   practice: () => createPracticeRun(ballpark, october, 'left'),
+  morePractice: (practice) => createMorePracticeRun(ballpark, october, 'left', practice),
   run: (practice) => createDerbyRun(ballpark, october, 7, { side: 'left', practice }),
 }
 const steps: DerbyStep[] = ['rules', 'setup', 'practice', 'practiceDone', 'play', 'result']
@@ -137,7 +142,8 @@ function playAway(setup: StageRunSetup, offsetsMs: readonly (number | null)[]) {
 
 function flowAt(step: DerbyStep): DerbyFlow {
   const run = createDerbyRun(ballpark, october, 7, { side: 'right', practice: [] })
-  return { ...setupFlow(1000), step, run: ['practice', 'play', 'result'].includes(step) ? run : null }
+  const practice = [100, 110, 120].map((errorMs) => ({ errorMs, speed: 8 }))
+  return { ...setupFlow(1000), step, practice, run: ['practice', 'play', 'result'].includes(step) ? run : null }
 }
 
 describe('the derby flow', () => {
@@ -173,6 +179,55 @@ describe('the derby flow', () => {
     const run = startedFlow(done, 10_000, plays).run!
     expect(run.log.practice).toEqual(done.practice)
     expect(createDerby(run.plan, run.log, 0).calibration.offsetMs).toBeCloseTo(110, 0)
+  })
+
+  it('offers more practice while too few swings counted, as often as it takes, keeping within what the board takes', () => {
+    // Two valid swings, and three no attempt at the pitch, more than the calibration's 400 ms off.
+    const practice = [120, 900, 140, -700, 600].map((errorMs) => ({ errorMs, speed: 8 }))
+    const done: DerbyFlow = { ...flowAt('practiceDone'), practice }
+    expect(startsRun(done)).toBe(false)
+    expect(offersMorePractice(done)).toBe(true)
+    const more = startedFlow(done, 2000, plays)
+    expect(more.step).toBe('practice')
+    expect(more.practice.map((sample) => sample.errorMs)).toEqual([120, 140])
+    expect(more.run!.log.practice).toEqual(more.practice)
+    // The two kept and one sample a pitch stay within the board's five (backend/src/homeRunDerby.ts).
+    expect(more.practice.length + more.run!.plan.schedule.length).toBeLessThanOrEqual(5)
+
+    const practiced = (offsetsMs: (number | null)[]) =>
+      playOnStage(more.run!, offsetsMs).reduce((flow, event) => flowAfterEvent(flow, event, 9000), more)
+    const stillShort = practiced([null, null, null])
+    expect(stillShort.step).toBe('practiceDone')
+    expect(startedFlow(stillShort, 9500, plays).step).toBe('practice')
+    const timed = practiced([null, 130, null])
+    expect(timed.practice).toHaveLength(3)
+    expect(offersMorePractice(timed)).toBe(false)
+    const run = startedFlow(timed, 10_000, plays)
+    expect(run.step).toBe('play')
+    expect(run.run!.log.practice).toEqual(timed.practice)
+  })
+
+  it('plays on anyway from the offer, and a go after such a run comes back to the offer', () => {
+    const practice = [{ errorMs: 120, speed: 8 }]
+    const offer: DerbyFlow = { ...flowAt('practiceDone'), practice }
+    const played = runFlow(offer, 2000, plays)
+    expect(played.step).toBe('play')
+    expect(played.run!.log.practice).toEqual(practice)
+    const back = startedFlow({ ...played, step: 'result' }, 3000, plays)
+    expect(back.step).toBe('practiceDone')
+    expect(back.run).toBe(null)
+    expect(offersMorePractice(back)).toBe(true)
+    // A run only starts from a step that allows one, as when the camera stopped before the board answered.
+    const setup = setupFlow(0)
+    expect(runFlow(setup, 2000, plays)).toBe(setup)
+  })
+
+  it('goes on judging more practice against the swings before it, not afresh', () => {
+    const earlier = [200, 220].map((errorMs) => ({ errorMs, speed: 8 }))
+    const events = playOnStage(createMorePracticeRun(ballpark, october, 'left', earlier), [20, null, null])
+    const [first] = events.flatMap((event) => (event.type === 'result' ? [event.result] : []))
+    // Alone it would be good on its own timing; with the two before it, it is far earlier than their usual lag.
+    expect(shownPracticeFeedback(first, 'normal')).toBe('early')
   })
 
   it('says only a bit early, good, or a bit late, the same way at every difficulty', () => {

@@ -67,15 +67,16 @@ export function replayPractice(plan: RunPlan, log: DerbyInputLog): DerbyResult {
 }
 
 /**
- * What practice pitch `pitchIndex` is judged with: the visitor's usual timing in the practice's swings up to this one,
- * this one's included (calibration.ts practiceTimingOffset), and the speed peak of the practice before it, which has
- * none. The field and the word practice shows both come from that one judgement, and a steady webcam delay is no miss.
+ * What practice pitch `pitchIndex` is judged with: the visitor's usual timing in the practice before it, if this is
+ * more practice, and its swings up to this one, this one's included (calibration.ts practiceTimingOffset), and the speed
+ * peak of the practice before it. The field and the word practice shows both come from that one judgement, and a
+ * steady webcam delay is no miss.
  */
 export function practiceCalibration(plan: RunPlan, log: DerbyInputLog, pitchIndex: number): Calibration {
   const samples = log.swings
     .slice(0, pitchIndex + 1)
     .flatMap((swing, swingIndex) => (swing ? [practiceSample(plan, swingIndex, swing)] : []))
-  return { ...calibrate(log.practice), offsetMs: practiceTimingOffset(samples) }
+  return { ...calibrate(log.practice), offsetMs: practiceTimingOffset([...log.practice, ...samples]) }
 }
 
 /**

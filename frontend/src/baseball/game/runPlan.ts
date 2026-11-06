@@ -21,10 +21,10 @@ export function createRunPlan(rules: BallparkRules, seed: number): RunPlan {
  * The practice before a run, shaped like one: the practice pitches in their fixed order under the run's `rules`, whose
  * timing windows judge it. It draws nothing at random, so its seed is 0, and it flies at the practice pace
  * (PRACTICE_PITCH_FLIGHT_SECONDS) rather than the difficulty's. It is never scored: only its swings' timing and speed
- * go into the log of the runs after it.
+ * go into the log of the runs after it. More practice passes its shorter `schedule`.
  */
-export function createPracticePlan(rules: BallparkRules): RunPlan {
-  return { seed: 0, rules: { ...rules, pitchCount: PRACTICE_SCHEDULE.length }, schedule: [...PRACTICE_SCHEDULE] }
+export function createPracticePlan(rules: BallparkRules, schedule = PRACTICE_SCHEDULE): RunPlan {
+  return { seed: 0, rules: { ...rules, pitchCount: schedule.length }, schedule: [...schedule] }
 }
 
 /** A fastball's flight from release to the plate (s) in the run: its difficulty's. */

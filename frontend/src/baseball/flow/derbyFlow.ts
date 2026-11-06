@@ -2,10 +2,11 @@ import { effectiveBallparkRules, rankingMonth } from '../../data/ballparkRules'
 import type { IssuedRun } from '../../data/leaderboardApi'
 import type { BallparkSettings, BaseballDifficulty } from '../../data/models'
 import type { CameraStatus } from '../cameraTracking'
-import type { PracticeSample } from '../game/calibration'
+import { findsUsualTiming, isValidPracticeSwing, type PracticeSample } from '../game/calibration'
 import { DIFFICULTY_RULES, type TimingWindows } from '../game/difficulty'
 import { type DerbyInputLog, type DerbyResult, type PitchResult, practiceSample } from '../game/derbyScore'
 import type { BattingSide } from '../game/field'
+import { MORE_PRACTICE_SCHEDULE } from '../game/pitchSchedule'
 import { createPracticePlan, createRunPlan, type RunPlan } from '../game/runPlan'
 import type { StageEvent, StageRunSetup } from '../stage/stageRun'
 import type { StanceWait } from './stanceHold'
@@ -16,7 +17,8 @@ import type { StanceWait } from './stanceHold'
 // press once it has focus, as any button. No key starts a step by itself or swings: only the camera sees swings.
 // Practice pitches the game core's practice schedule at the practice pace, judges each swing against the visitor's own
 // usual timing and says how it was timed in words only, and calibrates every run after it until the camera turns off.
-// Practice and a run pause between pitches while the visitor is out of the camera's view.
+// When too few of its swings counted to do that, going on offers more practice before the run, as often as it takes,
+// and only the step's other button plays on anyway, unranked. Practice and a run pause between pitches while the visitor is out of the camera's view.
 
 export type DerbyStep = 'rules' | 'setup' | 'practice' | 'practiceDone' | 'play' | 'result'
 
@@ -69,22 +71,42 @@ export function stanceWait(flow: DerbyFlow): StanceWait | null {
   return { key: `${flow.step}@${flow.since}`, afterSwings: flow.step !== 'setup' }
 }
 
-/** What a go can start: the practice, and a run calibrated by `practice`. */
-export type DerbyPlays = { practice: () => StageRunSetup; run: (practice: PracticeSample[]) => StageRunSetup }
+/** What a go can start: the practice, more of it after `practice`, and a run calibrated by `practice`. */
+export type DerbyPlays = {
+  practice: () => StageRunSetup
+  morePractice: (practice: PracticeSample[]) => StageRunSetup
+  run: (practice: PracticeSample[]) => StageRunSetup
+}
 
-/** Whether a go starts a run: after practice, and after a result. */
-export function startsRun(flow: DerbyFlow) {
-  return flow.step === 'practiceDone' || flow.step === 'result'
+/** Whether the step after practice offers more, because too few swings counted for a usual timing. */
+export function offersMorePractice(flow: Pick<DerbyFlow, 'step' | 'practice'>) {
+  return flow.step === 'practiceDone' && !findsUsualTiming(flow.practice)
+}
+
+/** Whether a go starts a run: after practice that timed the visitor's swings, and after a result of such a run. */
+export function startsRun(flow: Pick<DerbyFlow, 'step' | 'practice'>) {
+  return (flow.step === 'practiceDone' || flow.step === 'result') && findsUsualTiming(flow.practice)
+}
+
+/** The flow as a run starts at `at`, calibrated by the practice, once a step after practice or a result allows it. */
+export function runFlow(flow: DerbyFlow, at: number, plays: DerbyPlays): DerbyFlow {
+  if (flow.step !== 'practiceDone' && flow.step !== 'result') return flow
+  return { ...flow, step: 'play', since: at, run: plays.run(flow.practice), result: null }
 }
 
 /**
- * The flow after the visitor's go at `at` (the held stance, or the step's button): practice from the setup, a run
- * after practice, and another after a result, both calibrated by the practice. Other steps take no go.
+ * The flow after the visitor's go at `at` (the held stance, or the step's main button): practice from the setup, a run
+ * after practice and another after a result, both calibrated by the practice. While too few swings counted, a go after
+ * practice is more practice, and one after a result comes back to that offer. More practice keeps only the valid swings
+ * so far: the others count for nothing, and they would pile up past what the board takes. Other steps take no go.
  */
 export function startedFlow(flow: DerbyFlow, at: number, plays: DerbyPlays): DerbyFlow {
   if (flow.step === 'setup') return { ...flow, step: 'practice', since: at, run: plays.practice(), practice: [] }
-  if (!startsRun(flow)) return flow
-  return { ...flow, step: 'play', since: at, run: plays.run(flow.practice), result: null }
+  if (startsRun(flow)) return runFlow(flow, at, plays)
+  if (flow.step === 'result') return { ...flow, step: 'practiceDone', since: at, run: null, result: null }
+  if (!offersMorePractice(flow)) return flow
+  const practice = flow.practice.filter(isValidPracticeSwing)
+  return { ...flow, step: 'practice', since: at, run: plays.morePractice(practice), practice }
 }
 
 /**
@@ -185,6 +207,24 @@ export function createPracticeRun(
   return {
     plan: createPracticePlan(rulesFor(ballpark, rankingMonth(now))),
     log: { side, practice: [] },
+    practice: true,
+  }
+}
+
+/**
+ * More practice at `now` after the swings of `practice`, against which it goes on judging, as in createPracticeRun; its
+ * swings join those in the log of the runs after it.
+ */
+export function createMorePracticeRun(
+  ballpark: BallparkSettings,
+  now: Date,
+  side: BattingSide,
+  practice: PracticeSample[],
+  rulesFor = effectiveBallparkRules,
+): StageRunSetup {
+  return {
+    plan: createPracticePlan(rulesFor(ballpark, rankingMonth(now)), MORE_PRACTICE_SCHEDULE),
+    log: { side, practice },
     practice: true,
   }
 }

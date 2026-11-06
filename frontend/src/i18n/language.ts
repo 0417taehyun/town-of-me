@@ -750,8 +750,13 @@ export const languageCopy = {
         },
         doneTitle: 'Practice done',
         doneNote: 'Your swing timing is set for the runs that follow.',
+        doneTitleUntimed: 'Too few swings counted',
         doneNoteUntimed:
-          'Too few practice swings counted to set your timing, so the runs that follow use the standard timing and are not ranked.',
+          'Practice some more to set your timing. If you play now, the game uses the standard timing and isn’t ranked.',
+        toMorePractice: (pitches: number) =>
+          `Hold your batting stance for 3 seconds for ${pitches} more practice pitches.`,
+        morePractice: 'Practice more',
+        playAnyway: 'Play ball anyway',
       },
       result: {
         eyebrow: 'Final',
@@ -1802,8 +1807,12 @@ export const languageCopy = {
         },
         doneTitle: '연습 끝',
         doneNote: '스윙 타이밍을 맞췄어요. 이어지는 경기에 그대로 써요.',
+        doneTitleUntimed: '스윙이 덜 잡혔어요',
         doneNoteUntimed:
-          '연습 스윙이 적어서 타이밍을 맞추지 못했어요. 이어지는 경기는 기본 타이밍으로 판정하고 순위에는 넣지 않아요.',
+          '조금 더 연습하면 타이밍을 맞출 수 있어요. 지금 경기를 시작하면 기본 타이밍으로 판정하고 순위에는 넣지 않아요.',
+        toMorePractice: (pitches: number) => `타격 자세로 3초 버티면 연습 공을 ${pitches}개 더 던져요.`,
+        morePractice: '연습 더 하기',
+        playAnyway: '이대로 경기 시작',
       },
       result: {
         eyebrow: '결과',

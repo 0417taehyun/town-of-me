@@ -44,6 +44,7 @@ import { installDevSeam, queueDevSwing } from './devSeam'
 import { browserDeviceBlock, type DeviceBlock } from './deviceGate'
 import {
   createDerbyRun,
+  createMorePracticeRun,
   createPracticeRun,
   createRankedRun,
   DEFAULT_BATTING_SIDE,
@@ -58,6 +59,7 @@ import {
   shownPracticeFeedback,
   shownRun,
   stanceWait,
+  runFlow,
   startedFlow,
   startsRun,
 } from './flow/derbyFlow'
@@ -315,6 +317,7 @@ export function DerbyScreen({
   // A ranked run plays the rules and seed the board issued it; any other plays this page's.
   const plays = (issued: IssuedRun | null): DerbyPlays => ({
     practice: () => createPracticeRun(ballpark, new Date(), side, rulesFor),
+    morePractice: (practice) => createMorePracticeRun(ballpark, new Date(), side, practice, rulesFor),
     run: (practice) =>
       issued
         ? createRankedRun(issued, { side, practice })
@@ -327,7 +330,7 @@ export function DerbyScreen({
     setListing(false)
     void board.issue(flow.practice).then((issued) => {
       starting.current = false
-      begin((current) => startedFlow(current, performance.now(), plays(issued)))
+      begin((current) => runFlow(current, performance.now(), plays(issued)))
     })
   }
   // A go on a step that waits, by the held stance or its button.
@@ -353,7 +356,7 @@ export function DerbyScreen({
   const [heldWord, setHeldWord] = useState<string | null>(null)
   const onStanceHeld = () => {
     sounds.play('ding')
-    setHeldWord(heldStanceWord(flow.step, language))
+    setHeldWord(heldStanceWord(flow, language))
     start()
   }
   useEffect(() => {
@@ -445,7 +448,8 @@ export function DerbyScreen({
       const at = performance.now()
       setHud((current) => hudAfterEvent(current, event))
       setFlow((current) => flowAfterEvent(current, event, at))
-      // Only a ranked run is waiting for its finish: practice comes after a setup, which forgets any.
+      // Only a ranked run is waiting for its finish: practice comes after a setup, which forgets any, or more of it
+      // while too few swings counted, when no run was ranked.
       if (event.type === 'finished') finishRankedRun(event.result, event.log)
       const sound = derbySoundFor(event)
       if (sound) sounds.play(sound)
@@ -540,7 +544,8 @@ export function DerbyScreen({
           timed={findsUsualTiming(flow.practice)}
           language={language}
           cameraState={cameraState}
-          onPlay={start}
+          onGo={start}
+          onPlayAnyway={startRun}
         />
       )}
       {/* The result card shows the run's own figures, so the live HUD steps aside for it. */}
