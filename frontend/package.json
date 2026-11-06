@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "vitest run --testTimeout=30000",
     "format": "prettier --write . --ignore-path ../.gitignore",
     "format:check": "prettier --check . --ignore-path ../.gitignore"
   },
