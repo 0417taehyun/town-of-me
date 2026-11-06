@@ -7,7 +7,15 @@ COPY frontend/package.json frontend/package.json
 RUN npm ci
 COPY backend backend
 RUN npm run build --workspace backend
-RUN npm prune --omit=dev --workspace backend --include-workspace-root
+
+# A fresh install, because pruning the build stage keeps the frontend's packages (three, the fonts, MediaPipe).
+FROM node:26-alpine AS dependencies
+
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY backend/package.json backend/package.json
+COPY frontend/package.json frontend/package.json
+RUN npm ci --omit=dev --workspace backend --include-workspace-root
 
 FROM node:26-alpine
 
@@ -17,7 +25,7 @@ COPY --from=build /app/backend/dist backend/dist
 COPY backend/server.mjs backend/server.mjs
 COPY backend/migrations backend/migrations
 COPY backend/seed backend/seed
-COPY --from=build /app/node_modules node_modules
+COPY --from=dependencies /app/node_modules node_modules
 USER node
 EXPOSE 3000
 CMD ["node", "backend/server.mjs"]
