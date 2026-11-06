@@ -753,7 +753,7 @@ export const languageCopy = {
           lines: [
             '__Host-tom_visitor: a random value made when you first leave a note, which lets this browser find and change your note. It lasts 365 days, and the server stores only its hash. If you block it you can still leave a note, but not change it later.',
             '__Host-tom_session (30 days) and __Host-tom_oauth (10 minutes): only for someone signing in to the town’s editor.',
-            'There are no advertising or analytics cookies or scripts.',
+            'There are no advertising cookies or scripts. Visit statistics are described below.',
           ],
         },
         {
@@ -783,8 +783,21 @@ export const languageCopy = {
           title: 'Server logs',
           lines: [
             'For each request, the web server (nginx) writes an access log with the IP address, time, requested address, response code and size, previous page, and browser details.',
-            'The site’s code sets no period for deleting this log; it depends on how the server is set up.',
+            'This log is kept by size, not by date: up to three files of 10 MB each, with the oldest removed first.',
             'IP addresses are not saved in the database.',
+          ],
+        },
+        {
+          title: 'Hosting and backups',
+          lines: [
+            'Requests to this town pass through Cloudflare to servers at Amazon Web Services (AWS), which also hold the database. Both companies handle IP addresses and request contents to do this.',
+            'Database backups are kept for 7 days. A note or record you had removed stays in them for that time, and restoring a backup can bring it back.',
+          ],
+        },
+        {
+          title: 'Visit statistics',
+          lines: [
+            'Cloudflare Web Analytics shows the owner statistics such as page views, where visitors came from, devices, and loading speed on the town’s pages. It does not run on this notice.',
           ],
         },
       ],
@@ -799,7 +812,7 @@ export const languageCopy = {
           'Records have no end date. “Delete my records” removes this browser’s records and game numbers of every season at once, and turning LinkedIn off removes that address at once.',
           'If you ask for removal by writing to the address above, the admin takes away the name, LinkedIn link, and character and leaves the record anonymous, with its score and place. A LinkedIn address the admin blocks is kept as a hash so it cannot come back.',
           'Your records are found by the __Host-tom_visitor cookie above. It is also made when a ranked game starts, and if you block it a record cannot be saved. “It’s someone else’s turn” clears only the cookie and this tab’s character: the records stay, and this browser can no longer change them.',
-          'Requests to the game’s API write no access log, and the counters that stop request floods exist only in the server’s memory.',
+          'Requests to the game’s API write no access log, and the counters that stop request floods exist only in the server’s memory. Visit statistics do not run on the game and board pages.',
           'The stadium’s crowd and players take the looks of characters from guestbook notes the admin approved, without their names.',
           'This browser also remembers the camera panel’s size and which month’s statues it has already revealed.',
           'The board’s pages ask search engines not to index them, but that cannot stop a copy someone makes of the screen.',
@@ -1940,7 +1953,7 @@ export const languageCopy = {
           lines: [
             '__Host-tom_visitor: 방명록에 처음 글을 남길 때 만드는 무작위 값이에요. 이 브라우저에서 내 글을 다시 찾아 고칠 수 있게 해 주고, 365일 동안 유지돼요. 서버에는 이 값의 해시만 저장해요. 쿠키를 막아도 글은 남길 수 있지만 나중에 고칠 수는 없어요.',
             '__Host-tom_session(30일)과 __Host-tom_oauth(10분): 마을 편집 화면에 로그인하는 사람에게만 쓰여요.',
-            '광고나 방문 통계를 위한 쿠키와 스크립트는 없어요.',
+            '광고를 위한 쿠키와 스크립트는 없어요. 방문 통계는 아래에 따로 적었어요.',
           ],
         },
         {
@@ -1970,8 +1983,21 @@ export const languageCopy = {
           title: '서버 기록',
           lines: [
             '웹 서버(nginx)는 요청마다 IP 주소, 시각, 요청한 주소, 응답 코드와 크기, 이전 페이지 주소, 브라우저 정보를 접속 기록으로 남겨요.',
-            '사이트 코드에는 이 기록을 지우는 기간이 정해져 있지 않고, 서버 설정에 따라 달라져요.',
+            '이 기록은 기간이 아니라 용량으로 관리해요. 10 MB짜리 파일을 세 개까지 두고, 넘치면 가장 오래된 것부터 지워져요.',
             'IP 주소를 데이터베이스에 저장하지는 않아요.',
+          ],
+        },
+        {
+          title: '호스팅과 백업',
+          lines: [
+            '이 마을로 오는 요청은 Cloudflare를 거쳐 Amazon Web Services(AWS)의 서버로 전달되고, 데이터베이스도 AWS에 있어요. 두 회사는 이 과정에서 IP 주소와 요청 내용을 처리해요.',
+            '데이터베이스 백업은 7일 동안 보관돼요. 지운 글이나 기록도 그동안은 백업에 남아 있고, 백업을 복원하면 되살아날 수 있어요.',
+          ],
+        },
+        {
+          title: '방문 통계',
+          lines: [
+            'Cloudflare Web Analytics로 마을 화면의 페이지 조회 수, 유입 경로, 기기, 로딩 속도 같은 통계를 운영자가 봐요. 이 안내 페이지에서는 실행되지 않아요.',
           ],
         },
       ],
@@ -1986,7 +2012,7 @@ export const languageCopy = {
           '기록은 기간을 정해 지우지 않아요. ‘내 기록 지우기’를 누르면 이 브라우저의 모든 시즌 기록과 경기 숫자가 바로 지워지고, LinkedIn을 끄면 그 주소가 바로 지워져요.',
           '위 주소로 게시 중단을 요청하면 관리자가 이름, LinkedIn 주소, 캐릭터를 없애고 기록을 익명으로 바꿔요. 점수와 순위는 그대로 남아요. 관리자가 막은 LinkedIn 주소는 다시 쓰이지 않도록 해시로 계속 보관해요.',
           '내 기록은 위에 적은 __Host-tom_visitor 쿠키로 찾아요. 이 쿠키는 순위 경기를 시작할 때도 만들어지고, 막으면 기록을 저장할 수 없어요. ‘다른 사람이 할 차례예요’는 쿠키와 이 탭의 캐릭터만 지워요. 기록은 그대로 남고, 이 브라우저에서는 더 고칠 수 없어요.',
-          '경기 API 요청은 접속 기록에 남기지 않고, 과도한 요청을 막는 계수는 서버 메모리에만 있어요.',
+          '경기 API 요청은 접속 기록에 남기지 않고, 과도한 요청을 막는 계수는 서버 메모리에만 있어요. 경기 화면과 순위 페이지에서는 방문 통계가 실행되지 않아요.',
           '경기장의 관중과 선수는 관리자가 확인한 방명록 글의 캐릭터 모습을 빌려 써요. 이름은 쓰지 않아요.',
           '카메라 패널 크기와 어느 달의 동상 등장을 이미 봤는지는 이 브라우저에 남아요.',
           '순위 페이지는 검색엔진에 색인하지 말라고 요청하지만, 화면을 찍어 옮긴 사본까지 막을 수는 없어요.',
