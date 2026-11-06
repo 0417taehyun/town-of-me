@@ -16,7 +16,8 @@ import {
 import { alignHand, createGlove } from './gloves'
 import { fieldToRig, type HeadLook } from './headLook'
 import { createMitten, MITTEN } from './mittenHands'
-import { CATCHER_PROFILE } from './teamUniforms'
+import { addTeamEmblem } from './teamEmblem'
+import { AWAY_UNIFORM, CATCHER_PROFILE } from './teamUniforms'
 
 // The other team's catcher, crouched deep behind the plate facing the pitcher, so his head stays under the batting
 // shot's view of home plate and the strike zone. His mitt reaches for where each pitch will end up and holds the ball there; his bare
@@ -53,6 +54,7 @@ export type Catcher = { rig: BallplayerRig; mitt: Group; hand: Group; mittPoint:
 
 export function createCatcher(setTarget: Vec3): Catcher {
   const rig = createBallplayerRig(CATCHER_PROFILE)
+  addTeamEmblem(rig, AWAY_UNIFORM.emblem)
   rig.root.position.set(CATCHER_SPOT.x, CATCHER_SPOT.y, CATCHER_SPOT.z)
   rig.root.rotation.y = Math.PI
   rig.root.scale.setScalar(PLAYER_SCALE)

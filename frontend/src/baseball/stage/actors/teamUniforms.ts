@@ -2,13 +2,28 @@ import { DEFAULT_PLAYER_PROFILE, type PlayerProfile } from '../../../data/player
 
 // The other team's uniform: brick red tops with charcoal caps, trousers, and shoes, against the cream and navy of ours.
 // The visitor bats in their own town clothes; the other players wear their team's over faces of their own, the
-// pitcher's and catcher's fictional, the rest the town's visitors' (stadium/guestLooks.ts).
+// pitcher's and catcher's fictional, the rest the town's visitors' (stadium/guestLooks.ts). Each team wears its emblem
+// on the chest (teamEmblem.ts): a brick star on cream for them, a cream garden flower on navy for us.
 
-export type TeamUniform = { cap: string; top: string; bottom: string; shoes: string }
+export type TeamEmblem = { badgeColor: string; markColor: string; mark: 'star' | 'flower' }
 
-export const AWAY_UNIFORM: TeamUniform = { cap: '#2f2b2a', top: '#b0503f', bottom: '#3a3533', shoes: '#2f2b2a' }
+export type TeamUniform = { cap: string; top: string; bottom: string; shoes: string; emblem?: TeamEmblem }
+
+export const AWAY_UNIFORM: TeamUniform = {
+  cap: '#2f2b2a',
+  top: '#b0503f',
+  bottom: '#3a3533',
+  shoes: '#2f2b2a',
+  emblem: { badgeColor: '#f4efe2', markColor: '#b0503f', mark: 'star' },
+}
 /** Our team's: cream tops and trousers under navy caps and shoes. */
-export const HOME_UNIFORM: TeamUniform = { cap: '#374b65', top: '#f4efe2', bottom: '#f4efe2', shoes: '#374b65' }
+export const HOME_UNIFORM: TeamUniform = {
+  cap: '#374b65',
+  top: '#f4efe2',
+  bottom: '#f4efe2',
+  shoes: '#374b65',
+  emblem: { badgeColor: '#374b65', markColor: '#f4efe2', mark: 'flower' },
+}
 /** The umpire's: a navy shirt, grey trousers, and a charcoal cap and shoes. */
 export const UMPIRE_UNIFORM: TeamUniform = { cap: '#272525', top: '#374b65', bottom: '#5f6670', shoes: '#272525' }
 

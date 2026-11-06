@@ -13,7 +13,7 @@ import {
 } from '../stage/actors/fieldPlayer'
 import { type HeadRange, watch } from '../stage/actors/headLook'
 import { batchRigs, disposeRigBatch, drawRigBatch, type RigBatch } from '../stage/actors/rigBatch'
-import { AWAY_UNIFORM, HOME_UNIFORM, UMPIRE_UNIFORM, wearUniform } from '../stage/actors/teamUniforms'
+import { AWAY_UNIFORM, HOME_UNIFORM, type TeamUniform, UMPIRE_UNIFORM, wearUniform } from '../stage/actors/teamUniforms'
 import type { StageRun } from '../stage/stageRun'
 import {
   createMover,
@@ -64,8 +64,16 @@ export const CREW_MOTION = { ease: 6, runEase: 10, hop: 0.25, wave: 12 }
 
 const HOME_PLATE: Spot = { x: 0, z: 0 }
 
-export function crewMember(look: PlayerProfile, gloved: boolean, home: Spot, heading: number, floor = 0): CrewMember {
-  return { player: createFieldPlayer(look, gloved), mover: createMover(home, heading), floor, pose: { ...STANDING } }
+export function crewMember(
+  look: PlayerProfile,
+  uniform: TeamUniform,
+  gloved: boolean,
+  home: Spot,
+  heading: number,
+  floor = 0,
+): CrewMember {
+  const player = createFieldPlayer(wearUniform(look, uniform), gloved, uniform.emblem)
+  return { player, mover: createMover(home, heading), floor, pose: { ...STANDING } }
 }
 
 /**
@@ -75,18 +83,13 @@ export function crewMember(look: PlayerProfile, gloved: boolean, home: Spot, hea
 export function createFieldCrew(approved: readonly PlayerProfile[], withTeammates: boolean): FieldCrew {
   const looks = pickLooks(approved, FIELDER_SPOTS.length + 6, 29)
   const fielders = FIELDER_SPOTS.map((spot, index) =>
-    crewMember(wearUniform(looks[index], AWAY_UNIFORM), true, spot, headingToward(spot, HOME_PLATE)),
+    crewMember(looks[index], AWAY_UNIFORM, true, spot, headingToward(spot, HOME_PLATE)),
   )
   const ours = looks.slice(FIELDER_SPOTS.length)
-  const runner = crewMember(
-    wearUniform(ours[0], HOME_UNIFORM),
-    false,
-    RUNNER_SPOT,
-    headingToward(RUNNER_SPOT, HOME_PLATE),
-  )
-  const umpire = crewMember(wearUniform(ours[1], UMPIRE_UNIFORM), false, UMPIRE_SPOT, Math.PI)
+  const runner = crewMember(ours[0], HOME_UNIFORM, false, RUNNER_SPOT, headingToward(RUNNER_SPOT, HOME_PLATE))
+  const umpire = crewMember(ours[1], UMPIRE_UNIFORM, false, UMPIRE_SPOT, Math.PI)
   const teammates = (withTeammates ? teammateSpots() : []).map((spot, index) =>
-    crewMember(wearUniform(ours[2 + index], HOME_UNIFORM), false, spot, OUR_DUGOUT.yaw, DUGOUT_FLOOR),
+    crewMember(ours[2 + index], HOME_UNIFORM, false, spot, OUR_DUGOUT.yaw, DUGOUT_FLOOR),
   )
   const everyone = [...fielders, umpire, runner, ...teammates]
   everyone.forEach((member) => placeMember(member, 0))

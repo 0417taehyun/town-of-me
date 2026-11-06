@@ -14,6 +14,8 @@ import {
 } from './ballplayerRig'
 import { alignHand, createGlove, FIELDER_GLOVE } from './gloves'
 import type { HeadLook } from './headLook'
+import { addTeamEmblem } from './teamEmblem'
+import type { TeamEmblem } from './teamUniforms'
 
 // Everyone else on the field, on the town character's rig (ballplayerRig.ts): the other team's fielders with a glove on
 // the left hand, the umpire, and our runner and teammates. Their poses are blends of a few amounts rather than keyed
@@ -28,8 +30,9 @@ export const STANDING: FieldPose = { crouch: 0, run: 0, stride: 0, slump: 0, che
 /** `look` is where the head turns; `glove` is on the left hand, or null for a player without one. */
 export type FieldPlayer = { rig: BallplayerRig; glove: Group | null; look: HeadLook }
 
-export function createFieldPlayer(profile: PlayerProfile, gloved: boolean): FieldPlayer {
+export function createFieldPlayer(profile: PlayerProfile, gloved: boolean, emblem?: TeamEmblem): FieldPlayer {
   const rig = createBallplayerRig(profile)
+  addTeamEmblem(rig, emblem)
   rig.root.scale.setScalar(PLAYER_SCALE)
   const player = { rig, glove: gloved ? createGlove(rig, FIELDER_GLOVE) : null, look: { yaw: 0, pitch: 5 } }
   poseFieldPlayer(player, STANDING)

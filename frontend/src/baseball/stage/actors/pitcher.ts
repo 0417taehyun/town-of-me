@@ -19,7 +19,8 @@ import { alignHand, createGlove, FIELDER_GLOVE } from './gloves'
 import type { HeadLook } from './headLook'
 import { createMitten, MITTEN } from './mittenHands'
 import { keyedTracks, type MonotoneTrack, sampleTracks } from './keyframes'
-import { PITCHER_PROFILE } from './teamUniforms'
+import { addTeamEmblem } from './teamEmblem'
+import { AWAY_UNIFORM, PITCHER_PROFILE } from './teamUniforms'
 import { solveTwoBone } from './twoBoneIk'
 
 // The other team's right-handed pitcher on the rubber, facing home, keyed like the batter's swing (swingMotion.ts):
@@ -125,6 +126,7 @@ export type Pitcher = {
 
 export function createPitcher(): Pitcher {
   const rig = createBallplayerRig(PITCHER_PROFILE)
+  addTeamEmblem(rig, AWAY_UNIFORM.emblem)
   rig.root.position.set(PITCHER_SPOT.x, PITCHER_SPOT.y, PITCHER_SPOT.z)
   rig.root.scale.setScalar(PLAYER_SCALE)
   const tracks = keyedTracks(
