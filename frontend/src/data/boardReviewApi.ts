@@ -16,6 +16,9 @@ import { normalizePlayerProfile, type PlayerProfile } from './playerProfile'
 const reviewPath = '/v1/admin/games/home-run-derby'
 export const seasonPattern = /^\d{4}-(0[1-9]|1[0-2])$/u
 
+/** Mirrors the server's bound on one dismissal; a bigger flood takes another click. */
+export const DISMISSED_RUNS_LIMIT = 1000
+
 /** The queue's kinds, most urgent first, as the server orders them. */
 export const REVIEW_KINDS = ['statue', 'statue-run', 'report', 'linkedin', 'past-run', 'run', 'name'] as const
 export type ReviewKind = (typeof REVIEW_KINDS)[number]
@@ -60,7 +63,8 @@ export type ReviewedEntry = {
   name: string | null
   nameStatus: NameStatus | null
   reviewStatus: ReviewStatus
-  profile: PlayerProfile
+  /** `null` once taken down: the character is hidden from everyone, the admin included. */
+  profile: PlayerProfile | null
   appearancePublic: boolean
   takedown: boolean
   homeRuns: number
@@ -100,26 +104,30 @@ export type ReviewWarning =
 export type NeighbourName = { rank: number; name: string | null }
 export type VisitorCounts = { runs: number; abandoned: number; flagged: number }
 
-/** One visitor on one board. `kind` and `visitor` are `null` for a record found outside the queue. */
+/**
+ * One visitor on one board. `kind` and `visitor` are `null` for a record found outside the queue, whose `warnings` are
+ * `null` until they are read. `acceptable` says whether its held runs may still be accepted.
+ */
 export type ReviewItem = {
   kind: ReviewKind | null
   season: string
+  acceptable: boolean
   newVisitor: boolean
   visitor: VisitorCounts | null
   entry: ReviewedEntry | null
   runs: ReviewedRun[]
   reports: ReviewReport[]
-  warnings: ReviewWarning[]
+  warnings: ReviewWarning[] | null
   neighbours: NeighbourName[]
 }
 
 /**
  * What the dialog reads: the queue, and for finding one record, a season's records and, for a season the admin picked,
- * its queue. `season` is `null` for this season as the server counts it.
+ * its queue. `season` is the month the records belong to, as the server answered.
  */
 export type BoardReviewData = {
   queue: ReviewItem[]
-  season: string | null
+  season: string
   records: ReviewedEntry[]
   seasonQueue: ReviewItem[]
   unreadable: number
@@ -200,7 +208,7 @@ export function parseReviewedEntry(value: unknown): ReviewedEntry {
     name: textOrNull(input.name, 'entry.name'),
     nameStatus: input.nameStatus === null ? null : oneOf(input.nameStatus, nameStatuses, 'entry.nameStatus'),
     reviewStatus: oneOf(input.reviewStatus, reviewStatuses, 'entry.reviewStatus'),
-    profile: normalizePlayerProfile(requireRecord(input.profile, 'entry.profile')),
+    profile: input.profile === null ? null : normalizePlayerProfile(requireRecord(input.profile, 'entry.profile')),
     appearancePublic: input.appearancePublic === true,
     takedown: input.takedown === true,
     homeRuns: wholeNumber(input.homeRuns, 'entry.homeRuns'),
@@ -285,6 +293,7 @@ export function parseReviewItem(value: unknown): ReviewItem {
   return {
     kind: oneOf(input.kind, REVIEW_KINDS, 'item.kind'),
     season: requireSeason(input.season, 'item.season'),
+    acceptable: input.acceptable === true,
     newVisitor: input.newVisitor === true,
     visitor: {
       runs: wholeNumber(counts.runs, 'item.visitor.runs'),
@@ -331,7 +340,24 @@ export async function fetchReviewQueue(season: string | null, request: typeof fe
 export async function fetchBoardRecords(season: string | null, request: typeof fetch = fetch) {
   const query = season ? `?season=${encodeURIComponent(season)}` : ''
   const payload = await responseRecord(await sendReview(`/entries${query}`, {}, request))
-  return readableList(payload.entries, 'entries', parseReviewedEntry)
+  return {
+    season: requireSeason(payload.season, 'season'),
+    ...readableList(payload.entries, 'entries', parseReviewedEntry),
+  }
+}
+
+/** The warnings of the records a search found, by id, which only they need: reading them costs the server a board each. */
+export async function fetchRecordWarnings(
+  season: string | null,
+  recordIds: string,
+  request: typeof fetch = fetch,
+): Promise<Record<string, ReviewWarning[]>> {
+  if (recordIds === '') return {}
+  const seasonQuery = season ? `&season=${encodeURIComponent(season)}` : ''
+  const path = `/entries/warnings?ids=${encodeURIComponent(recordIds)}${seasonQuery}`
+  const payload = await responseRecord(await sendReview(path, {}, request))
+  const warnings = Object.entries(requireRecord(payload.warnings, 'warnings'))
+  return Object.fromEntries(warnings.map(([id, list]) => [id, requireList(list, 'warnings[]').map(parseWarning)]))
 }
 
 /**
@@ -347,7 +373,7 @@ export async function fetchBoardReview(season: string | null, request: typeof fe
   ])
   return {
     queue: queue.items,
-    season,
+    season: records.season,
     records: records.items,
     seasonQueue: seasonQueue?.items ?? [],
     // The reads overlap, so the largest says how many at least; a sum would count one item two or three times.
@@ -395,9 +421,8 @@ export async function dismissHeldRun(run: ReviewedRun, request: typeof fetch = f
   await sendReview(`/runs/${encodeURIComponent(run.id)}/rejection`, { method: 'POST' }, request)
 }
 
-/** Dismisses the held runs of `season`'s visitors with no history, and answers how many. */
-export async function dismissRunsWithoutHistory(season: string, request: typeof fetch = fetch): Promise<number> {
-  const body = JSON.stringify({ season, scope: 'no-history' })
-  const response = await sendReview('/runs/rejection', { method: 'POST', body }, request)
+/** Dismisses the listed held runs in one request, and answers how many were still waiting. */
+export async function dismissListedRuns(runIds: readonly string[], request: typeof fetch = fetch): Promise<number> {
+  const response = await sendReview('/runs/rejection', { method: 'POST', body: JSON.stringify({ runIds }) }, request)
   return wholeNumber((await responseRecord(response)).rejected, 'rejected')
 }

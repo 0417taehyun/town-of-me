@@ -1,5 +1,8 @@
+import { useCallback } from 'react'
 import { recordNumber } from '../baseball/board/boardView'
 import {
+  DISMISSED_RUNS_LIMIT,
+  fetchRecordWarnings,
   REVIEW_KINDS,
   seasonPattern,
   type BoardReviewData,
@@ -12,6 +15,7 @@ import {
 } from '../data/boardReviewApi'
 import { LeaderboardRequestError } from '../data/leaderboardApi'
 import { normalizeLinkedInProfileUrl } from '../data/linkedInProfile'
+import { useRetryableLoad } from '../hooks/useRetryableLoad'
 import type { AppLanguage } from '../i18n/language'
 import type { BoardReviewCopy } from './boardReviewCopy'
 
@@ -22,9 +26,12 @@ import type { BoardReviewCopy } from './boardReviewCopy'
 export const FOUND_RECORDS_SHOWN = 20
 const neighbourDistance = 3
 
-/** Someone changed the record since the list loaded, so the list must reload before the admin acts on it. */
+/**
+ * Someone changed the record since the list loaded (`409`), or its visitor deleted their records (`404`), so the list
+ * must reload before the admin acts on it.
+ */
 export function isStaleBoardReview(error: unknown) {
-  return error instanceof LeaderboardRequestError && error.status === 409
+  return error instanceof LeaderboardRequestError && (error.status === 409 || error.status === 404)
 }
 
 /** The queue under its kinds, keeping the server's order, and without the kinds nothing waits in. */
@@ -39,7 +46,10 @@ export function itemKey(item: ReviewItem) {
   return item.entry?.id ?? item.runs[0]?.id ?? ''
 }
 
-/** Per season in the queue, how many held runs "dismiss all" would take: those of visitors with no history there. */
+/**
+ * Per season in the queue, the held runs of visitors with no history, which the bulk action names one by one: a
+ * dismissal cannot be undone, so it takes only what the admin sees listed. A bigger flood takes another click.
+ */
 export function noHistoryRuns(items: readonly ReviewItem[]) {
   const held = items.filter((item) => item.newVisitor && item.runs.length > 0)
   const seasons = [...new Set(held.map((item) => item.season))]
@@ -47,7 +57,7 @@ export function noHistoryRuns(items: readonly ReviewItem[]) {
     const ofSeason = held.filter((item) => item.season === season)
     return {
       season,
-      runs: ofSeason.reduce((total, item) => total + item.runs.length, 0),
+      runIds: ofSeason.flatMap((item) => item.runs.map((run) => run.id)).slice(0, DISMISSED_RUNS_LIMIT),
       keys: ofSeason.map(itemKey),
     }
   })
@@ -57,16 +67,21 @@ export function searchForm(text: string) {
   return text.normalize('NFKC').trim().toLowerCase()
 }
 
-/** A record number is the id's first characters, so any start of the id finds it; a name matches anywhere within. */
-export function matchesRecord(record: ReviewedEntry, form: string) {
-  return record.id.startsWith(form) || (record.name !== null && searchForm(record.name).includes(form))
-}
-
-/** The records that match, in the board's order and at most `FOUND_RECORDS_SHOWN`, and how many there were. */
+/**
+ * The records that match, in the board's order and at most `FOUND_RECORDS_SHOWN`, how many there were, and whether they
+ * matched by number. A record number is the id's first characters, and when any id starts with the query only those
+ * records count: a visitor can name themselves another record's number, and the admin must not act on the impostor.
+ * Otherwise a name matches anywhere within.
+ */
 export function findRecords(records: readonly ReviewedEntry[], query: string) {
   const form = searchForm(query)
-  const matches = form === '' ? [] : records.filter((record) => matchesRecord(record, form))
-  return { shown: matches.slice(0, FOUND_RECORDS_SHOWN), total: matches.length }
+  if (form === '') return { shown: [], total: 0, byNumber: false }
+  const byNumber = records.filter((record) => record.id.startsWith(form))
+  const matches =
+    byNumber.length > 0
+      ? byNumber
+      : records.filter((record) => record.name !== null && searchForm(record.name).includes(form))
+  return { shown: matches.slice(0, FOUND_RECORDS_SHOWN), total: matches.length, byNumber: byNumber.length > 0 }
 }
 
 /** The names around a found record's place in the public order, as the queue gives them. */
@@ -81,18 +96,34 @@ export function boardNeighbours(records: readonly ReviewedEntry[], entry: Review
     .filter(({ rank }) => rank !== index + 1)
 }
 
-/** A found record as a card shows it: its queue item when it waits in a queue the dialog read, or the record alone. */
-export function foundItem(entry: ReviewedEntry, data: BoardReviewData): ReviewItem {
+/** The warnings of the records a search found outside the queues, read again whenever they change. */
+export function useRecordWarnings(season: string | null, recordIds: string) {
+  const load = useCallback(() => fetchRecordWarnings(season, recordIds), [season, recordIds])
+  return useRetryableLoad(load)
+}
+
+/** The record's item in a queue the dialog read, which brings its own warnings, reports, and runs. */
+export function queuedItem(entry: ReviewedEntry, data: BoardReviewData) {
+  return [...data.seasonQueue, ...data.queue].find((item) => item.entry?.id === entry.id) ?? null
+}
+
+/** A found record as a card shows it: its queue item, or the record with the warnings read for it, once they are. */
+export function foundItem(
+  entry: ReviewedEntry,
+  data: BoardReviewData,
+  warnings: Readonly<Record<string, ReviewWarning[]>> | undefined,
+): ReviewItem {
   return (
-    [...data.seasonQueue, ...data.queue].find((item) => item.entry?.id === entry.id) ?? {
+    queuedItem(entry, data) ?? {
       kind: null,
       season: entry.season,
+      acceptable: false,
       newVisitor: false,
       visitor: null,
       entry,
       runs: [],
       reports: [],
-      warnings: [],
+      warnings: warnings?.[entry.id] ?? null,
       neighbours: boardNeighbours(data.records, entry),
     }
   )
@@ -175,18 +206,37 @@ export function recordButtons(entry: ReviewedEntry, copy: BoardReviewCopy) {
   return buttons.filter((button) => button.shown)
 }
 
-/** What the admin must confirm first: what is hard to see undone, or cannot be. `null` for everything else. */
+/**
+ * What the admin must confirm about a record first: what deletes something for good (a link, a record's name and link),
+ * what publishes a name that was refused, and disqualifying, which moves a statue at once. Each says which record, by
+ * number too, since a visitor can name themselves anything. Dismissing a held run asks too, but it is not on a record.
+ */
 export function actionQuestion(entry: ReviewedEntry, action: RecordAction, copy: BoardReviewCopy) {
-  const name = entry.name ?? recordNumber(entry.id)
-  if (action.kind === 'disqualification') return copy.confirmDisqualify(name)
-  if (action.kind === 'takedown') return copy.confirmTakedown(name, action.blockLinkedIn === true)
+  const number = recordNumber(entry.id)
+  const name = entry.name ?? copy.noName
+  if (action.kind === 'disqualification') return copy.confirmDisqualify(name, number)
+  if (action.kind === 'takedown') return copy.confirmTakedown(name, number, action.blockLinkedIn === true)
+  if (deletesLink(action)) return copy.confirmRejectLink(name, number)
+  if (action.kind === 'approval' && action.name === 'approve' && entry.nameStatus === 'rejected') {
+    return copy.confirmRejectedName(name, number)
+  }
   return null
+}
+
+export function deletesLink(action: RecordAction) {
+  if (action.kind === 'linkedin-review') return action.decision === 'reject'
+  return action.kind === 'report-resolution' && action.target === 'link' && action.resolution === 'removed'
 }
 
 export function warningText(warning: ReviewWarning, copy: BoardReviewCopy) {
   if (warning.kind === 'similar-name') return copy.similarName(warning.name)
   if (warning.kind === 'same-appearance') return copy.sameAppearance(warning.name)
   return copy.townLink
+}
+
+/** Each thing a card warns of once: the town's owner and their house can share a name, and many records have none. */
+export function warningLines(warnings: readonly ReviewWarning[], copy: BoardReviewCopy) {
+  return [...new Set(warnings.map((warning) => warningText(warning, copy)))]
 }
 
 /** A flag the server added after this page was built still shows, as the server names it. */

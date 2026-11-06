@@ -5,6 +5,8 @@ what changed.
 
 ## Town and editor
 
+- Decide whether the derby review's queue should show a visitor's other runs: the spec lists them for each item (§3.9,
+  leaderboard-spec.md line 601), and today it shows only their held runs and their record's best run.
 - Editor phase 2: a scatter tool that fills an area with trees, flowers, grass, birds, or clouds at a chosen density
   (as OpenRCT2's scenery scatter tool does), and an area tool that clears one category.
 - Let route handles (residents' and the pet's) move with the keyboard, not only by dragging.

@@ -6,7 +6,7 @@ import { distanceText, recordText } from '../data/boardRecord'
 import {
   acceptHeldRun,
   dismissHeldRun,
-  dismissRunsWithoutHistory,
+  dismissListedRuns,
   fetchBoardReview,
   fetchReviewedRun,
   sendRecordAction,
@@ -38,11 +38,13 @@ import {
   neighbourLines,
   noHistoryRuns,
   numberText,
+  queuedItem,
   recordButtons,
   recordChoices,
   reviewGroups,
   reviewTime,
-  warningText,
+  useRecordWarnings,
+  warningLines,
   withEntry,
   withoutRun,
 } from './boardReviewing'
@@ -244,10 +246,13 @@ export function HeldRun({
       {!sentShown && run.profile && <Portrait profile={run.profile} label={copy.runPortraitLabel} />}
       {run.submittedAt && <time dateTime={run.submittedAt}>{reviewTime(run.submittedAt, language)}</time>}
       <RunFacts run={run} language={language} copy={copy} />
+      {!item.acceptable && <p className="editor-note">{copy.runFinal}</p>}
       <div className="editor-actions">
-        <button className="text-button" type="button" disabled={busy} onClick={() => onAcceptRun(run)}>
-          {copy.acceptRun}
-        </button>
+        {item.acceptable && (
+          <button className="text-button" type="button" disabled={busy} onClick={() => onAcceptRun(run)}>
+            {copy.acceptRun}
+          </button>
+        )}
         <button className="text-button danger" type="button" disabled={busy} onClick={() => onDismissRun(run)}>
           {copy.dismissRun}
         </button>
@@ -439,15 +444,16 @@ export function ReviewCard({
       </div>
       <PublicPreview
         name={entry ? entry.name : (bestHeldRun?.name ?? null)}
-        profile={entry?.profile ?? bestHeldRun?.profile ?? null}
+        profile={entry ? entry.profile : (bestHeldRun?.profile ?? null)}
         link={entry?.linkedIn ?? null}
         copy={copy}
       />
-      {item.warnings.length > 0 && (
+      {item.warnings === null && <p className="editor-note">{copy.warningsUnknown}</p>}
+      {item.warnings && item.warnings.length > 0 && (
         <ul className="board-review-warnings">
-          {item.warnings.map((warning, index) => (
-            <li key={index}>
-              <bdi>{warningText(warning, copy)}</bdi>
+          {warningLines(item.warnings, copy).map((line) => (
+            <li key={line}>
+              <bdi>{line}</bdi>
             </li>
           ))}
         </ul>
@@ -511,6 +517,8 @@ export function BoardReview({ language, onClose }: { language: AppLanguage; onCl
   const shellCopy = languageCopy[language].boardReview
   const currentSeason = rankingMonth(new Date())
   const [season, setSeason] = useState<string | null>(null)
+  // What the month field says, which may be a month not loaded, or none while it is half typed.
+  const [monthField, setMonthField] = useState(currentSeason)
   const [query, setQuery] = useState('')
   const load = useCallback(() => fetchBoardReview(season), [season])
   const { status, latest, retry, update } = useRetryableLoad(load)
@@ -520,9 +528,11 @@ export function BoardReview({ language, onClose }: { language: AppLanguage; onCl
   const queue = latest?.queue ?? []
   const groups = reviewGroups(queue)
   const dismissible = noHistoryRuns(queue)
-  // A season still loading shows nothing of the one before it, so a search never acts on the wrong board.
-  const seasonData = latest?.season === season ? latest : null
+  // Results show only for the month the field says, so "no record matches" is never about another board.
+  const seasonData = latest?.season === monthField ? latest : null
   const found = findRecords(seasonData?.records ?? [], query)
+  const unqueued = seasonData ? found.shown.filter((record) => !queuedItem(record, seasonData)) : []
+  const warnings = useRecordWarnings(season, unqueued.map(({ id }) => id).join())
 
   /** Only the acting items wait; the list changes as `action` says at once, then reloads from the server. */
   const act = async (keys: readonly string[], action: () => Promise<ActionOutcome>) => {
@@ -533,16 +543,20 @@ export function BoardReview({ language, onClose }: { language: AppLanguage; onCl
       const outcome = await action()
       update(outcome.change)
       setNotice(outcome.notice ?? copy.done)
-      retry()
+      reload()
     } catch (error) {
       reportFailure(error)
     } finally {
       setBusyKeys((current) => new Set([...current].filter((key) => !keys.includes(key))))
     }
   }
+  const reload = () => {
+    retry()
+    warnings.retry()
+  }
   const reportFailure = (error: unknown) => {
     setFailure(isStaleBoardReview(error) ? copy.changed : copy.failed)
-    if (isStaleBoardReview(error)) retry()
+    if (isStaleBoardReview(error)) reload()
   }
   const recordAction = (entry: ReviewedEntry, action: RecordAction) => {
     const question = actionQuestion(entry, action, copy)
@@ -557,20 +571,23 @@ export function BoardReview({ language, onClose }: { language: AppLanguage; onCl
       const entry = await acceptHeldRun(run, item.entry)
       return { change: (data) => withEntry(withoutRun(data, run.id), entry) }
     })
-  const dismissRun = (item: ReviewItem, run: ReviewedRun) =>
+  const dismissRun = (item: ReviewItem, run: ReviewedRun) => {
+    if (!window.confirm(copy.confirmDismissRun)) return
     void act([itemKey(item)], async () => {
       await dismissHeldRun(run)
       return { change: (data) => withoutRun(data, run.id) }
     })
-  const dismissNoHistory = ({ season: heldSeason, runs, keys }: (typeof dismissible)[number]) => {
+  }
+  const dismissNoHistory = ({ season: heldSeason, runIds, keys }: (typeof dismissible)[number]) => {
     const month = monthName(heldSeason, currentSeason, language)
-    if (!window.confirm(copy.bulkConfirm(month, runs))) return
+    if (!window.confirm(copy.bulkConfirm(month, runIds.length))) return
     void act(keys, async () => {
-      const dismissed = await dismissRunsWithoutHistory(heldSeason)
+      const dismissed = await dismissListedRuns(runIds)
       return { change: (data) => data, notice: copy.bulkDone(dismissed) }
     })
   }
   const changeSeason = (value: string) => {
+    setMonthField(value)
     if (!isPickableSeason(value, currentSeason)) return
     setSeason(value)
     retry()
@@ -640,12 +657,15 @@ export function BoardReview({ language, onClose }: { language: AppLanguage; onCl
               <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} />
             </label>
           </div>
-          {query.trim() && !seasonData && status !== 'error' && <p role="status">{copy.loading}</p>}
+          {query.trim() && !seasonData && status !== 'error' && (
+            <p role="status">{status === 'loading' ? copy.loading : copy.pickSeason}</p>
+          )}
           {query.trim() && seasonData && found.total === 0 && <p role="status">{copy.noMatch}</p>}
+          {found.byNumber && <p className="editor-note">{copy.matchedByNumber}</p>}
           {found.total > found.shown.length && <p role="status">{copy.moreMatches(found.shown.length, found.total)}</p>}
           {seasonData && found.shown.length > 0 && (
             <ul className="guestbook-review-list">
-              {found.shown.map((record) => card(foundItem(record, seasonData)))}
+              {found.shown.map((record) => card(foundItem(record, seasonData, warnings.latest)))}
             </ul>
           )}
         </section>
@@ -662,7 +682,7 @@ export function BoardReview({ language, onClose }: { language: AppLanguage; onCl
                 disabled={held.keys.every((key) => busyKeys.has(key))}
                 onClick={() => dismissNoHistory(held)}
               >
-                {copy.bulkDismiss(monthName(held.season, currentSeason, language), held.runs)}
+                {copy.bulkDismiss(monthName(held.season, currentSeason, language), held.runIds.length)}
               </button>
             ))}
           </div>

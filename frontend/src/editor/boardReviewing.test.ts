@@ -1,11 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import type { BoardReviewData, ReviewedEntry, ReviewedLink, ReviewItem } from '../data/boardReviewApi'
-import { DEFAULT_PLAYER_PROFILE } from '../data/playerProfile'
 import {
+  DISMISSED_RUNS_LIMIT,
+  type BoardReviewData,
+  type ReviewedEntry,
+  type ReviewedLink,
+  type ReviewItem,
+} from '../data/boardReviewApi'
+import { LeaderboardRequestError } from '../data/leaderboardApi'
+import { DEFAULT_PLAYER_PROFILE } from '../data/playerProfile'
+import { boardReviewCopy } from './boardReviewCopy'
+import {
+  actionQuestion,
   boardNeighbours,
   findRecords,
   FOUND_RECORDS_SHOWN,
   foundItem,
+  isStaleBoardReview,
   linkView,
   neighbourLines,
   noHistoryRuns,
@@ -41,6 +51,7 @@ function item(changes: Partial<ReviewItem>): ReviewItem {
   return {
     kind: 'run',
     season: '2026-11',
+    acceptable: true,
     newVisitor: false,
     visitor: { runs: 5, abandoned: 0, flagged: 1 },
     entry: null,
@@ -83,6 +94,16 @@ describe('finding a record', () => {
     expect(findRecords(records, '   ').total).toBe(0)
   })
 
+  it('shows only the record itself when a visitor names themselves its number', () => {
+    const real = entry('a1b2c3d4-0000-4000-8000-000000000001', 'Sprout')
+    const impostor = entry('77777777-0000-4000-8000-000000000002', 'a1b2c3d4')
+    const namedLike = entry('88888888-0000-4000-8000-000000000003', 'x a1b2c3d4 y')
+    const found = findRecords([impostor, namedLike, real], 'A1B2C3D4')
+    expect(found.shown).toEqual([real])
+    expect(found).toMatchObject({ total: 1, byNumber: true })
+    expect(findRecords([impostor, namedLike], 'a1b2c3d4')).toMatchObject({ total: 2, byNumber: false })
+  })
+
   it('caps what it shows on a big board and still says how many matched', () => {
     const many = Array.from({ length: FOUND_RECORDS_SHOWN + 5 }, (_, index) => entry(`id-${index}`, `Clover ${index}`))
     const found = findRecords(many, 'clover')
@@ -106,9 +127,11 @@ describe('finding a record', () => {
       seasonQueue: [reported],
       unreadable: 0,
     }
-    expect(foundItem(queued, data)).toBe(reported)
-    expect(foundItem(queued, { ...data, seasonQueue: [], queue: [reported] })).toBe(reported)
-    expect(foundItem(quiet, data)).toMatchObject({ kind: null, visitor: null, entry: quiet, reports: [], runs: [] })
+    expect(foundItem(queued, data, {})).toBe(reported)
+    expect(foundItem(queued, { ...data, seasonQueue: [], queue: [reported] }, {})).toBe(reported)
+    expect(foundItem(quiet, data, undefined)).toMatchObject({ kind: null, visitor: null, entry: quiet, reports: [] })
+    expect(foundItem(quiet, data, undefined).warnings).toBeNull()
+    expect(foundItem(quiet, data, { quiet: [{ kind: 'town-link' }] }).warnings).toEqual([{ kind: 'town-link' }])
   })
 })
 
@@ -184,6 +207,37 @@ describe('what a record offers', () => {
   })
 })
 
+describe('what an action asks first', () => {
+  const copy = boardReviewCopy.en
+  const record = entry('a1b2c3d4-0000-4000-8000-000000000001', 'Sprout')
+
+  it('names the record by number before anything that cannot be seen undone', () => {
+    expect(actionQuestion(record, { kind: 'disqualification' }, copy)).toContain('a1b2c3d4')
+    expect(actionQuestion(record, { kind: 'takedown' }, copy)).toContain('a1b2c3d4')
+    expect(actionQuestion(record, { kind: 'linkedin-review', decision: 'reject' }, copy)).toContain('a1b2c3d4')
+  })
+
+  it('asks before deleting a link, however it goes, and before publishing a refused name, and nothing else', () => {
+    const removed = { kind: 'report-resolution', target: 'link', resolution: 'removed' } as const
+    expect(actionQuestion(record, removed, copy)).not.toBeNull()
+    const refused = entry('b', 'Robin Official', { nameStatus: 'rejected' })
+    expect(actionQuestion(refused, { kind: 'approval', name: 'approve' }, copy)).toContain('Robin Official')
+    expect(actionQuestion(record, { kind: 'approval', name: 'approve' }, copy)).toBeNull()
+    expect(actionQuestion(record, { kind: 'linkedin-review', decision: 'code-verified' }, copy)).toBeNull()
+    expect(actionQuestion(record, { ...removed, resolution: 'kept' }, copy)).toBeNull()
+    expect(actionQuestion(record, { ...removed, target: 'name' }, copy)).toBeNull()
+  })
+})
+
+describe('a refused action', () => {
+  it('reloads when the record changed or its visitor deleted it, and not for any other failure', () => {
+    expect(isStaleBoardReview(new LeaderboardRequestError(409))).toBe(true)
+    expect(isStaleBoardReview(new LeaderboardRequestError(404))).toBe(true)
+    expect(isStaleBoardReview(new LeaderboardRequestError(500))).toBe(false)
+    expect(isStaleBoardReview(new Error('offline'))).toBe(false)
+  })
+})
+
 describe('how a link reads', () => {
   const link = (profileUrl: string, profileId: string, encoded = false): ReviewedLink => ({
     profileUrl,
@@ -218,7 +272,7 @@ describe('how a link reads', () => {
 })
 
 describe('the bulk dismissal', () => {
-  it('counts per season the held runs of visitors with no history, and no one else', () => {
+  it('names per season the held runs of visitors with no history, and no one else', () => {
     const items = [
       item({ season: '2026-11', newVisitor: true, runs: [heldRun('a'), heldRun('b')], entry: entry('rec-a', 'A') }),
       item({ season: '2026-11', newVisitor: false, runs: [heldRun('c')] }),
@@ -226,9 +280,14 @@ describe('the bulk dismissal', () => {
       item({ season: '2026-10', newVisitor: true, runs: [heldRun('d')] }),
     ]
     expect(noHistoryRuns(items)).toEqual([
-      { season: '2026-11', runs: 2, keys: ['rec-a'] },
-      { season: '2026-10', runs: 1, keys: ['d'] },
+      { season: '2026-11', runIds: ['a', 'b'], keys: ['rec-a'] },
+      { season: '2026-10', runIds: ['d'], keys: ['d'] },
     ])
+  })
+
+  it('names no more than one request may carry', () => {
+    const runs = Array.from({ length: DISMISSED_RUNS_LIMIT + 3 }, (_, index) => heldRun(`run-${index}`))
+    expect(noHistoryRuns([item({ newVisitor: true, runs })])[0].runIds).toHaveLength(DISMISSED_RUNS_LIMIT)
   })
 })
 

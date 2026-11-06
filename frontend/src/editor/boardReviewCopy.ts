@@ -10,7 +10,7 @@ export const boardReviewCopy = {
     retry: 'Try again',
     empty: 'Nothing is waiting.',
     unreadable: (count: number) => `${count} could not be read and are not shown.`,
-    changed: 'The record changed while you were reviewing it. Check what it shows now.',
+    changed: 'The record changed or was deleted while you were reviewing it. Check the list now.',
     failed: 'That did not work. Please try again.',
     done: 'Done.',
     kinds: {
@@ -27,6 +27,8 @@ export const boardReviewCopy = {
     season: 'Season',
     query: 'Record number or name',
     noMatch: 'No record matches.',
+    pickSeason: 'Pick a month up to this one to search it.',
+    matchedByNumber: 'Only records whose number starts with this are shown.',
     moreMatches: (shown: number, total: number) => `Showing ${shown} of ${total}. Type more to narrow it down.`,
     place: (rank: number) => `Place ${rank}`,
     wouldBe: (rank: number) => `Off the board, would be place ${rank}`,
@@ -49,6 +51,7 @@ export const boardReviewCopy = {
     sameAppearance: (name: string | null) =>
       name === null ? 'Same appearance as a record with no name' : `Same appearance as ${name}`,
     townLink: 'Same link as a resident or a house in the town',
+    warningsUnknown: 'Not checked yet against other names and looks.',
     neighbours: 'Names around it',
     visitorCounts: ({ runs, abandoned, flagged }: { runs: number; abandoned: number; flagged: number }) =>
       `On this board: runs started ${runs}, abandoned ${abandoned}, held ${flagged}`,
@@ -63,6 +66,7 @@ export const boardReviewCopy = {
     heldRun: 'Held run',
     heldRunPlace: (rank: number) => `Held run, would be place ${rank}`,
     sentAs: (name: string) => `Sent as ${name}`,
+    runFinal: 'Its season’s week for accepting runs is over, so this run can only be dismissed.',
     recordRun: 'This record’s run, pitch by pitch',
     runLoadError: 'The run could not be loaded.',
     noFlags: 'No flags',
@@ -115,15 +119,21 @@ export const boardReviewCopy = {
     blockLinkedIn: 'Also block this LinkedIn profile from every record',
     acceptRun: 'Accept run',
     dismissRun: 'Dismiss run',
-    confirmDisqualify: (name: string) => `Take ${name} off the board? The next record takes its place at once.`,
-    confirmTakedown: (name: string, blocking: boolean) =>
-      `Anonymise ${name}? Its name, link, and character are gone for good on this board, and the score keeps its place.${
+    confirmDisqualify: (name: string, number: string) =>
+      `Take ${name} (record ${number}) off the board? The next record takes its place at once.`,
+    confirmTakedown: (name: string, number: string, blocking: boolean) =>
+      `Anonymise ${name} (record ${number})? Its name and link are deleted for good, its character is hidden from everyone, and the score keeps its place.${
         blocking ? ' The LinkedIn profile is blocked from every record too.' : ''
       }`,
+    confirmRejectLink: (name: string, number: string) =>
+      `Delete the link of ${name} (record ${number})? To link it again the visitor needs a new code.`,
+    confirmRejectedName: (name: string, number: string) =>
+      `The name ${name} (record ${number}) was rejected, by the name check or by you. Publish it anyway?`,
+    confirmDismissRun: 'Dismiss this held run? It stays stored as evidence but can’t be accepted afterwards.',
     bulkDismiss: (month: string, runs: number) =>
-      `Dismiss all held runs of visitors with no history: ${month} (${runs})`,
+      `Dismiss the ${runs} held runs listed for visitors with no history: ${month}`,
     bulkConfirm: (month: string, runs: number) =>
-      `Dismiss every held run of ${month} from visitors with no history (${runs} listed here)? They stay stored as evidence.`,
+      `Dismiss the ${runs} held runs listed for visitors with no history in ${month}? This can’t be undone. They stay stored as evidence, and a run that arrives later is not included.`,
     bulkDone: (runs: number) => `Dismissed ${runs} held runs.`,
   },
   ko: {
@@ -133,7 +143,7 @@ export const boardReviewCopy = {
     retry: '다시 시도',
     empty: '기다리는 항목이 없어요.',
     unreadable: (count: number) => `${count}개를 읽지 못해 보여 주지 못했어요.`,
-    changed: '검토하는 사이 기록이 바뀌었어요. 새 내용을 확인해 주세요.',
+    changed: '검토하는 사이 기록이 바뀌었거나 지워졌어요. 목록을 다시 확인해 주세요.',
     failed: '처리하지 못했어요. 다시 시도해 주세요.',
     done: '처리했어요.',
     kinds: {
@@ -150,6 +160,8 @@ export const boardReviewCopy = {
     season: '시즌',
     query: '기록 번호나 이름',
     noMatch: '맞는 기록이 없어요.',
+    pickSeason: '이번 달까지의 달을 골라야 찾을 수 있어요.',
+    matchedByNumber: '번호가 이렇게 시작하는 기록만 보여요.',
     moreMatches: (shown: number, total: number) => `${total}개 중 ${shown}개만 보여요. 더 입력해 좁혀 주세요.`,
     place: (rank: number) => `${rank}위`,
     wouldBe: (rank: number) => `순위 밖, 오르면 ${rank}위`,
@@ -172,6 +184,7 @@ export const boardReviewCopy = {
     sameAppearance: (name: string | null) =>
       name === null ? '이름 없는 기록과 외형이 같아요' : `${name} 기록과 외형이 같아요`,
     townLink: '마을 주민이나 집의 링크와 같아요',
+    warningsUnknown: '다른 이름과 외형에 아직 견주어 보지 못했어요.',
     neighbours: '앞뒤 순위 이름',
     visitorCounts: ({ runs, abandoned, flagged }: { runs: number; abandoned: number; flagged: number }) =>
       `이 시즌: 발급한 판 ${runs}개, 버린 판 ${abandoned}개, 보류된 판 ${flagged}개`,
@@ -186,6 +199,7 @@ export const boardReviewCopy = {
     heldRun: '보류 판',
     heldRunPlace: (rank: number) => `보류 판, 인정하면 ${rank}위`,
     sentAs: (name: string) => `보낸 이름: ${name}`,
+    runFinal: '이 시즌의 인정 기간(시즌이 끝나고 7일)이 지나서 기각만 할 수 있어요.',
     recordRun: '이 기록의 판 자세히',
     runLoadError: '판을 불러오지 못했어요.',
     noFlags: '플래그 없음',
@@ -238,14 +252,20 @@ export const boardReviewCopy = {
     blockLinkedIn: '이 LinkedIn 프로필도 모든 기록에서 막기',
     acceptRun: '이 판 인정',
     dismissRun: '이 판 기각',
-    confirmDisqualify: (name: string) => `${name} 기록을 순위에서 뺄까요? 다음 기록이 바로 그 자리에 올라와요.`,
-    confirmTakedown: (name: string, blocking: boolean) =>
-      `${name} 기록을 익명으로 바꿀까요? 이 순위에서 이름, 링크, 캐릭터는 다시 돌아오지 않고 점수와 순위는 그대로예요.${
+    confirmDisqualify: (name: string, number: string) =>
+      `이 기록을 순위에서 뺄까요? ${name} · 기록 번호 ${number}. 다음 기록이 바로 그 자리에 올라와요.`,
+    confirmTakedown: (name: string, number: string, blocking: boolean) =>
+      `이 기록을 익명으로 바꿀까요? ${name} · 기록 번호 ${number}. 이름과 링크는 지워져 돌아오지 않고, 캐릭터는 누구에게도 보이지 않아요. 점수와 순위는 그대로예요.${
         blocking ? ' 이 LinkedIn 프로필도 모든 기록에서 막아요.' : ''
       }`,
-    bulkDismiss: (month: string, runs: number) => `이력 없는 방문자의 보류 판 모두 기각: ${month} (${runs}개)`,
+    confirmRejectLink: (name: string, number: string) =>
+      `이 기록의 링크를 지울까요? ${name} · 기록 번호 ${number}. 다시 연결하려면 방문자에게 새 코드가 필요해요.`,
+    confirmRejectedName: (name: string, number: string) =>
+      `이름 검사나 관리자가 거절한 이름이에요: ${name} · 기록 번호 ${number}. 그래도 공개할까요?`,
+    confirmDismissRun: '이 보류 판을 기각할까요? 증거로 남지만 나중에 인정할 수 없어요.',
+    bulkDismiss: (month: string, runs: number) => `이력 없는 방문자의 보류 판 여기 보이는 ${runs}개 기각: ${month}`,
     bulkConfirm: (month: string, runs: number) =>
-      `${month}에 이력 없는 방문자의 보류 판을 모두 기각할까요? (여기 보이는 것 ${runs}개) 판은 증거로 남아요.`,
+      `${month}에 이력 없는 방문자의 보류 판 여기 보이는 ${runs}개를 기각할까요? 되돌릴 수 없어요. 판은 증거로 남고, 나중에 들어온 판은 포함되지 않아요.`,
     bulkDone: (runs: number) => `보류 판 ${runs}개를 기각했어요.`,
   },
 } as const
