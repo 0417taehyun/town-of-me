@@ -35,13 +35,13 @@ import {
   type SettleEntry,
 } from './leaderboard.js'
 import {
+  isTownProfile,
   leaderboardNameStatus,
   linkBlockHash,
   ownershipCode,
   profileIdOf,
   reservedNameForms,
   takenNameForms,
-  townLinkedInIds,
   type LinkedInLink,
 } from './leaderboardIdentity.js'
 import {
@@ -411,6 +411,21 @@ export class BackendService {
   }
 
   /**
+   * Every finished season with a record, newest first, and the first three of its public order as they stand now: a
+   * late acceptance, a disqualification, or an owner's change still moves them. A year adds twelve reads at most.
+   */
+  async getHallOfFame(game: string, now = Date.now()): Promise<Array<{ season: string; entries: LeaderboardEntry[] }>> {
+    assertRankedGame(game)
+    const seasons = await this.store.listEndedSeasons(game, rankingMonth(now))
+    return Promise.all(
+      seasons.map(async (season) => ({
+        season,
+        entries: await this.store.listBoard({ game, season }, statueCount),
+      })),
+    )
+  }
+
+  /**
    * The visitor lists or unlists this month's record, changes the character and name it shows, or turns its link on or
    * off. A past season's record (`season`) may only be anonymised or have its link turned off, unless its best run
    * came in after the season ended (`listableAfterSeason`): then it takes the same changes as this month's.
@@ -465,8 +480,7 @@ export class BackendService {
   /** A link the town shows already, or one a takedown blocked, cannot be claimed. */
   async assertLinkAllowed(link: LinkedInLink): Promise<void> {
     const town = await this.store.getTown(homeRunDerby.townId)
-    const claimed = townLinkedInIds(town).includes(link.profileId.toLowerCase())
-    if (claimed || (await this.store.isLinkBlocked(await linkBlockHash(link.profileId)))) {
+    if (isTownProfile(town, link.profileId) || (await this.store.isLinkBlocked(await linkBlockHash(link.profileId)))) {
       throw new DomainError('INVALID_INPUT', 'This link cannot be used')
     }
   }

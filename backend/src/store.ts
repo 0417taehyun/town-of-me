@@ -74,6 +74,8 @@ export interface Store extends AuthStore {
   getEntry(id: string): Promise<LeaderboardEntry | null>
   /** Every record on the board, listed or not, in public order. */
   listEntries(board: BoardKey): Promise<LeaderboardEntry[]>
+  /** The seasons before `currentSeason` with any record of the game, listed or not, newest first. */
+  listEndedSeasons(game: string, currentSeason: string): Promise<string[]>
   /** The board's held runs nobody has reviewed yet. */
   listRunsForReview(board: BoardKey): Promise<GameRun[]>
   /** Per visitor with a run for the board: how many they started, abandoned, and had held. */
@@ -352,6 +354,13 @@ export class MemoryStore implements Store {
   async listEntries(board: BoardKey): Promise<LeaderboardEntry[]> {
     const entries = [...this.leaderboardEntries.values()].filter((entry) => isOnBoard(entry, board))
     return structuredClone(entries.sort(boardOrder))
+  }
+
+  async listEndedSeasons(game: string, currentSeason: string): Promise<string[]> {
+    const ended = [...this.leaderboardEntries.values()].filter(
+      (entry) => entry.game === game && entry.season < currentSeason,
+    )
+    return [...new Set(ended.map(({ season }) => season))].sort().reverse()
   }
 
   async listRunsForReview(board: BoardKey): Promise<GameRun[]> {

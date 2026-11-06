@@ -609,6 +609,15 @@ async function checkEntryStore(store: Store, assert: Assert): Promise<void> {
     board.map(({ id }) => id).join() === [leader, sameMoment, earlier].map(({ id }) => id).join(),
     'the board lists listed, not disqualified records in public order, up to the limit',
   )
+  const ended = await store.listEndedSeasons(runGame, '2026-10')
+  assert(
+    ended.indexOf('2026-09') !== -1 &&
+      ended.indexOf('2026-09') < ended.indexOf(season) &&
+      new Set(ended).size === ended.length &&
+      !(await store.listEndedSeasons(runGame, '2026-09')).includes('2026-09') &&
+      (await store.listEndedSeasons('another-game', '2026-10')).length === 0,
+    "the ended seasons are a game's seasons before the given one, each once, newest first",
+  )
 
   const changes = {
     authorName: null,

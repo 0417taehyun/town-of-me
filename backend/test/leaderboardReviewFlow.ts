@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util'
 import {
   DomainError,
   forgetQuietReporters,
@@ -10,6 +11,7 @@ import {
   rankingMonthStart,
   reservedNameForms,
   type Actor,
+  type EntryReviewAction,
 } from '../src/index.js'
 import {
   fiveNormal,
@@ -34,6 +36,7 @@ type ReviewedEntry = {
 type ReviewItem = {
   kind: string
   entry: ReviewedEntry | null
+  warnings: Array<{ kind: string }>
   runs: Array<{ id: string; wouldBeRank: number; result: { pitches: Array<{ power: number | null }> } | null }>
 }
 type PublicEntry = {
@@ -42,6 +45,7 @@ type PublicEntry = {
   nameState: string
   profile: Record<string, unknown>
   linkedInProfileUrl?: string
+  rank?: number
 }
 type OwnEntry = { linkedIn: { profileHint: string; status: string; code: string } | null; name: string | null }
 
@@ -115,6 +119,9 @@ export async function checkLeaderboardReviewFlow(assert: Assert): Promise<void> 
   await checkReviewActions(assert)
   await checkTakedownAndErasure(assert)
   await checkPastSeason(assert)
+  await checkHallOfFame(assert)
+  await checkVisitorForget(assert)
+  await checkTownLinkWarning(assert)
 }
 
 /** Names that pass for the town or a contact, and link ids that hide something, never reach the board. */
@@ -535,5 +542,148 @@ async function checkPastSeason(assert: Assert): Promise<void> {
       unlistedFinal instanceof DomainError &&
       unlistedFinal.code === 'INVALID_INPUT',
     "a held run accepted after its season ended may be listed by its visitor until that season's board is final",
+  )
+}
+
+/** A finished season keeps the first three of its public order, showing only what each owner still shows. */
+async function checkHallOfFame(assert: Assert): Promise<void> {
+  const { service, send, play, own, entryOf } = await reviewHarness()
+  const january = '2026-01'
+  const at = rankingMonthStart(january) + 60 * minute
+  async function playAt(token: string, errorsMs: Array<number | null>, time = at) {
+    await play(token, errorsMs, { profile: { ...profile, name: token } }, time)
+  }
+  async function stand(token: string, errorsMs: Array<number | null>) {
+    await playAt(token, errorsMs)
+    const listing = { listed: true, profile: { ...profile, name: token } }
+    await service.updateOwnEntry(game, await hashToken(token), listing, null, at)
+  }
+  async function adminAct(token: string, action: EntryReviewAction, input: object) {
+    const entry = await entryOf(token, january)
+    await service.reviewEntry(adminActor, game, entry?.id ?? '', action, { updatedAt: entry?.updatedAt, ...input })
+  }
+  async function hall(cookie = 'hall-nobody') {
+    const response = await send('GET', `/v1/games/${game}/hall-of-fame`, { cookie: cookieOf(cookie) })
+    const text = await response.text()
+    const seasons = (JSON.parse(text) as { seasons: Array<{ id: string; champions: PublicEntry[] }> }).seasons
+    return { response, text, seasons, champions: seasons.find(({ id }) => id === january)?.champions ?? [] }
+  }
+
+  await playAt('hall-unlisted', [12, -21, -8, 33, -27])
+  await stand('hall-out', [12, -21, -8, 33, -27])
+  await adminAct('hall-out', 'disqualification', {})
+  await stand('hall-first', [12, -21, null, 33, -27])
+  await stand('hall-second', [12, -21, null, 33, null])
+  await stand('hall-third', [12, null, null, 33, null])
+  await stand('hall-fourth', [12, null, null, null, null])
+  await adminAct('hall-second', 'approval', { name: 'approve' })
+  for (const token of ['hall-first', 'hall-second', 'hall-third']) {
+    const link = { linkedIn: linkOf(`${token}-sample`) }
+    await service.updateOwnEntry(game, await hashToken(token), link, null, at)
+  }
+  await adminAct('hall-first', 'linkedin-review', { decision: 'code-verified' })
+  await adminAct('hall-second', 'linkedin-review', { decision: 'code-verified' })
+  await playAt('hall-february', [12, null, null, null, null], rankingMonthStart('2026-02') + 60 * minute)
+  await play('hall-current', [12, -21, -8, 33, -27], { profile: { ...profile, name: 'hall-current' } })
+  await own('hall-current', { listed: true, profile: { ...profile, name: 'hall-current' } })
+
+  const before = await hall()
+  const standing = await Promise.all(
+    ['hall-first', 'hall-second', 'hall-third'].map((token) => entryOf(token, january)),
+  )
+  assert(
+    before.seasons.map(({ id }) => id).join() === `2026-02,${january}` && before.seasons[0]?.champions.length === 0,
+    "finished seasons come newest first, this month's never, and one with no public record stands empty",
+  )
+  assert(
+    before.champions.map(({ id }) => id).join() === standing.map((entry) => entry?.id).join() &&
+      before.champions.map(({ rank }) => rank).join() === '1,2,3',
+    "a season's statues are its first three public records: not an unlisted or disqualified one, nor the fourth",
+  )
+  const hashes = await Promise.all(['hall-first', 'hall-unlisted', 'hall-out'].map((token) => hashToken(token)))
+  assert(
+    !hashes.some((hash) => before.text.includes(hash)) &&
+      !/hall-unlisted|hall-out|hall-fourth/u.test(before.text) &&
+      before.response.headers.get('Set-Cookie') === null &&
+      before.response.headers.get('Cache-Control') === 'no-store' &&
+      (await hall('hall-first')).text === before.text,
+    'the hall of fame is the same for everyone: no visitor hash, no cookie, not kept by a cache',
+  )
+  assert(
+    before.champions[0]?.linkedInProfileUrl === 'https://www.linkedin.com/in/hall-first-sample' &&
+      before.champions[2]?.linkedInProfileUrl === undefined,
+    'a champion shows a link once the admin approved it, and not while it waits',
+  )
+
+  await own('hall-first', { linkedIn: null }, january)
+  assert(
+    (await hall()).champions[0]?.linkedInProfileUrl === undefined,
+    'a champion who turns their link off no longer shows it',
+  )
+  assert((await hall()).champions[1]?.name === 'hall-second', "an approved champion's name shows")
+  await own('hall-second', { anonymize: true }, january)
+  const named = await own('hall-second', { listed: true, profile: { ...profile, name: 'hall-second' } }, january)
+  const anonymous = (await hall()).champions[1]
+  assert(
+    named.status === 400 &&
+      anonymous?.id === standing[1]?.id &&
+      anonymous?.name === null &&
+      anonymous.nameState === 'anonymous' &&
+      anonymous.profile.kind === 'default' &&
+      anonymous.linkedInProfileUrl === undefined,
+    'a champion anonymised by its owner keeps its place, shows nothing of them, and cannot take a name back',
+  )
+}
+
+/** Forgetting the visitor ends this browser's hold on its records and leaves the records alone. */
+async function checkVisitorForget(assert: Assert): Promise<void> {
+  const { send, play, own, entryOf, board } = await reviewHarness()
+  const forgetPath = '/v1/visitor/forget'
+  const named = { ...profile, name: 'Sprout' }
+  await play('forget-first', [12, -21, null, 33, -27], { profile: named })
+  await own('forget-first', { listed: true, profile: named })
+  const record = await entryOf('forget-first')
+  assert(
+    (await send('POST', forgetPath, { cookie: cookieOf('forget-first'), origin: null })).status === 403,
+    'forgetting needs an allowed origin, like any write',
+  )
+  const forgotten = await send('POST', forgetPath, { cookie: cookieOf('forget-first') })
+  assert(
+    forgotten.status === 204 &&
+      /^__Host-tom_visitor=; .*Max-Age=0$/u.test(forgotten.headers.get('Set-Cookie') ?? '') &&
+      isDeepStrictEqual(await entryOf('forget-first'), record),
+    'forgetting clears the visitor cookie and changes no record',
+  )
+  const renamed = await own('forget-next', { listed: false })
+  const erased = await send('DELETE', `/v1/games/${game}/entries/own`, { cookie: cookieOf('forget-next') })
+  assert(
+    renamed.status === 404 &&
+      erased.status === 204 &&
+      isDeepStrictEqual(await entryOf('forget-first'), record) &&
+      (await board()).podium[0]?.id === record?.id,
+    "a browser's new cookie can neither change nor delete the record it left behind",
+  )
+}
+
+/** A record's link can match the town only if the town added it later, so the queue warns the admin. */
+async function checkTownLinkWarning(assert: Assert): Promise<void> {
+  const { store, play, own, review, entryOf } = await reviewHarness()
+  const named = (name: string) => ({ ...profile, name })
+  await play('warned-owner', [12, -21, null, 33, -27], { profile: named('Sprout') })
+  await own('warned-owner', { listed: true, profile: named('Sprout'), linkedIn: linkOf('Fern-sample') })
+  await play('warned-other', [12, -21, null, 33, null], { profile: named('Pebble') })
+  await own('warned-other', { listed: true, profile: named('Pebble'), linkedIn: linkOf('pebble-sample') })
+  const warningsOf = async (token: string) => {
+    const entry = await entryOf(token)
+    return (await review()).find((item) => item.entry?.id === entry?.id)?.warnings.map(({ kind }) => kind) ?? []
+  }
+  assert(!(await warningsOf('warned-owner')).includes('town-link'), 'a link the town does not show raises no warning')
+  const residents = [{ ...sampleTownLayout.residents[0], linkedInProfileUrl: 'https://linkedin.com/in/FERN-sample' }]
+  const layout = parseTownLayout({ ...sampleTownLayout, residents, venues: { ballpark: { visible: true } } })
+  await store.saveTown('mossbell', layout, (await store.getTown('mossbell'))?.revision ?? 0)
+  assert(
+    (await warningsOf('warned-owner')).includes('town-link') &&
+      !(await warningsOf('warned-other')).includes('town-link'),
+    "a link equal to a resident's, whatever its case, is flagged in the queue, and no one else's is",
   )
 }

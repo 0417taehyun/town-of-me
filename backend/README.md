@@ -92,7 +92,8 @@ Create a handler with `createApi({ service, authStore, linkedInOidc, allowedOrig
 - `GET /v1/guestbook` returns `{ entries, own }`: the newest 100 approved entries, and this browser's latest entry with its `status` and whether it is still `revisable`
 - `POST /v1/guestbook` and `PUT /v1/guestbook/:id` take `{ message, locale, profile }` from anyone and return `{ entry }`; see the guestbook rules below
 - `GET /v1/admin/guestbook` lists the newest 200 entries of every status with `updatedAt`; `POST /v1/admin/guestbook/:id/approval` with `{ updatedAt }` publishes the entry only if it was not revised since that version (`409` otherwise); `DELETE /v1/admin/guestbook/:id` removes it
-- `POST /v1/games/:game/runs` and `POST /v1/games/:game/runs/:id/result` start and record a ranked run, `GET /v1/games/:game/leaderboard` and `GET /v1/games/:game/podium` read the monthly board and its statues, `PUT` and `DELETE /v1/games/:game/entries/own` change or delete the visitor's records, and `POST /v1/games/:game/entries/:id/report` reports one; see [Ranked runs](#ranked-runs)
+- `POST /v1/games/:game/runs` and `POST /v1/games/:game/runs/:id/result` start and record a ranked run, `GET /v1/games/:game/leaderboard`, `GET /v1/games/:game/podium`, and `GET /v1/games/:game/hall-of-fame` read the monthly board, its statues, and every finished season's statues, `PUT` and `DELETE /v1/games/:game/entries/own` change or delete the visitor's records, and `POST /v1/games/:game/entries/:id/report` reports one; see [Ranked runs](#ranked-runs)
+- `POST /v1/visitor/forget` clears this browser's visitor cookie and returns `204`; see [Ranked runs](#ranked-runs)
 - `GET /v1/admin/games/:game/review` and the `/v1/admin/games/:game/entries/:id/…` and `/v1/admin/games/:game/runs/…` actions review the boards for an admin session; see [Board review](#board-review)
 - `GET /v1/towns/:id` returns `{ town }` with `revision`, or `404` when no such town exists
 - `PUT /v1/admin/towns/:id` with `{ baseRevision, name, owner, pet, spawn, movement, venues, objects, residents }` replaces the town for an admin session (`401` signed out, `403` otherwise) and returns the saved `{ town }`; `baseRevision` is `0` for the first save
@@ -193,6 +194,15 @@ the same results).
   reads and sets no cookie and is `Cache-Control: public, max-age=60` (nginx leaves its `no-store` off this path), so
   a disqualification shows within a minute. Reads stay open while the ballpark is hidden; the frontend decides what a
   hidden venue shows.
+- `GET /v1/games/home-run-derby/hall-of-fame` returns `{ seasons: [{ id, champions }] }`: every finished season with a
+  record of any kind, newest first (a month nobody played has none), and as `champions` the first three of its public
+  order, as statue rows like `podium`. A season with fewer public records has fewer champions, or none. A row is what
+  the board shows now: an approved link only while its visitor keeps it on, no name or character once anonymised, and
+  a later disqualification or accepted late run moves the places. It reads and sets no cookie and is `no-store`, so
+  all of that shows at once. It stays open while the ballpark is hidden, like the board.
+- `POST /v1/visitor/forget` (no body; an allowed `Origin`, like any write) clears `__Host-tom_visitor` with `Max-Age=0`
+  and returns `204`, for the next person on a shared device. Nothing is deleted: the records and guestbook entries stay
+  as they are, and since a browser reaches them only through that cookie, no new cookie can change them.
 
 ## Board review
 
@@ -209,7 +219,8 @@ shows it: a record changed since is `409` and stays as it is. Each answers `{ en
   it was percent-encoded), their held `runs` (flags, would-be place, the profile they were sent with, and per pitch the
   server's timing error, power, swing duration and speed, and height error, which visitors never see), run counts,
   open `reports` per target, `warnings` (a name containing another record's or the town's, an appearance equal to
-  another record's or a resident's), and the names three places either side.
+  another record's or a resident's, and `town-link` for a link a resident or a house has too, which the town added
+  after the record claimed it), and the names three places either side.
 - `POST …/entries/:id/approval` with `{ updatedAt, name?: 'approve' | 'reject' }` approves the record (`409` while it is
   disqualified) and decides its name; it never changes the link.
 - `POST …/entries/:id/disqualification` with `{ updatedAt }` takes the record off the board, and the next record takes

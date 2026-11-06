@@ -16,7 +16,7 @@ import {
   type LeaderboardEntry,
   type SettleEntry,
 } from './leaderboard.js'
-import { comparisonForm, profileIdOf, townNames } from './leaderboardIdentity.js'
+import { comparisonForm, isTownProfile, profileIdOf, townNames } from './leaderboardIdentity.js'
 import { nextRankingMonth, rankingMonthStart, type TownLayout } from './town.js'
 import { invalidInput, matchingText, oneOf } from './validation.js'
 
@@ -298,8 +298,9 @@ export function reportSummary(reports: readonly EntryReport[]) {
 }
 
 /**
- * Names and appearances the record shares with another record on the board or with the town: a name whose comparison
- * form contains another's, and an identical appearance. Only a warning; the admin decides.
+ * What the record shares with another record on the board or with the town: a name whose comparison form contains
+ * another's, an identical appearance, and a link the town shows, which a record can hold only if the town added it
+ * after the record claimed it. Only a warning; the admin decides.
  */
 export function overlapWarnings(
   entry: LeaderboardEntry,
@@ -315,11 +316,13 @@ export function overlapWarnings(
     ...others.map((other) => ({ name: other.authorName, appearance: other.appearance })),
     ...(town?.residents ?? []).map((resident) => ({ name: resident.name, appearance: resident.appearance })),
   ]
+  const townLink = entry.linkedIn !== null && isTownProfile(town, profileIdOf(entry.linkedIn.profileUrl))
   return [
     ...similarNames(entry.authorName, names).map((name) => ({ kind: 'similar-name' as const, name })),
     ...characters
       .filter((character) => isDeepStrictEqual(character.appearance, entry.appearance))
       .map(({ name }) => ({ kind: 'same-appearance' as const, name })),
+    ...(townLink ? [{ kind: 'town-link' as const }] : []),
   ]
 }
 

@@ -11,7 +11,15 @@ import {
 import { DomainError, type Actor, type LinkedUser } from './domain.js'
 import { ownGuestbookEntry, publicGuestbookEntry, reviewedGuestbookEntry } from './guestbook.js'
 import { publicDerbyResult } from './homeRunDerby.js'
-import { ownEntry, podiumEntry, rankedEntry, seasonView, statueCount, type GameRun } from './leaderboard.js'
+import {
+  ownEntry,
+  podiumEntry,
+  rankedEntry,
+  seasonView,
+  statueCount,
+  type GameRun,
+  type LeaderboardEntry,
+} from './leaderboard.js'
 import { reviewedEntry, reviewedRun, type EntryReviewAction } from './leaderboardReview.js'
 import { BackendService, type Leaderboard, type RunOutcome } from './service.js'
 import { townIdPattern } from './town.js'
@@ -90,6 +98,7 @@ const routes: readonly Route[] = [
     const entry = await dependencies.service.reviseGuestbookEntry(visitorHash, pathId, await objectBody(request))
     return json({ entry: ownGuestbookEntry(entry, Date.now()) })
   }),
+  route('POST', '/v1/visitor/forget', serveVisitorForget),
   route('GET', '/v1/admin/guestbook', async ({ actor, dependencies }) => {
     const entries = await dependencies.service.listGuestbookForReview(await actor())
     return json({ entries: entries.map(reviewedGuestbookEntry) })
@@ -116,6 +125,9 @@ const routes: readonly Route[] = [
     return json(leaderboardView(await dependencies.service.getLeaderboard(pathId, visitorHash, season)))
   }),
   route('GET', `/v1/games/(${gameId})/podium`, servePodium),
+  route('GET', `/v1/games/(${gameId})/hall-of-fame`, async ({ pathId, dependencies }) =>
+    json({ seasons: (await dependencies.service.getHallOfFame(pathId)).map(hallOfFameSeason) }),
+  ),
   route('PUT', `/v1/games/(${gameId})/entries/own`, async ({ request, url, pathId, dependencies }) => {
     const body = await objectBody(request, gameBodyLimitBytes)
     const visitorHash = await readVisitorHash(request)
@@ -278,6 +290,14 @@ export async function serveGuestbookSigning({ request, dependencies }: RouteCont
   return json({ entry: ownGuestbookEntry(entry, Date.now()) }, 201, newVisitorCookie(existingToken, visitorToken))
 }
 
+/**
+ * Lets the next person on a shared device start fresh. Only the cookie's hash ties a browser to what it wrote, so the
+ * records and guestbook entries stay as they are and can no longer be changed from here.
+ */
+export function serveVisitorForget(): Response {
+  return new Response(null, { status: 204, headers: { 'Set-Cookie': cookie(visitorCookie, '', 0) } })
+}
+
 /** The run's id, its season, and the rules and seed its pitches are planned from: all a client needs to play it. */
 export async function serveRunIssue({ request, pathId, dependencies }: RouteContext): Promise<Response> {
   const existingToken = readCookie(request, visitorCookie)
@@ -303,6 +323,11 @@ export async function servePodium({ pathId, dependencies }: RouteContext): Promi
   const { season, entries } = await dependencies.service.getPodium(pathId)
   const podium = entries.map((entry, index) => podiumEntry(entry, index + 1))
   return json({ season: { id: season }, podium }, 200, { 'Cache-Control': 'public, max-age=60' })
+}
+
+/** A finished season's statues, each with its approved link while its owner keeps it on. */
+export function hallOfFameSeason({ season, entries }: { season: string; entries: readonly LeaderboardEntry[] }) {
+  return { id: season, champions: entries.map((entry, index) => podiumEntry(entry, index + 1)) }
 }
 
 /** The first three places are the statues, which alone carry an approved link, and the rest the list below them. */

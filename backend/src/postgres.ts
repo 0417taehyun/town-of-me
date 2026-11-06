@@ -558,6 +558,14 @@ export class PostgresStore implements Store {
     return rows.map(toLeaderboardEntry)
   }
 
+  async listEndedSeasons(game: string, currentSeason: string): Promise<string[]> {
+    const { rows } = await this.pool.query<{ season: string }>(
+      'SELECT DISTINCT season FROM minigame_entries WHERE game = $1 AND season < $2 ORDER BY season DESC',
+      [game, currentSeason],
+    )
+    return rows.map(({ season }) => season)
+  }
+
   async listRunsForReview(board: BoardKey): Promise<GameRun[]> {
     const { rows } = await this.pool.query<GameRunRow>(
       `SELECT * FROM minigame_runs

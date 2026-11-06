@@ -160,6 +160,11 @@ export function townLinkedInIds(town: TownIdentity | null): string[] {
   return links.flatMap((link) => (link ? [profileIdOf(link).toLowerCase()] : []))
 }
 
+/** Whether the town links to this profile already; LinkedIn ids compare without case. */
+export function isTownProfile(town: TownIdentity | null, profileId: string): boolean {
+  return townLinkedInIds(town).includes(profileId.toLowerCase())
+}
+
 /** How a blocked profile is kept: the hash of its id, never the id. */
 export function linkBlockHash(profileId: string): Promise<string> {
   return hashToken(`linkedin:${profileId.toLowerCase()}`)
