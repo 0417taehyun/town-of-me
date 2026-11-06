@@ -51,7 +51,9 @@ import {
   fromVersion,
   heldRunCandidate,
   listableAfterSeason,
+  overlapWarnings,
   parseEntryReport,
+  parseRecordIds,
   parseReportResolution,
   parseRunIds,
   previousRankingMonth,
@@ -593,12 +595,33 @@ export class BackendService {
     return { ...board, entries, runs, reports, counts }
   }
 
-  /** Every record on one season's board, including those the queue does not list, as an admin's search reads them. */
+  /**
+   * Every record on one season's board, including those the queue does not list, as an admin's search reads them, and
+   * the season that turned out to be. Warnings are read apart (`getRecordWarnings`).
+   */
   async getBoardRecords(actor: Actor, game: string, requestedSeason: string | null, now = Date.now()) {
     assertAdmin(actor)
     assertRankedGame(game)
     const season = boardSeason(requestedSeason, rankingMonth(now))
-    return reviewedBoard(await this.store.listEntries({ game, season }))
+    return { season, entries: reviewedBoard(await this.store.listEntries({ game, season })) }
+  }
+
+  /**
+   * The warnings of the records a search found, by id: a record outside the queue must not be approved blind. Only for
+   * those, since each compares against the whole board: at 3,000 records that takes 37 ms for twenty and 5.5 s of
+   * blocked event loop for all of them, on every reload after an action.
+   */
+  async getRecordWarnings(actor: Actor, game: string, requestedSeason: string | null, ids: string, now = Date.now()) {
+    assertAdmin(actor)
+    assertRankedGame(game)
+    const season = boardSeason(requestedSeason, rankingMonth(now))
+    const wanted = new Set(parseRecordIds(ids))
+    const [town, entries] = await Promise.all([
+      this.store.getTown(homeRunDerby.townId),
+      this.store.listEntries({ game, season }),
+    ])
+    const found = entries.filter((entry) => wanted.has(entry.id))
+    return Object.fromEntries(found.map((entry) => [entry.id, overlapWarnings(entry, entries, town)]))
   }
 
   /** Any run of the game for an admin: a record's best run has scored, so it is not among the queue's held runs. */

@@ -151,7 +151,12 @@ const routes: readonly Route[] = [
   }),
   route('GET', `/v1/admin/games/(${gameId})/entries`, async ({ url, pathId, actor, dependencies }) => {
     const season = url.searchParams.get('season')
-    return json({ entries: await dependencies.service.getBoardRecords(await actor(), pathId, season) })
+    return json(await dependencies.service.getBoardRecords(await actor(), pathId, season))
+  }),
+  route('GET', `/v1/admin/games/(${gameId})/entries/warnings`, async ({ url, pathId, actor, dependencies }) => {
+    const season = url.searchParams.get('season')
+    const ids = url.searchParams.get('ids') ?? ''
+    return json({ warnings: await dependencies.service.getRecordWarnings(await actor(), pathId, season, ids) })
   }),
   route('GET', `/v1/admin/games/(${gameId})/runs/(${uuid})`, async ({ pathIds, actor, dependencies }) => {
     const [game = '', runId = ''] = pathIds

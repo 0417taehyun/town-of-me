@@ -7,10 +7,12 @@ import {
   leaderboardLinkedInUrl,
   leaderboardNameStatus,
   MemoryStore,
+  overlapWarnings,
   parseTownLayout,
   rankingMonth,
   rankingMonthStart,
   reservedNameForms,
+  warnedRecordsLimit,
   type Actor,
   type EntryReviewAction,
 } from '../src/index.js'
@@ -119,6 +121,7 @@ export async function checkLeaderboardReviewFlow(assert: Assert): Promise<void> 
   checkReportCounter(assert)
   await checkReviewActions(assert)
   await checkBoardRecords(assert)
+  await checkRecordWarnings(assert)
   await checkListedDismissal(assert)
   await checkTakenDownReadBack(assert)
   await checkTakedownAndErasure(assert)
@@ -496,7 +499,11 @@ async function checkBoardRecords(assert: Assert): Promise<void> {
   )
   const queued = (await review()).map(({ entry }) => entry?.id)
   const response = await send('GET', recordsPath, { cookie: admin })
-  const records = ((await response.json()) as { entries: Array<ReviewedEntry & { bestRunId: string }> }).entries
+  const { entries: records, season: recordsSeason } = (await response.json()) as {
+    season: string
+    entries: Array<ReviewedEntry & { bestRunId: string }>
+  }
+  assert(recordsSeason === season, 'the records say which season they are')
   assert(
     !queued.includes(gone?.id) &&
       !queued.includes(statue?.id) &&
@@ -513,6 +520,57 @@ async function checkBoardRecords(assert: Assert): Promise<void> {
     run.result?.pitches.some((pitch) => pitch.power !== null && pitch.power > 0),
     "a record's best run shows the admin the power visitors never see",
   )
+}
+
+/** A record the search found shows what a queue item would, so its name cannot be approved blind. */
+async function checkRecordWarnings(assert: Assert): Promise<void> {
+  const { send, admin, member, season, play, own, act, entryOf } = await reviewHarness()
+  const posted = async (token: string, name: string, hair: string) => {
+    const look = { ...profile, name, hair }
+    await play(token, [12, null, null, null, null], { profile: look })
+    await own(token, { listed: true, profile: look })
+    return entryOf(token)
+  }
+  const refused = await posted('warned-robin', 'Robin Official', 'bob')
+  const plain = await posted('warned-plain', 'Clover', 'crop')
+  const twin = await posted('warned-twin', 'Thistle', 'crop')
+  const gone = await posted('warned-gone', 'Juniper', 'crop')
+  await act(`entries/${gone?.id}/takedown`, { updatedAt: gone?.updatedAt })
+  const hidden = await entryOf('warned-gone')
+  await act(`entries/${hidden?.id}/approval`, { updatedAt: hidden?.updatedAt })
+
+  const warningsOf = async (ids: readonly (string | undefined)[], cookie = admin) =>
+    send('GET', `/v1/admin/games/${game}/entries/warnings?season=${season}&ids=${ids.join()}`, { cookie })
+  assert(
+    (await warningsOf([refused?.id], member)).status === 403 &&
+      (await warningsOf(['not-a-record'])).status === 400 &&
+      (await warningsOf([])).status === 400 &&
+      (await warningsOf(Array.from({ length: warnedRecordsLimit + 1 }, () => refused?.id))).status === 400,
+    'only an admin reads warnings, of a short list of records',
+  )
+  const response = await warningsOf([refused?.id, plain?.id, gone?.id, crypto.randomUUID()])
+  const { warnings } = (await response.json()) as {
+    warnings: Record<string, Array<{ kind: string; name?: string | null }>>
+  }
+  const similar = warnings[refused?.id ?? '']?.flatMap(({ kind, name }) => (kind === 'similar-name' ? [name] : []))
+  assert(
+    refused?.nameStatus === 'rejected' && similar?.includes('Robin') && similar.includes('official'),
+    "an auto-rejected name warns of the town's and the reserved name it contains",
+  )
+  assert(
+    warnings[plain?.id ?? '']?.map(({ kind, name }) => `${kind}:${name}`).join() === 'same-appearance:Thistle' &&
+      Object.keys(warnings).length === 3,
+    "a record warns of its twin's look, not a taken-down record's, and only the listed records that exist answer",
+  )
+  assert(warnings[gone?.id ?? '']?.length === 0, 'a taken-down record warns of nothing that would say how it looks')
+
+  const crowd = Array.from({ length: 25 }, (_, index) => ({
+    ...twin!,
+    id: `crowd-${index}`,
+    visitorHash: `crowd-${index}`,
+  }))
+  const crowded = overlapWarnings(twin!, crowd, null).filter(({ kind }) => kind === 'same-appearance')
+  assert(crowded.length === 20, 'a flood of one look gives a record a bounded list of warnings')
 }
 
 /** The bulk dismissal takes the runs the admin saw listed, and nothing that arrived after the list loaded. */

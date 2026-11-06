@@ -16,7 +16,7 @@ import {
   type LeaderboardEntry,
   type SettleEntry,
 } from './leaderboard.js'
-import { comparisonForm, isTownProfile, profileIdOf, townNames } from './leaderboardIdentity.js'
+import { comparisonForm, isTownProfile, profileIdOf, reservedNames, townNames } from './leaderboardIdentity.js'
 import { nextRankingMonth, rankingMonthStart, type TownLayout } from './town.js'
 import { inputList, invalidInput, matchingText, oneOf } from './validation.js'
 
@@ -39,6 +39,10 @@ const versionPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u
 /** How many held runs one dismissal may name: a flood takes a few clicks, each one request. */
 export const dismissedRunsLimit = 1000
+/** How many records one read of warnings may name: a search shows no more than this at a time. */
+export const warnedRecordsLimit = 20
+/** A flood of one look must not bury a card, or swell a response, with a warning per record. */
+const warningsPerKind = 20
 const nameDecisions = ['approve', 'reject'] as const
 const linkedInDecisions = ['code-verified', 'reject'] as const
 
@@ -131,6 +135,13 @@ export function versionInput(value: unknown, field: string): string {
 export function parseRunIds(value: unknown): string[] {
   return inputList(value, 'runIds', dismissedRunsLimit, 1).map((id) =>
     matchingText(id, idPattern, 'runIds', 'a list of run ids'),
+  )
+}
+
+/** The records a search found, as the query's comma-separated ids. */
+export function parseRecordIds(value: string): string[] {
+  return inputList(value.split(','), 'ids', warnedRecordsLimit, 1).map((id) =>
+    matchingText(id, idPattern, 'ids', 'a list of record ids'),
   )
 }
 
@@ -277,6 +288,8 @@ export function reviewItem(subject: ReviewSubject, kind: ReviewKind, context: Re
   return {
     kind,
     season: subject.board.season,
+    // Whether its held runs may still be accepted; past that, a run can only be dismissed.
+    acceptable: subject.acceptable,
     newVisitor: isNewVisitor(subject.counts),
     visitor: { runs: subject.counts.runs, abandoned: subject.counts.abandoned, flagged: subject.counts.flagged },
     entry: entry && reviewedEntry(entry, place),
@@ -321,6 +334,7 @@ export function overlapWarnings(
   const names = [
     ...others.flatMap((other) => (other.authorName === null ? [] : [other.authorName])),
     ...townNames(town),
+    ...reservedNames,
   ]
   // A taken-down character is shown to no one, so no warning may say what it matches.
   const shownOthers = others.filter((other) => !other.takedown)
@@ -332,9 +346,12 @@ export function overlapWarnings(
       ]
   const townLink = entry.linkedIn !== null && isTownProfile(town, profileIdOf(entry.linkedIn.profileUrl))
   return [
-    ...similarNames(entry.authorName, names).map((name) => ({ kind: 'similar-name' as const, name })),
+    ...similarNames(entry.authorName, names)
+      .slice(0, warningsPerKind)
+      .map((name) => ({ kind: 'similar-name' as const, name })),
     ...characters
       .filter((character) => isDeepStrictEqual(character.appearance, entry.appearance))
+      .slice(0, warningsPerKind)
       .map(({ name }) => ({ kind: 'same-appearance' as const, name })),
     ...(townLink ? [{ kind: 'town-link' as const }] : []),
   ]

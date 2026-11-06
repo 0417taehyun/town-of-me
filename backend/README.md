@@ -219,13 +219,17 @@ shows it: a record changed since is `409` and stays as it is. Each answers `{ en
   statues). An item has the visitor's `entry` (real name, every status, `updatedAt`, the whole link decoded and whether
   it was percent-encoded), their held `runs` (flags, would-be place, the profile they were sent with, and per pitch the
   server's timing error, power, swing duration and speed, and height error, which visitors never see), run counts,
-  open `reports` per target, `warnings` (a name containing another record's or the town's, an appearance equal to
-  another record's or a resident's, and `town-link` for a link a resident or a house has too, which the town added
-  after the record claimed it), and the names three places either side.
-- `GET /v1/admin/games/home-run-derby/entries?season=YYYY-MM` (this season by default) returns `{ entries }`: every
-  record on that board in public order, unlisted and disqualified included, in the queue's `entry` shape, with the
-  place a record off the board would take. The queue lists only what waits, so this is how the admin reaches an
+  open `reports` per target, `warnings` (a name containing another record's, the town's, or a reserved one, an
+  appearance equal to another record's or a resident's, at most 20 of each, and `town-link` for a link a resident or a
+  house has too, which the town added after the record claimed it), the names three places either side, and
+  `acceptable`, whether the held runs may still be accepted: a past season's only until a week after it ended.
+- `GET /v1/admin/games/home-run-derby/entries?season=YYYY-MM` (this season by default) returns `{ season, entries }`:
+  every record on that board in public order, unlisted and disqualified included, in the queue's `entry` shape, with
+  the place a record off the board would take. The queue lists only what waits, so this is how the admin reaches an
   approved statue, a disqualified record, or the record a takedown request names by its first eight characters.
+- `GET /v1/admin/games/home-run-derby/entries/warnings?season=YYYY-MM&ids=a,b` (1–20 record ids) returns `{ warnings }`,
+  each listed record's `warnings` by id. They are read apart from the whole board's records because each compares
+  against the whole board, which at 3,000 records takes seconds for all of them and milliseconds for twenty.
 - `GET /v1/admin/games/home-run-derby/runs/:id` returns `{ run }`, any run of the game in the queue's `runs` shape
   (`wouldBeRank` is `null`), for a record's `bestRunId`: the record's best run has scored, so it is not a held run.
 - `POST …/entries/:id/approval` with `{ updatedAt, name?: 'approve' | 'reject' }` approves the record (`409` while it is
