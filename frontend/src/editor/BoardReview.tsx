@@ -25,6 +25,7 @@ import type { AppLanguage } from '../i18n/language'
 import { languageCopy, monthName } from '../i18n/language'
 import { CloseButton } from '../ui/CloseButton'
 import './boardReview.css'
+import { boardReviewCopy, type BoardReviewCopy } from './boardReviewCopy'
 import {
   actionQuestion,
   findRecords,
@@ -46,7 +47,6 @@ import {
   withoutRun,
 } from './boardReviewing'
 
-type Copy = (typeof languageCopy)[AppLanguage]['boardReview']
 /** How the dialog's data changes once an action is answered, and what to tell the admin if not the usual. */
 type ActionOutcome = { change: (data: BoardReviewData) => BoardReviewData; notice?: string }
 type CardActions = {
@@ -71,7 +71,7 @@ export function Portrait({ profile, label }: { profile: PlayerProfile; label: st
 }
 
 /** The link as what it really reads: decoded and large, with the encoded address beside it when it was encoded. */
-export function PublicLink({ link, copy }: { link: ReviewedLink; copy: Copy }) {
+export function PublicLink({ link, copy }: { link: ReviewedLink; copy: BoardReviewCopy }) {
   const view = linkView(link)
   return (
     <div className="board-review-link">
@@ -100,7 +100,7 @@ export function PublicPreview({
   name: string | null
   profile: PlayerProfile | null
   link: ReviewedLink | null
-  copy: Copy
+  copy: BoardReviewCopy
 }) {
   return (
     <div className="board-review-public">
@@ -123,7 +123,7 @@ export function PitchTable({
 }: {
   pitches: readonly ReviewedPitch[]
   language: AppLanguage
-  copy: Copy
+  copy: BoardReviewCopy
 }) {
   const outcomes = languageCopy[language].baseball.result.outcomes
   return (
@@ -163,7 +163,7 @@ export function PitchTable({
 }
 
 /** What the server worked out for a run: its flags, its clocks, its practice, and every pitch. */
-export function RunFacts({ run, language, copy }: { run: ReviewedRun; language: AppLanguage; copy: Copy }) {
+export function RunFacts({ run, language, copy }: { run: ReviewedRun; language: AppLanguage; copy: BoardReviewCopy }) {
   const result = run.result
   return (
     <>
@@ -228,7 +228,7 @@ export function HeldRun({
   run: ReviewedRun
   item: ReviewItem
   language: AppLanguage
-  copy: Copy
+  copy: BoardReviewCopy
   busy: boolean
 } & Pick<CardActions, 'onAcceptRun' | 'onDismissRun'>) {
   // Accepting a run posts what it was sent with, which the card's preview already shows for a visitor with no record.
@@ -256,7 +256,7 @@ export function HeldRun({
   )
 }
 
-export function LoadedRun({ runId, language, copy }: { runId: string; language: AppLanguage; copy: Copy }) {
+export function LoadedRun({ runId, language, copy }: { runId: string; language: AppLanguage; copy: BoardReviewCopy }) {
   const load = useCallback(() => fetchReviewedRun(runId), [runId])
   const { status, latest, retry } = useRetryableLoad(load)
   if (status === 'loading') return <p role="status">{copy.loading}</p>
@@ -277,7 +277,15 @@ export function LoadedRun({ runId, language, copy }: { runId: string; language: 
  * A record's own run has scored, so the queue does not bring it; it loads when opened. Without one (its run was
  * deleted), the record's copied public result is all there is.
  */
-export function RecordRun({ entry, language, copy }: { entry: ReviewedEntry; language: AppLanguage; copy: Copy }) {
+export function RecordRun({
+  entry,
+  language,
+  copy,
+}: {
+  entry: ReviewedEntry
+  language: AppLanguage
+  copy: BoardReviewCopy
+}) {
   const [opened, setOpened] = useState(false)
   if (!entry.bestRunId) return <PitchTable pitches={entry.pitches} language={language} copy={copy} />
   return (
@@ -297,7 +305,7 @@ export function ReportLine({
 }: {
   report: ReviewReport
   language: AppLanguage
-  copy: Copy
+  copy: BoardReviewCopy
   busy: boolean
   onResolve: (resolution: 'kept' | 'removed') => void
 }) {
@@ -327,7 +335,7 @@ export function RecordActions({
   onAction,
 }: {
   entry: ReviewedEntry
-  copy: Copy
+  copy: BoardReviewCopy
   busy: boolean
   onAction: (action: RecordAction) => void
 }) {
@@ -382,7 +390,7 @@ export function RecordMarks({
 }: {
   entry: ReviewedEntry | null
   newVisitor: boolean
-  copy: Copy
+  copy: BoardReviewCopy
 }) {
   return (
     <span className="board-review-marks">
@@ -409,7 +417,7 @@ export function ReviewCard({
   item: ReviewItem
   language: AppLanguage
   currentSeason: string
-  copy: Copy
+  copy: BoardReviewCopy
   busy: boolean
 } & CardActions) {
   const entry = item.entry
@@ -499,7 +507,8 @@ export function ReviewCard({
  * changed since is refused and the list reloads.
  */
 export function BoardReview({ language, onClose }: { language: AppLanguage; onClose: () => void }) {
-  const copy = languageCopy[language].boardReview
+  const copy = boardReviewCopy[language]
+  const shellCopy = languageCopy[language].boardReview
   const currentSeason = rankingMonth(new Date())
   const [season, setSeason] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -592,8 +601,8 @@ export function BoardReview({ language, onClose }: { language: AppLanguage; onCl
         aria-modal="true"
         aria-labelledby="board-review-title"
       >
-        <CloseButton autoFocus onClick={onClose} label={copy.close} />
-        <h2 id="board-review-title">{copy.title}</h2>
+        <CloseButton autoFocus onClick={onClose} label={shellCopy.close} />
+        <h2 id="board-review-title">{shellCopy.title}</h2>
         <p className="editor-note">{copy.intro}</p>
         {failure && (
           <p className="editor-field-error" role="alert">

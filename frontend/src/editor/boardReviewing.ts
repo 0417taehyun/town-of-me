@@ -12,12 +12,11 @@ import {
 } from '../data/boardReviewApi'
 import { LeaderboardRequestError } from '../data/leaderboardApi'
 import { normalizeLinkedInProfileUrl } from '../data/linkedInProfile'
-import type { AppLanguage, languageCopy } from '../i18n/language'
+import type { AppLanguage } from '../i18n/language'
+import type { BoardReviewCopy } from './boardReviewCopy'
 
 // What the board review dialog works out from the server's answers. The server decides the queue's order and kinds;
 // nothing here ranks or sorts them again.
-
-type Copy = (typeof languageCopy)[AppLanguage]['boardReview']
 
 /** A search on a big board stops here: the admin narrows it rather than scroll through hundreds of cards. */
 export const FOUND_RECORDS_SHOWN = 20
@@ -129,7 +128,7 @@ export function recordChoices(entry: ReviewedEntry) {
 }
 
 /** The buttons of a record's plain actions, in the order the card shows them. Taking it down has its own option. */
-export function recordButtons(entry: ReviewedEntry, copy: Copy) {
+export function recordButtons(entry: ReviewedEntry, copy: BoardReviewCopy) {
   const choices = recordChoices(entry)
   const buttons: Array<{ shown: boolean; label: string; action: RecordAction; tone: 'primary' | 'plain' | 'danger' }> =
     [
@@ -177,21 +176,21 @@ export function recordButtons(entry: ReviewedEntry, copy: Copy) {
 }
 
 /** What the admin must confirm first: what is hard to see undone, or cannot be. `null` for everything else. */
-export function actionQuestion(entry: ReviewedEntry, action: RecordAction, copy: Copy) {
+export function actionQuestion(entry: ReviewedEntry, action: RecordAction, copy: BoardReviewCopy) {
   const name = entry.name ?? recordNumber(entry.id)
   if (action.kind === 'disqualification') return copy.confirmDisqualify(name)
   if (action.kind === 'takedown') return copy.confirmTakedown(name, action.blockLinkedIn === true)
   return null
 }
 
-export function warningText(warning: ReviewWarning, copy: Copy) {
+export function warningText(warning: ReviewWarning, copy: BoardReviewCopy) {
   if (warning.kind === 'similar-name') return copy.similarName(warning.name)
   if (warning.kind === 'same-appearance') return copy.sameAppearance(warning.name)
   return copy.townLink
 }
 
 /** A flag the server added after this page was built still shows, as the server names it. */
-export function flagLabel(flag: string, copy: Copy) {
+export function flagLabel(flag: string, copy: BoardReviewCopy) {
   return (copy.flags as Readonly<Record<string, string>>)[flag] ?? flag
 }
 
