@@ -10,10 +10,6 @@ ALTER TABLE towns
   ADD COLUMN pet jsonb NOT NULL DEFAULT '{"name":{"ko":"토토","en":"Toto"}}'
     CHECK (jsonb_typeof(pet) = 'object');
 
-UPDATE town_residents
-SET dialogue = (dialogue - 'aboutTaehyun') || jsonb_build_object('aboutOwner', dialogue -> 'aboutTaehyun')
-WHERE dialogue ? 'aboutTaehyun';
-
 -- Verified LinkedIn emails that sign in as admin, edited at /admin. ADMIN_EMAILS fills it only while it is empty.
 CREATE TABLE admin_emails (
   email text PRIMARY KEY CHECK (email = lower(btrim(email)) AND char_length(email) BETWEEN 3 AND 254),
