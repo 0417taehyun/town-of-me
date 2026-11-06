@@ -521,10 +521,17 @@ export class PostgresStore implements Store {
 
   async updateEntry(id: string, expectedUpdatedAt: string, changes: EntryChanges): Promise<LeaderboardEntry | null> {
     const { rows } = await this.pool.query<LeaderboardEntryRow>(
-      `UPDATE minigame_entries SET author_name = $3, name_status = $4, author_appearance = $5, appearance_public = $6,
-         listed = $7, review_status = $8, linkedin_profile_url = $9, linkedin_status = $10, linkedin_code = $11,
-         takedown = $12, updated_at = $13
-       WHERE id = $1 AND updated_at = $2::timestamptz RETURNING *`,
+      `WITH updated AS (
+         UPDATE minigame_entries SET author_name = $3, name_status = $4, author_appearance = $5,
+           appearance_public = $6, listed = $7, review_status = $8, linkedin_profile_url = $9, linkedin_status = $10,
+           linkedin_code = $11, takedown = $12, updated_at = $13
+         WHERE id = $1 AND updated_at = $2::timestamptz RETURNING *
+       ), forgotten AS (
+         UPDATE minigame_runs AS run SET profile = NULL FROM updated
+         WHERE updated.takedown AND run.game = updated.game AND run.season = updated.season
+           AND run.visitor_hash = updated.visitor_hash AND run.profile IS NOT NULL
+       )
+       SELECT * FROM updated`,
       [
         id,
         expectedUpdatedAt,
@@ -608,7 +615,7 @@ export class PostgresStore implements Store {
     return inTransaction(this.pool, async (client) => {
       await lockRunVisitor(client, id)
       const { rows } = await client.query<GameRunRow>(
-        `UPDATE minigame_runs SET status = 'scored', reviewed_at = $2
+        `UPDATE minigame_runs SET status = 'scored', reviewed_at = $2, profile = NULL
          WHERE id = $1 AND status = 'flagged' AND reviewed_at IS NULL RETURNING *`,
         [id, reviewedAt],
       )

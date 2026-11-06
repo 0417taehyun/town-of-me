@@ -322,10 +322,14 @@ export function overlapWarnings(
     ...others.flatMap((other) => (other.authorName === null ? [] : [other.authorName])),
     ...townNames(town),
   ]
-  const characters = [
-    ...others.map((other) => ({ name: other.authorName, appearance: other.appearance })),
-    ...(town?.residents ?? []).map((resident) => ({ name: resident.name, appearance: resident.appearance })),
-  ]
+  // A taken-down character is shown to no one, so no warning may say what it matches.
+  const shownOthers = others.filter((other) => !other.takedown)
+  const characters = entry.takedown
+    ? []
+    : [
+        ...shownOthers.map((other) => ({ name: other.authorName, appearance: other.appearance })),
+        ...(town?.residents ?? []).map((resident) => ({ name: resident.name, appearance: resident.appearance })),
+      ]
   const townLink = entry.linkedIn !== null && isTownProfile(town, profileIdOf(entry.linkedIn.profileUrl))
   return [
     ...similarNames(entry.authorName, names).map((name) => ({ kind: 'similar-name' as const, name })),
@@ -371,7 +375,8 @@ export function reviewedEntry(entry: LeaderboardEntry, rank: number | null) {
     name: entry.authorName,
     nameStatus: entry.nameStatus,
     reviewStatus: entry.reviewStatus,
-    profile: entry.appearance,
+    // A record keeps an appearance because the schema needs one, but after a takedown no one reads it, the admin included.
+    profile: entry.takedown ? null : entry.appearance,
     appearancePublic: entry.appearancePublic,
     takedown: entry.takedown,
     homeRuns: entry.score,
@@ -653,9 +658,17 @@ export function previousRankingMonth(month: string): string {
   return new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 2, 1)).toISOString().slice(0, 7)
 }
 
-/** A held run as a candidate for its visitor's record; the admin has seen it, so a record it makes is approved. */
-export function heldRunCandidate(run: GameRun, entryId: string): Omit<BoardCandidate, 'nameStatus'> {
-  if (!run.result || !run.profile || !run.submittedAt) throw new DomainError('CONFLICT', 'This run kept no result')
+/**
+ * A held run as a candidate for its visitor's record; the admin has seen it, so a record it makes is approved. A record
+ * taken down has taken its runs' profiles with it, so such a run keeps the record's own hidden look and no name.
+ */
+export function heldRunCandidate(
+  run: GameRun,
+  entryId: string,
+  record: LeaderboardEntry | null,
+): Omit<BoardCandidate, 'nameStatus'> {
+  const profile = run.profile ?? (record?.takedown ? { name: null, appearance: record.appearance } : null)
+  if (!run.result || !profile || !run.submittedAt) throw new DomainError('CONFLICT', 'This run kept no result')
   return {
     entryId,
     runId: run.id,
@@ -663,7 +676,7 @@ export function heldRunCandidate(run: GameRun, entryId: string): Omit<BoardCandi
     tiebreak: run.result.homeRunDistanceDecimetres,
     result: publicDerbyResult(run.result),
     achievedAt: run.submittedAt,
-    profile: run.profile,
+    profile,
     reviewStatus: 'approved',
   }
 }

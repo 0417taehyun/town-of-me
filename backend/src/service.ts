@@ -315,6 +315,8 @@ export class BackendService {
     const record = judgeDerbyRun(run.rules, run.seed, submission, serverElapsedMs)
     const flags = derbyRunFlags({ rules: run.rules, log: submission.log, record })
     const held = flags.length > 0
+    // A held run keeps who it was sent as for its acceptance, unless a takedown already took that off this board.
+    const keepsProfile = held && !(await this.store.getBoardEntryByVisitor(run, run.visitorHash))?.takedown
     const candidate = {
       entryId: crypto.randomUUID(),
       runId: run.id,
@@ -333,7 +335,7 @@ export class BackendService {
       score: candidate.score,
       tiebreak: candidate.tiebreak,
       flags,
-      profile: held ? profile : null,
+      profile: keepsProfile ? profile : null,
     }
     const settle = held ? null : await this.settlementFor(run, candidate)
     const saved = await this.store.finishRun(run.id, run.visitorHash, finished, settle)
@@ -666,7 +668,8 @@ export class BackendService {
     const expectedUpdatedAt = input.updatedAt === null ? null : versionInput(input.updatedAt, 'updatedAt')
     const run = await this.heldRun(game, runId)
     if (now >= acceptanceDeadline(run.season)) throw new DomainError('CONFLICT', "That season's board is final")
-    const settle = await this.settlementFor(run, heldRunCandidate(run, crypto.randomUUID()))
+    const record = await this.store.getBoardEntryByVisitor(run, run.visitorHash)
+    const settle = await this.settlementFor(run, heldRunCandidate(run, crypto.randomUUID(), record))
     const accepted = await this.store.acceptRun(
       run.id,
       new Date(now).toISOString(),

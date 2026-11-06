@@ -129,7 +129,8 @@ the same results).
   to `contactMs`, 0–200, and −3 to 3 m or `null`); `clientElapsedMs` is 0–600000; `claimed` is the client's
   `{ homeRuns, totalDistanceDm }`; and `profile` is the character appearance with an optional `name` (NFKC, one line of
   1–24 characters). Every other field, such as pose keypoints, is dropped and never stored; the run keeps only the
-  parsed `side`, `practice`, and `swings`, and the name is kept only on a listed record.
+  parsed `side`, `practice`, and `swings`, and the name is kept only on a listed record, or on a held run until it is
+  accepted or its record is taken down.
 - It answers `200 { result, standing, entry }`: the server's own `result` (`homeRuns`, `totalDistanceDm` of the home
   runs, and per pitch only `pitchType`, `outcome`, and `distanceDm`), the visitor's `standing`, and their record on the
   run's board (`entry`, or `null`). `standing.kind` is `ranked` (`rank`, `personalBest`), `unlisted` (`wouldBeRank`,
@@ -239,10 +240,13 @@ shows it: a record changed since is `409` and stays as it is. Each answers `{ en
 - `POST …/entries/:id/appearance` with `{ updatedAt, public }` shows or hides the appearance (the default batter).
 - `POST …/entries/:id/takedown` with `{ updatedAt, blockLinkedIn? }` answers a takedown request by anonymising the
   record: no name, no link, the default batter, and on this board neither ever comes back; the score keeps its place.
-  `blockLinkedIn: true` also blocks the profile it linked (by the hash of its id) from every record.
+  The visitor's runs on that board lose the profile they were sent with. The record keeps an appearance because the
+  schema needs one, but no route returns it from then on: `entry.profile` is `null` here and the default batter in the
+  visitor's own view. `blockLinkedIn: true` also blocks the profile it linked (by the hash of its id) from every record.
 - `POST …/runs/:id/acceptance` with `{ updatedAt }`, the visitor's record as read (`null` when they had none), scores a
   held run as if it had scored at once and settles the record, approved; a past season's run only until a week after
-  the season ended. `POST …/runs/:id/rejection` dismisses one; it stays stored. Both answer `{ run }` (acceptance also
+  the season ended; the run then drops the profile it was sent with, which the record now holds as far as it may.
+  `POST …/runs/:id/rejection` dismisses one; it stays stored. Both answer `{ run }` (acceptance also
   `entry`), and a run that is not waiting is `409`. `POST …/runs/rejection` with `{ runIds }` (1–1000 ids)
   dismisses those that are still waiting, in one step, and returns `{ rejected }`, how many that was: only the runs the
   admin saw listed, since a dismissal cannot be undone and a run may arrive after the list loaded.

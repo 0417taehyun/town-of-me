@@ -511,7 +511,7 @@ export function ownEntry(entry: LeaderboardEntry, rank: number) {
     name: entry.authorName,
     nameStatus: entry.nameStatus,
     disqualified,
-    profile: entry.appearance,
+    profile: entry.takedown ? { kind: 'default' as const } : entry.appearance,
     appearancePublic: entry.appearancePublic,
     takedown: entry.takedown,
     linkedIn: linkedIn && {

@@ -69,7 +69,10 @@ export interface Store extends AuthStore {
   rankOf(entry: LeaderboardEntry): Promise<number>
   /** The top of the board's public order (listed and not disqualified); its first three are the statues. */
   listBoard(board: BoardKey, limit: number): Promise<LeaderboardEntry[]>
-  /** Applies `changes` only while the record is still at `expectedUpdatedAt`; `null` if it is missing or changed. */
+  /**
+   * Applies `changes` only while the record is still at `expectedUpdatedAt`; `null` if it is missing or changed. A record
+   * taken down also takes the name and look off its visitor's runs on that board, in the same step.
+   */
   updateEntry(id: string, expectedUpdatedAt: string, changes: EntryChanges): Promise<LeaderboardEntry | null>
   getEntry(id: string): Promise<LeaderboardEntry | null>
   /** Every record on the board, listed or not, in public order. */
@@ -83,8 +86,9 @@ export interface Store extends AuthStore {
   /** Whether the visitor has sent a result for any run of the game. */
   hasSubmittedRun(game: string, visitorHash: string): Promise<boolean>
   /**
-   * Accepts a held run nobody has reviewed: it becomes `scored` and `settle` decides the visitor's record, in one step;
-   * if `settle` throws, nothing changes. `null`, with nothing changed, when the run is no longer waiting for review.
+   * Accepts a held run nobody has reviewed: it becomes `scored`, its profile goes, since the record now holds what may be
+   * kept, and `settle` decides the visitor's record, in one step; if `settle` throws, nothing changes. `null`, with
+   * nothing changed, when the run is no longer waiting for review.
    */
   acceptRun(
     id: string,
@@ -345,7 +349,15 @@ export class MemoryStore implements Store {
     if (entry?.updatedAt !== expectedUpdatedAt) return null
     const updated = { ...entry, ...structuredClone(changes) }
     this.leaderboardEntries.set(id, updated)
+    if (updated.takedown) this.forgetRunProfiles(updated)
     return structuredClone(updated)
+  }
+
+  forgetRunProfiles(entry: LeaderboardEntry): void {
+    const runs = [...this.gameRuns.values()].filter(
+      (run) => isOnBoard(run, entry) && run.visitorHash === entry.visitorHash,
+    )
+    runs.forEach((run) => this.gameRuns.set(run.id, { ...run, profile: null }))
   }
 
   async getEntry(id: string): Promise<LeaderboardEntry | null> {
@@ -394,7 +406,7 @@ export class MemoryStore implements Store {
     const run = this.gameRuns.get(id)
     if (run?.status !== 'flagged' || run.reviewedAt !== null) return null
     const settlement = this.settleEntry(run, settle)
-    const accepted: GameRun = { ...run, status: 'scored', reviewedAt }
+    const accepted: GameRun = { ...run, status: 'scored', reviewedAt, profile: null }
     this.gameRuns.set(id, accepted)
     return { run: structuredClone(accepted), settlement }
   }

@@ -685,6 +685,10 @@ async function checkModerationStore(store: Store, assert: Assert): Promise<void>
     'an accepted run scores and settles its record in one step, link and all',
   )
   assert(
+    accepted?.run.profile === null && (await store.getRun(held.id))?.profile === null,
+    'an accepted run no longer keeps the name and look it was sent with',
+  )
+  assert(
     (await store.acceptRun(held.id, reviewedAt, settled)) === null &&
       (await store.listRunsForReview(board)).length === 0,
     'a held run is accepted once and leaves the queue',
@@ -707,6 +711,7 @@ async function checkModerationStore(store: Store, assert: Assert): Promise<void>
     'a dismissed run stays held as evidence and leaves the queue once',
   )
   await checkListedDismissal(store, flagged, reviewedAt, assert)
+  await checkTakenDownProfiles(store, flagged, reviewedAt, assert)
   const counts = await store.countRunsByVisitor(board)
   assert(
     isDeepStrictEqual(
@@ -775,6 +780,49 @@ async function checkModerationStore(store: Store, assert: Assert): Promise<void>
   )
 }
 
+/** A record taken down takes the name and look off its visitor's runs on that board, and off nothing else. */
+async function checkTakenDownProfiles(
+  store: Store,
+  flagged: FinishedRun,
+  reviewedAt: string,
+  assert: Assert,
+): Promise<void> {
+  const season = '2026-03'
+  const held = async (visitorHash: string, month = season) => {
+    const run = issuedRun(visitorHash, month)
+    await store.issueRun(run)
+    await store.finishRun(run.id, visitorHash, flagged, null)
+    return run
+  }
+  const entry = await recordEntry(store, 'takedown-visitor', season, {})
+  const waiting = await held('takedown-visitor')
+  const dismissed = await held('takedown-visitor')
+  await store.rejectRun(dismissed.id, reviewedAt)
+  const otherVisitor = await held('takedown-other')
+  const otherSeason = await held('takedown-visitor', '2026-02')
+  const profileOf = async (run: GameRun) => (await store.getRun(run.id))?.profile ?? null
+
+  const takenDown = { ...entry, takedown: true, appearancePublic: false, updatedAt: reviewedAt }
+  assert(
+    (await store.updateEntry(entry.id, '2000-01-01T00:00:00.000Z', takenDown)) === null &&
+      (await profileOf(waiting)) !== null,
+    'a takedown refused as stale leaves the runs as they are',
+  )
+  const relisted = { ...entry, listed: true, updatedAt: reviewedAt }
+  await store.updateEntry(entry.id, entry.updatedAt, relisted)
+  assert((await profileOf(waiting)) !== null, 'any other change to a record leaves its runs as they are')
+
+  const applied = await store.updateEntry(entry.id, reviewedAt, { ...takenDown, updatedAt: runAfter(reviewedAt) })
+  assert(
+    applied?.takedown === true && (await profileOf(waiting)) === null && (await profileOf(dismissed)) === null,
+    "a takedown takes the name and look off the visitor's runs on that board, waiting or dismissed",
+  )
+  assert(
+    (await profileOf(otherVisitor)) !== null && (await profileOf(otherSeason)) !== null,
+    "a takedown leaves another visitor's runs and the visitor's other seasons as they are",
+  )
+}
+
 /** Dismissing a list takes only what is listed, still waiting, and of the game, and says how many that was. */
 async function checkListedDismissal(
   store: Store,
@@ -803,6 +851,10 @@ async function checkListedDismissal(
     'a listed dismissal takes only the listed runs that wait, of that game, and leaves a run it did not name',
   )
   assert((await store.rejectRuns(runGame, [listed.id], reviewedAt)) === 0, 'a run is dismissed only once')
+}
+
+function runAfter(time: string): string {
+  return new Date(Date.parse(time) + 1).toISOString()
 }
 
 /** The visitor's record as it stands, or `entry` when there is none yet. */

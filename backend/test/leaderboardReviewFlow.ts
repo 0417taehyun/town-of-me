@@ -120,6 +120,7 @@ export async function checkLeaderboardReviewFlow(assert: Assert): Promise<void> 
   await checkReviewActions(assert)
   await checkBoardRecords(assert)
   await checkListedDismissal(assert)
+  await checkTakenDownReadBack(assert)
   await checkTakedownAndErasure(assert)
   await checkPastSeason(assert)
   await checkHallOfFame(assert)
@@ -549,6 +550,54 @@ async function checkListedDismissal(assert: Assert): Promise<void> {
   )
   const again = (await (await act('runs/rejection', { runIds: listed })).json()) as { rejected: number }
   assert(again.rejected === 0, 'runs no longer waiting are not counted')
+}
+
+/** Nothing the admin or the visitor can read brings a taken-down name or character back. */
+async function checkTakenDownReadBack(assert: Assert): Promise<void> {
+  const { store, send, admin, play, own, act, entryOf, review } = await reviewHarness()
+  const named = { ...profile, name: 'Sprout' }
+  const strong = [12, -21, -8, 33, -27]
+  const claimedFalsely = { claimed: { homeRuns: 0, totalDistanceDm: 0 } }
+  const readRun = async (id: string) => {
+    const response = await send('GET', `/v1/admin/games/${game}/runs/${id}`, { cookie: admin })
+    return ((await response.json()) as { run: { name: string | null; profile: object | null } }).run
+  }
+  await play('readback', [12, null, null, null, null], { profile: named })
+  await own('readback', { listed: true, profile: named })
+  const accepted = await play('readback', strong, { ...claimedFalsely, profile: named })
+  const before = await entryOf('readback')
+  await act(`runs/${accepted.run.id}/acceptance`, { updatedAt: before?.updatedAt })
+  const acceptedRun = await readRun(accepted.run.id)
+  assert(acceptedRun.name === null && acceptedRun.profile === null, 'an accepted run keeps no name or character')
+
+  const waiting = await play('readback', strong, { ...claimedFalsely, profile: named })
+  const record = await entryOf('readback')
+  const takedown = await act(`entries/${record?.id}/takedown`, { updatedAt: record?.updatedAt })
+  const answered = (await takedown.json()) as { entry: { profile: object | null; name: string | null } }
+  const waitingRun = await readRun(waiting.run.id)
+  assert(
+    answered.entry.profile === null && answered.entry.name === null,
+    'the admin reads no name or character of a record taken down',
+  )
+  assert(waitingRun.name === null && waitingRun.profile === null, 'a takedown takes both off a run still waiting')
+  const ownView = await send('GET', `/v1/games/${game}/leaderboard`, { cookie: cookieOf('readback') })
+  const ownEntry = ((await ownView.json()) as { own: { profile: { kind?: string } } }).own
+  assert(ownEntry.profile.kind === 'default', "the record's own browser reads the default batter too")
+
+  const taken = await entryOf('readback')
+  const acceptedAfter = await act(`runs/${waiting.run.id}/acceptance`, { updatedAt: taken?.updatedAt })
+  const settled = await entryOf('readback')
+  assert(
+    acceptedAfter.status === 200 && settled?.takedown === true && settled.authorName === null,
+    'a run that waited through a takedown can still be accepted, and the record stays anonymous',
+  )
+
+  const next = await play('readback', strong, { ...claimedFalsely, profile: named })
+  const queued = (await review()).flatMap(({ runs }) => runs).find(({ id }) => id === next.run.id)
+  assert(
+    (await store.getRun(next.run.id))?.profile === null && queued !== undefined,
+    'a later held run on that board waits without keeping who it was sent as',
+  )
 }
 
 /** Past seasons stay as they are, but a past statue's link stays only while its owner keeps it on. */
