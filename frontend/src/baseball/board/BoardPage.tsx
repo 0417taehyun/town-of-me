@@ -8,7 +8,6 @@ import {
   upcomingBallparkRules,
 } from '../../data/ballparkRules'
 import { homeRunDistanceText, linkedInChipText, recordText, rowName } from '../../data/boardRecord'
-import { clearStoredSession, getBrowserSessionStore, readStoredSession } from '../../data/InMemoryDemoRepository'
 import {
   type Board,
   type BoardOwnEntry,
@@ -24,6 +23,7 @@ import {
 } from '../../data/leaderboardApi'
 import type { TownSnapshot } from '../../data/models'
 import type { PlayerProfile } from '../../data/playerProfile'
+import { clearStoredSession, getBrowserSessionStore, readStoredSession } from '../../data/visitorSession'
 import { usePageLanguage } from '../../hooks/usePageLanguage'
 import { useReducedMotion } from '../../hooks/useReducedMotion'
 import { type AppLanguage, languageCopy, monthName } from '../../i18n/language'

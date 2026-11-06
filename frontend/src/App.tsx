@@ -4,14 +4,13 @@ import { CAMERA_DEFAULTS, type CameraSettings } from './camera/cameraConfig'
 import { cameraHeightForFov } from './camera/cameraMath'
 import { useCozyBgm } from './audio/useCozyBgm'
 import { signOut } from './data/adminSession'
-import { InMemoryDemoRepository } from './data/InMemoryDemoRepository'
 import type { TownGuideStep, Vec3 } from './data/models'
 import { fetchTownLayout } from './data/townApi'
 import type { EditorCategory } from './editor/objectSelection'
 import type { EditorView } from './editor/townEditing'
 import { isAdminPath, useAdminAccess } from './editor/useAdminAccess'
 import { useTownEditor } from './editor/useTownEditor'
-import { createVisitorSession, useDemoSession } from './hooks/useDemoSession'
+import { createVisitorSession, useVisitorSession } from './hooks/useVisitorSession'
 import { usePageLanguage } from './hooks/usePageLanguage'
 import { useLocalEnvironment } from './hooks/useLocalEnvironment'
 import { useReducedMotion } from './hooks/useReducedMotion'
@@ -66,8 +65,7 @@ export function App() {
 
 /** The town at `/` and its editor at `/admin`. */
 export function TownApp() {
-  const [repository] = useState(() => new InMemoryDemoRepository(() => fetchTownLayout()))
-  const { town, session, error, save, retry } = useDemoSession(repository)
+  const { town, session, error, save, retry } = useVisitorSession(fetchTownLayout)
   const [adminMode] = useState(() => isAdminPath(window.location.pathname))
   const [loginFailed] = useState(() => new URLSearchParams(window.location.search).get('login') === 'failed')
   const adminAccess = useAdminAccess(adminMode)

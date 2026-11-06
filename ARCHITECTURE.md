@@ -43,7 +43,7 @@ skids, ballpark themes, and color roles need no backend change.
 
 | Path               | Owns                                                                                                |
 | ------------------ | --------------------------------------------------------------------------------------------------- |
-| `App.tsx`          | Routes `/baseball` lazily; `TownApp` (`/`, `/admin`) creates adapters and connects UI and scene.    |
+| `App.tsx`          | Routes `/baseball` lazily; `TownApp` (`/`, `/admin`) connects UI and scene.                         |
 | `data/`            | Models, the untrusted API boundary (`townApi.ts`), API clients, the tab's session and language.     |
 | `scene/`           | Everything drawn with Three.js (see below). Loaded as a lazy chunk.                                 |
 | `editor/`          | The admin editor: panels, gestures, history, admins, guestbook and board review. Only on `/admin`.  |
@@ -62,10 +62,9 @@ never imports `editor/`, `TownScene.tsx`, or a `scene/` module that reaches the 
 none of the town.
 
 - `townApi.ts` is the untrusted boundary: payloads are parsed into a `TownSnapshot`, and renderers never see transport
-  shapes. `DemoRepository` is the data port for the visitor's session; `InMemoryDemoRepository` keeps it in
-  `sessionStorage`.
-- Use an interface only at a real boundary (repository adapters, reusable component props, data from another module),
-  never for a single implementation with nothing to substitute.
+  shapes. `visitorSession.ts` keeps the visitor's session in `sessionStorage`.
+- Use an interface only at a real boundary (reusable component props, data from another module), never for a single
+  implementation with nothing to substitute.
 - Extract a component when a UI pattern repeats or owns its own accessible contract. Pass ids and callbacks across UI
   boundaries; never hand Three.js objects to DOM components.
 

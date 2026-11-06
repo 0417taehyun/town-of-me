@@ -186,7 +186,7 @@ export type TownSnapshot = {
   revision: number
 }
 
-export type DemoSession = {
+export type VisitorSession = {
   playerPosition: Vec3
   camera: CameraSettings
   profile?: PlayerProfile

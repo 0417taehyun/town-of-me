@@ -1,5 +1,5 @@
 import { getPreferredLanguage, type AppLanguage } from '../i18n/language'
-import { getBrowserSessionStore } from './InMemoryDemoRepository'
+import { getBrowserSessionStore } from './visitorSession'
 
 type LanguageStore = Pick<Storage, 'getItem' | 'setItem'>
 

@@ -17,11 +17,10 @@ import {
   rankingMonth,
   upcomingBallparkRules,
 } from '../data/ballparkRules'
-import { InMemoryDemoRepository } from '../data/InMemoryDemoRepository'
 import type { IssuedRun } from '../data/leaderboardApi'
 import type { BallparkSettings, TownSnapshot } from '../data/models'
 import { normalizePlayerProfile, type PlayerProfile } from '../data/playerProfile'
-import { useDemoSession } from '../hooks/useDemoSession'
+import { useVisitorSession } from '../hooks/useVisitorSession'
 import { useLocalEnvironment } from '../hooks/useLocalEnvironment'
 import { usePageLanguage } from '../hooks/usePageLanguage'
 import { useReducedMotion } from '../hooks/useReducedMotion'
@@ -117,8 +116,8 @@ const CharacterPreviewCanvas = lazy(() =>
  * visitor plays as their character.
  */
 export function BaseballApp({ town: loadedTown }: { town: TownSnapshot }) {
-  const [repository] = useState(() => new InMemoryDemoRepository(async () => loadedTown))
-  const { town, session, save } = useDemoSession(repository)
+  const loadTown = useCallback(async () => loadedTown, [loadedTown])
+  const { town, session, save } = useVisitorSession(loadTown)
   const [language, setLanguage] = usePageLanguage()
   // Phones and browsers without WebGL 2 stop here, before a character or the stadium could be made; so does a stadium
   // whose graphics fail or are lost later.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CAMERA_DEFAULTS } from '../camera/cameraConfig'
 import { DEFAULT_PLAYER_PROFILE } from '../data/playerProfile'
-import { createSeedSession, createVisitorSession } from '../hooks/useDemoSession'
+import { createSeedSession, createVisitorSession } from '../hooks/useVisitorSession'
 import { SAMPLE_TOWN } from '../testing/sampleTown'
 import { needsCharacter, withVenueProfile } from './baseballSession'
 

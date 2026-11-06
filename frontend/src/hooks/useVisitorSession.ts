@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { CAMERA_DEFAULTS } from '../camera/cameraConfig'
-import type { DemoRepository } from '../data/DemoRepository'
 import type { CameraSettings } from '../camera/cameraConfig'
-import type { DemoSession, TownGuideStep, TownSnapshot, Vec3 } from '../data/models'
+import type { TownGuideStep, TownSnapshot, Vec3, VisitorSession } from '../data/models'
 import { normalizePlayerProfile, type PlayerProfile } from '../data/playerProfile'
+import { getBrowserSessionStore, readStoredSession, saveStoredSession } from '../data/visitorSession'
 
-export function createSeedSession(town: TownSnapshot): DemoSession {
+export function createSeedSession(town: TownSnapshot): VisitorSession {
   return {
     playerPosition: structuredClone(town.spawn),
     camera: { ...CAMERA_DEFAULTS },
@@ -20,7 +20,7 @@ export function createVisitorSession(
   camera: CameraSettings,
   profile: PlayerProfile,
   guideStep: TownGuideStep,
-): DemoSession {
+): VisitorSession {
   return {
     playerPosition: { x: position.x, y: position.y, z: position.z },
     camera: { ...camera },
@@ -29,25 +29,20 @@ export function createVisitorSession(
   }
 }
 
-export async function resetDemoSession(repository: DemoRepository, town: TownSnapshot) {
-  await repository.resetSession()
-  return createSeedSession(town)
-}
-
 /** Loads the town and the visitor's session; after a failure, `retry` loads both again. */
-export function useDemoSession(repository: DemoRepository) {
+export function useVisitorSession(loadTown: () => Promise<TownSnapshot>) {
   const [attempt, setAttempt] = useState(0)
   const [town, setTown] = useState<TownSnapshot | null>(null)
-  const [session, setSession] = useState<DemoSession | null>(null)
+  const [session, setSession] = useState<VisitorSession | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
-    void Promise.all([repository.getTown(), repository.getSession()])
-      .then(([loadedTown, saved]) => {
+    void loadTown()
+      .then((loadedTown) => {
         if (!active) return
         setTown(loadedTown)
-        setSession(saved ? { ...saved, profile: normalizePlayerProfile(saved.profile) } : createSeedSession(loadedTown))
+        setSession(readStoredSession(getBrowserSessionStore()) ?? createSeedSession(loadedTown))
       })
       .catch((reason: unknown) => {
         if (active) setError(reason instanceof Error ? reason.message : 'Could not load the town')
@@ -55,27 +50,17 @@ export function useDemoSession(repository: DemoRepository) {
     return () => {
       active = false
     }
-  }, [attempt, repository])
+  }, [attempt, loadTown])
 
   const retry = useCallback(() => {
     setError(null)
     setAttempt((current) => current + 1)
   }, [])
 
-  const save = useCallback(
-    async (next: DemoSession) => {
-      await repository.saveSession(next)
-      setSession(next)
-    },
-    [repository],
-  )
-
-  const reset = useCallback(async () => {
-    if (!town) return null
-    const next = await resetDemoSession(repository, town)
+  const save = useCallback(async (next: VisitorSession) => {
+    saveStoredSession(getBrowserSessionStore(), next)
     setSession(next)
-    return next
-  }, [repository, town])
+  }, [])
 
-  return { town, session, error, save, reset, retry }
+  return { town, session, error, save, retry }
 }
