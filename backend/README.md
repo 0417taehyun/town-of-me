@@ -252,6 +252,8 @@ At startup the server stores the town in `seed/town.json` (a fictional sample: a
 
 Before the first deployment the schema lives in one squashed `001_initial.sql`; after a deployment, add new numbered files instead of editing applied ones. When `DATABASE_URL` is set, the server uses `PostgresStore` and applies pending files from [`migrations/`](migrations/) in name order at startup. Applied files are recorded in `schema_migrations`, all pending files run in one transaction, and an advisory lock serializes instances that start together. Without `DATABASE_URL`, the server warns and uses `MemoryStore`. Both stores implement the `Store` contract in `src/store.ts` with parameterized SQL and transactions on the PostgreSQL side. Localized JSON objects store both `ko` and `en`, enforced by database checks. Public guestbook reads must always require `status = 'approved'`.
 
+The repository configures no database backups. Whoever turns on volume snapshots or `pg_dump` must add how long backups are kept to the notice at `/privacy` (`privacy` in `frontend/src/i18n/language.ts`), because a record someone deleted stays in a backup for that long. Restoring one brings back whatever was taken down or deleted after it was made, so before the restored database takes traffic, handle the takedown requests in the operator's mailbox again. A visitor's own deletion leaves nothing to replay, since the server keeps no trace of who asked; the notice must say those can come back too.
+
 On account deletion: set `deleted_at`, revoke every session immediately, hide public content, enqueue hard deletion, and keep only the minimum audit record required by the chosen legal retention policy. The product still needs an explicit decision for the retention duration.
 
 ## Verify
