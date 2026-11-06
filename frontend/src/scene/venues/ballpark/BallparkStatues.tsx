@@ -2,9 +2,10 @@ import { useFrame } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { MutableRefObject } from 'react'
 import { DoubleSide, type InstancedMesh, type Mesh, type MeshStandardMaterial, Object3D } from 'three'
+import { rankingMonth } from '../../../data/ballparkRules'
 import type { TownObject } from '../../../data/models'
 import { useWebFontGlyphs } from '../../../hooks/useWebFontGlyphs'
-import { type AppLanguage, languageCopy } from '../../../i18n/language'
+import { type AppLanguage, languageCopy, monthName } from '../../../i18n/language'
 import { getSeasonColors } from '../../environment/season'
 import { getSnowCover, isSeasonChangeSettled, seasonClock, type SeasonChange } from '../../environment/seasonTransition'
 import { useSeasonalColor } from '../../environment/useSeasonChange'
@@ -57,7 +58,7 @@ export type GardenProps = {
  * ballpark is shown: this month's top three as painted statues, read 2-1-3 on the stage, before an arc of hedge in
  * the town's season with bunting and flower beds, two of the town's lamps, which light at night, and a sign. A place
  * no one holds yet, or every place while the month's statues cannot be read, keeps a baseball on a cushion and says it
- * waits for a challenger. Snow settles on the pedestals and the beds in winter as on the town's roofs.
+ * waits for a challenger, and with no statue at all the sign says so too. Snow settles on the pedestals and the beds in winter as on the town's roofs.
  */
 export function BallparkStatues({ seasonChange, lampsOn, language, still }: GardenProps) {
   const copy = languageCopy[language].venues.ballpark.statues
@@ -79,6 +80,8 @@ export function BallparkStatues({ seasonChange, lampsOn, language, still }: Gard
     })),
   )
   const { stage, sign, turn, at } = garden
+  const emptyMonth = !podium?.rows.length
+  const month = podium?.season ?? rankingMonth(new Date())
 
   return (
     <group position={[at[0], 0, at[1]]} rotation-y={turn}>
@@ -101,7 +104,12 @@ export function BallparkStatues({ seasonChange, lampsOn, language, still }: Gard
         <Lamp key={lamp.id} object={lamp} lampsOn={lampsOn} />
       ))}
       <group position={[sign.x, 0, sign.z]} rotation-y={sign.turn}>
-        <GuestbookSign title={copy.sign} height={0.34} position={[0, sign.height, 0]} />
+        <GuestbookSign
+          title={emptyMonth ? copy.waiting : copy.sign}
+          subtitle={emptyMonth ? copy.firstStatueOf(monthName(month, month, language)) : undefined}
+          height={0.34}
+          position={[0, sign.height, 0]}
+        />
       </group>
       {lampsOn && (
         <GroundGlow
