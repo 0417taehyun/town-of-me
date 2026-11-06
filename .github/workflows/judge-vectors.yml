@@ -1,0 +1,27 @@
+name: Judge vectors
+
+on:
+  push:
+    paths:
+      - backend/test/derbyJudgeVectors.json
+      - frontend/src/baseball/game/derbyJudgeVectors.json
+      - .github/workflows/judge-vectors.yml
+  pull_request:
+    paths:
+      - backend/test/derbyJudgeVectors.json
+      - frontend/src/baseball/game/derbyJudgeVectors.json
+      - .github/workflows/judge-vectors.yml
+
+permissions:
+  contents: read
+
+jobs:
+  identical:
+    name: Hold both judges to the same vectors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # A ranked run's result is the server's, and each module tests its judge against its own copy, so copies that
+      # differ would let the game show a visitor a result the board does not keep. Changes land one module at a time:
+      # this stays red between a backend change to the vectors and the frontend change that follows it.
+      - run: cmp backend/test/derbyJudgeVectors.json frontend/src/baseball/game/derbyJudgeVectors.json

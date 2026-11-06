@@ -1,0 +1,44 @@
+name: Nginx config
+
+on:
+  push:
+    paths:
+      - docker/nginx.conf
+      - .github/workflows/nginx-config.yml
+  pull_request:
+    paths:
+      - docker/nginx.conf
+      - .github/workflows/nginx-config.yml
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Check the config, the flood guard and the noindex headers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # No backend runs here, so a request the flood guard lets through answers 502, which is fine.
+      - name: Start nginx with the real config
+        run: |
+          docker run --rm --add-host backend:127.0.0.1 \
+            -v "$PWD/docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro" nginx:1.30-alpine nginx -t
+          docker run --rm -d --name nginx-smoke --add-host backend:127.0.0.1 -p 8080:80 \
+            -v "$PWD/docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro" nginx:1.30-alpine
+          for attempt in $(seq 20); do
+            curl -fs http://localhost:8080/healthz && break
+            sleep 1
+          done
+          curl -fs http://localhost:8080/healthz
+      - name: Issuing runs quickly reaches the flood guard
+        run: |
+          statuses="$(seq 80 | xargs -P 20 -I{} curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+            http://localhost:8080/v1/games/home-run-derby/runs)"
+          sort <<< "$statuses" | uniq -c
+          grep -q '^429$' <<< "$statuses"
+      - name: Boards are not indexed, and the town is
+        run: |
+          curl -si http://localhost:8080/v1/games/home-run-derby/leaderboard | grep -qi '^x-robots-tag:'
+          curl -si http://localhost:8080/baseball/ranking | grep -qi '^x-robots-tag:'
+          if curl -si http://localhost:8080/ | grep -qi '^x-robots-tag:'; then exit 1; fi
