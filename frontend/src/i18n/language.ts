@@ -1047,6 +1047,7 @@ export const languageCopy = {
         /** Over the ballpark's gate at the town's edge. */
         signs: { garden: 'Garden Ballpark' },
         enter: 'Enter the ballpark',
+        mapGate: 'Ballpark gate',
         difficulties: { easy: 'Easy', normal: 'Normal', hard: 'Hard' },
         rulesThisMonth: (pitchCount: number, difficulty: string) => `This month: ${pitchCount} pitches · ${difficulty}`,
         rulesFrom: (month: string, pitchCount: number, difficulty: string) =>
@@ -2082,6 +2083,7 @@ export const languageCopy = {
         themes: { garden: '정원 야구장' },
         signs: { garden: '정원 야구장' },
         enter: '야구장 들어가기',
+        mapGate: '야구장 정문',
         difficulties: { easy: '쉬움', normal: '보통', hard: '어려움' },
         rulesThisMonth: (pitchCount: number, difficulty: string) => `이번 달: ${pitchCount}구 · ${difficulty}`,
         rulesFrom: (month: string, pitchCount: number, difficulty: string) =>

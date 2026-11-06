@@ -7,6 +7,7 @@ import { getHouseTitle } from '../scene/objects/houses/houseLayout'
 import { PLAZA_RADIUS } from '../scene/objects/fountain/fountainLayout'
 import { getTownRoads } from '../scene/objects/roads/roadLayout'
 import { groupTownObjects } from '../scene/townObjectGroups'
+import { getVenueEntrances } from '../scene/venues/venuePlacements'
 import { CloseButton } from './CloseButton'
 
 export interface TownMapPanelProps {
@@ -18,6 +19,7 @@ export interface TownMapPanelProps {
 
 export function TownMapPanel({ language, town, playerPosition, onClose }: TownMapPanelProps) {
   const copy = languageCopy[language].hud
+  const venueCopy = languageCopy[language].venues
   const petHouse = languageCopy[language].pet.house(town.pet.name[language])
   const [visitorPosition, setVisitorPosition] = useState(() => ({
     x: playerPosition.current.x,
@@ -29,6 +31,8 @@ export function TownMapPanel({ language, town, playerPosition, onClose }: TownMa
     return { ...groups, roads: getTownRoads(groups.roads) }
   }, [town.objects])
   const { fountain, guestbook } = objects
+  // Only the venues the admin shows have a gate to mark; a hidden ballpark leaves the map as it was.
+  const venueGates = useMemo(() => getVenueEntrances(town.venues, language), [town.venues, language])
 
   useEffect(() => {
     const updatePosition = () => setVisitorPosition({ x: playerPosition.current.x, z: playerPosition.current.z })
@@ -81,6 +85,14 @@ export function TownMapPanel({ language, town, playerPosition, onClose }: TownMa
             <circle cx="0.85" cy="-0.12" r="0.18" />
           </g>
         )}
+        {venueGates.map((gate) => (
+          <g key={gate.id} className="map-venue-gate" transform={`translate(${gate.x} ${gate.z + 1.3})`}>
+            <circle r="2.6">
+              <title>{venueCopy[gate.id].mapGate}</title>
+            </circle>
+            <path d="M-1.4 -2 Q-0.6 0 -1.4 2 M1.4 -2 Q0.6 0 1.4 2" />
+          </g>
+        ))}
         {objects.benches.map((bench) => (
           <rect
             key={bench.id}
@@ -132,6 +144,11 @@ export function TownMapPanel({ language, town, playerPosition, onClose }: TownMa
         <span className="map-key map-key-bench">{copy.mapBenches}</span>
         <span className="map-key map-key-fountain">{copy.mapFountain}</span>
         <span className="map-key map-key-guestbook">{copy.mapGuestbook}</span>
+        {venueGates.map((gate) => (
+          <span key={gate.id} className="map-key map-key-venue-gate">
+            {venueCopy[gate.id].mapGate}
+          </span>
+        ))}
       </div>
       <ul className="map-home-list" aria-label={copy.mapHomes}>
         {objects.houses.map((house) => (

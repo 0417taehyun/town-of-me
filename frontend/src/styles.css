@@ -1025,6 +1025,17 @@ kbd {
   stroke: #c97158;
   stroke-width: 0.12;
 }
+.map-venue-gate circle {
+  fill: #fffdf6;
+  stroke: #b0503f;
+  stroke-width: 0.6;
+}
+.map-venue-gate path {
+  fill: none;
+  stroke: #b0503f;
+  stroke-width: 0.42;
+  stroke-linecap: round;
+}
 .map-bench {
   fill: #8c6044;
   stroke: #594b40;
@@ -1088,6 +1099,11 @@ kbd {
 }
 .map-key-guestbook::before {
   background: #8c5d3f;
+}
+.map-key-venue-gate::before {
+  border: 2px solid #b0503f;
+  border-radius: 50%;
+  background: #fffdf6;
 }
 .map-home-list {
   display: grid;
