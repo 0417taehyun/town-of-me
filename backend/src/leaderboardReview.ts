@@ -356,6 +356,7 @@ export function reviewedEntry(entry: LeaderboardEntry, rank: number | null) {
     season: entry.season,
     rank,
     updatedAt: entry.updatedAt,
+    bestRunId: entry.bestRunId,
     listed: entry.listed,
     name: entry.authorName,
     nameStatus: entry.nameStatus,
@@ -375,6 +376,19 @@ export function reviewedEntry(entry: LeaderboardEntry, rank: number | null) {
       code: linkedIn.code,
     },
   }
+}
+
+/**
+ * Every record on a board as the admin reviews it, off the board or not, so one the queue does not list can still be
+ * acted on: `entries` in public order, and a record off the board with the place it would take, as `rankOf` gives.
+ */
+export function reviewedBoard(entries: readonly LeaderboardEntry[]) {
+  let publicAhead = 0
+  return entries.map((entry) => {
+    const record = reviewedEntry(entry, publicAhead + 1)
+    publicAhead += Number(isPublicEntry(entry))
+    return record
+  })
 }
 
 /** A held run with what the server worked out per pitch, which visitors never see: timing error and power. */

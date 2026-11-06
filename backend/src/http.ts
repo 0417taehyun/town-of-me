@@ -149,6 +149,14 @@ const routes: readonly Route[] = [
     const season = url.searchParams.get('season')
     return json({ items: await dependencies.service.getReviewQueue(await actor(), pathId, season) })
   }),
+  route('GET', `/v1/admin/games/(${gameId})/entries`, async ({ url, pathId, actor, dependencies }) => {
+    const season = url.searchParams.get('season')
+    return json({ entries: await dependencies.service.getBoardRecords(await actor(), pathId, season) })
+  }),
+  route('GET', `/v1/admin/games/(${gameId})/runs/(${uuid})`, async ({ pathIds, actor, dependencies }) => {
+    const [game = '', runId = ''] = pathIds
+    return json({ run: reviewedRun(await dependencies.service.getReviewedRun(await actor(), game, runId), null) })
+  }),
   entryReviewRoute('POST', 'approval', 'approval'),
   entryReviewRoute('POST', 'disqualification', 'disqualification'),
   entryReviewRoute('DELETE', 'disqualification', 'restoration'),

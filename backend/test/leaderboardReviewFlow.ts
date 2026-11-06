@@ -117,6 +117,7 @@ export async function checkLeaderboardReviewFlow(assert: Assert): Promise<void> 
   checkIdentityRules(assert)
   checkReportCounter(assert)
   await checkReviewActions(assert)
+  await checkBoardRecords(assert)
   await checkTakedownAndErasure(assert)
   await checkPastSeason(assert)
   await checkHallOfFame(assert)
@@ -463,6 +464,51 @@ async function checkTakedownAndErasure(assert: Assert): Promise<void> {
   assert(
     statuesAfter.join() === [statuesBefore[0], statuesBefore[1], one?.id].join(),
     'a deleted statue makes way for the next record',
+  )
+}
+
+/** The admin reaches every record on a board and a record's best run, whatever the queue lists; no one else does. */
+async function checkBoardRecords(assert: Assert): Promise<void> {
+  const { send, admin, member, season, play, own, act, entryOf, review } = await reviewHarness()
+  const recordsPath = `/v1/admin/games/${game}/entries?season=${season}`
+  const players: Array<[string, Array<number | null>, string]> = [
+    ['records-gone', [12, -21, null, 33, -27], 'Sprout'],
+    ['records-statue', [12, -21, null, 33, null], 'Pebble'],
+    ['records-next', [12, null, null, 33, null], 'Clover'],
+  ]
+  for (const [token, errorsMs, name] of players) {
+    await play(token, errorsMs, { profile: { ...profile, name } })
+    await own(token, { listed: true, profile: { ...profile, name } })
+  }
+  await play('records-unlisted', [12, -21, -8, 33, -27], { profile: { ...profile, name: 'Juniper' } })
+  const gone = await entryOf('records-gone')
+  const statue = await entryOf('records-statue')
+  await act(`entries/${gone?.id}/disqualification`, { updatedAt: gone?.updatedAt })
+  await act(`entries/${statue?.id}/approval`, { updatedAt: statue?.updatedAt, name: 'approve' })
+
+  assert(
+    (await send('GET', recordsPath)).status === 401 &&
+      (await send('GET', recordsPath, { cookie: member })).status === 403,
+    "only an admin reads a board's records",
+  )
+  const queued = (await review()).map(({ entry }) => entry?.id)
+  const response = await send('GET', recordsPath, { cookie: admin })
+  const records = ((await response.json()) as { entries: Array<ReviewedEntry & { bestRunId: string }> }).entries
+  assert(
+    !queued.includes(gone?.id) &&
+      !queued.includes(statue?.id) &&
+      records.map(({ name, rank }) => `${name}:${rank}`).join() === 'null:1,Sprout:1,Pebble:1,Clover:2',
+    'the records hold what the queue leaves out, in public order, each at the place it holds or would take',
+  )
+
+  const bestRunPath = `/v1/admin/games/${game}/runs/${statue?.bestRunId}`
+  assert((await send('GET', bestRunPath, { cookie: member })).status === 403, "a member cannot read a run's details")
+  const { run } = (await (await send('GET', bestRunPath, { cookie: admin })).json()) as {
+    run: ReviewItem['runs'][number]
+  }
+  assert(
+    run.result?.pitches.some((pitch) => pitch.power !== null && pitch.power > 0),
+    "a record's best run shows the admin the power visitors never see",
   )
 }
 

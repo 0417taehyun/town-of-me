@@ -94,7 +94,7 @@ Create a handler with `createApi({ service, authStore, linkedInOidc, allowedOrig
 - `GET /v1/admin/guestbook` lists the newest 200 entries of every status with `updatedAt`; `POST /v1/admin/guestbook/:id/approval` with `{ updatedAt }` publishes the entry only if it was not revised since that version (`409` otherwise); `DELETE /v1/admin/guestbook/:id` removes it
 - `POST /v1/games/:game/runs` and `POST /v1/games/:game/runs/:id/result` start and record a ranked run, `GET /v1/games/:game/leaderboard`, `GET /v1/games/:game/podium`, and `GET /v1/games/:game/hall-of-fame` read the monthly board, its statues, and every finished season's statues, `PUT` and `DELETE /v1/games/:game/entries/own` change or delete the visitor's records, and `POST /v1/games/:game/entries/:id/report` reports one; see [Ranked runs](#ranked-runs)
 - `POST /v1/visitor/forget` clears this browser's visitor cookie and returns `204`; see [Ranked runs](#ranked-runs)
-- `GET /v1/admin/games/:game/review` and the `/v1/admin/games/:game/entries/:id/…` and `/v1/admin/games/:game/runs/…` actions review the boards for an admin session; see [Board review](#board-review)
+- `GET /v1/admin/games/:game/review`, `GET /v1/admin/games/:game/entries`, `GET /v1/admin/games/:game/runs/:id`, and the `/v1/admin/games/:game/entries/:id/…` and `/v1/admin/games/:game/runs/…` actions review the boards for an admin session; see [Board review](#board-review)
 - `GET /v1/towns/:id` returns `{ town }` with `revision`, or `404` when no such town exists
 - `PUT /v1/admin/towns/:id` with `{ baseRevision, name, owner, pet, spawn, movement, venues, objects, residents }` replaces the town for an admin session (`401` signed out, `403` otherwise) and returns the saved `{ town }`; `baseRevision` is `0` for the first save
 - `POST /v1/admin/resident-dialogues` with `{ name, role, relationship, reference, owner }` (`owner` is the owner's `{ ko, en }` name) returns a drafted `{ dialogue }` for an admin session without storing it; the admin saves it with the town
@@ -221,6 +221,12 @@ shows it: a record changed since is `409` and stays as it is. Each answers `{ en
   open `reports` per target, `warnings` (a name containing another record's or the town's, an appearance equal to
   another record's or a resident's, and `town-link` for a link a resident or a house has too, which the town added
   after the record claimed it), and the names three places either side.
+- `GET /v1/admin/games/home-run-derby/entries?season=YYYY-MM` (this season by default) returns `{ entries }`: every
+  record on that board in public order, unlisted and disqualified included, in the queue's `entry` shape, with the
+  place a record off the board would take. The queue lists only what waits, so this is how the admin reaches an
+  approved statue, a disqualified record, or the record a takedown request names by its first eight characters.
+- `GET /v1/admin/games/home-run-derby/runs/:id` returns `{ run }`, any run of the game in the queue's `runs` shape
+  (`wouldBeRank` is `null`), for a record's `bestRunId`: the record's best run has scored, so it is not a held run.
 - `POST …/entries/:id/approval` with `{ updatedAt, name?: 'approve' | 'reject' }` approves the record (`409` while it is
   disqualified) and decides its name; it never changes the link.
 - `POST …/entries/:id/disqualification` with `{ updatedAt }` takes the record off the board, and the next record takes

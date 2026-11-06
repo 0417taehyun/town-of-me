@@ -59,6 +59,7 @@ import {
   reportedChanges,
   reportsPerHour,
   reportSweepIntervalMs,
+  reviewedBoard,
   reviewQueue,
   supersededKeeps,
   versionInput,
@@ -590,6 +591,21 @@ export class BackendService {
     return { ...board, entries, runs, reports, counts }
   }
 
+  /** Every record on one season's board, including those the queue does not list, as an admin's search reads them. */
+  async getBoardRecords(actor: Actor, game: string, requestedSeason: string | null, now = Date.now()) {
+    assertAdmin(actor)
+    assertRankedGame(game)
+    const season = boardSeason(requestedSeason, rankingMonth(now))
+    return reviewedBoard(await this.store.listEntries({ game, season }))
+  }
+
+  /** Any run of the game for an admin: a record's best run has scored, so it is not among the queue's held runs. */
+  async getReviewedRun(actor: Actor, game: string, runId: string): Promise<GameRun> {
+    assertAdmin(actor)
+    assertRankedGame(game)
+    return this.gameRun(game, runId)
+  }
+
   /**
    * An admin's action on a record (`entryReviewChanges`), only from the version they read: a record changed since is
    * `409` and stays as it is. Disqualifying, hiding, or anonymising a statue lets the next record stand at once.
@@ -690,10 +706,15 @@ export class BackendService {
 
   /** A held run nobody has reviewed; any other run is `409`, and another game's is not found. */
   async heldRun(game: string, runId: string): Promise<GameRun> {
-    const run = await this.store.getRun(runId)
-    if (!run || run.game !== game) throw new DomainError('NOT_FOUND', 'Run not found')
+    const run = await this.gameRun(game, runId)
     if (run.status !== 'flagged' || run.reviewedAt !== null)
       throw new DomainError('CONFLICT', 'The run is not waiting for review')
+    return run
+  }
+
+  async gameRun(game: string, runId: string): Promise<GameRun> {
+    const run = await this.store.getRun(runId)
+    if (!run || run.game !== game) throw new DomainError('NOT_FOUND', 'Run not found')
     return run
   }
 
