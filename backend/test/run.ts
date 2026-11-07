@@ -13,6 +13,7 @@ import { checkGuestbookFlow } from './guestbookFlow.js'
 import { checkLeaderboardFlow } from './leaderboardFlow.js'
 import { checkLeaderboardReviewFlow } from './leaderboardReviewFlow.js'
 import { checkLoginFlow } from './loginFlow.js'
+import { checkSiteStatsFlow } from './siteStatsFlow.js'
 import { checkPostgresStoreContract, checkStoreContract } from './storeContract.js'
 import { checkTownFlow } from './townFlow.js'
 
@@ -272,5 +273,6 @@ await checkTownFlow(assert)
 await checkDerbyJudge(assert)
 await checkLeaderboardFlow(assert)
 await checkLeaderboardReviewFlow(assert)
+await checkSiteStatsFlow(assert)
 
 console.log(`ok - ${assertions} assertions`)

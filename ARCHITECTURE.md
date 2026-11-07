@@ -30,6 +30,7 @@ deployment is one town: no code, URL, or response names it.
 | Admin emails                                                                                                                   | database (`admin_emails`), filled from `ADMIN_EMAILS` once | admins at `/admin`              |
 | Guestbook notes                                                                                                                | database (`guestbook_entries`)                             | visitors write, admins approve  |
 | Ranked derby runs, each visitor's best record per KST month, its optional LinkedIn link, reports, and blocked links            | database (`minigame_*`)                                    | visitors play, admins review    |
+| Anonymous daily totals of what people do in the town                                                                           | database (`site_event_counts`)                             | visitors' browsers add to them  |
 | A visitor's character, camera settings, guide progress, language                                                               | the browser tab (`sessionStorage`)                         | the visitor                     |
 | Object kinds, variants, walks, skids, copy, procedural geometry                                                                | frontend code                                              | contributors                    |
 | The sample town a fresh database starts from                                                                                   | `backend/seed/town.json` (fictional), or `TOWN_SEED_PATH`  | contributors, or a private file |
@@ -240,6 +241,7 @@ server.mjs (Node runtime: .env, store, seeding, HTTP)
 | `leaderboard.ts`               | Runs, monthly records, the public order, and how a scored run changes a record.    |
 | `leaderboardIdentity.ts`       | What a record shows of its player: the board's name check and LinkedIn link check. |
 | `leaderboardReview.ts`         | The admin's review queue and actions on records and held runs, and reports.        |
+| `siteStats.ts`                 | The anonymous daily totals: the list of events and what the admin reads.           |
 
 Tests run with `npm test` through `test/run.ts`. `test/storeContract.ts` runs the same behaviors against both stores
 (PostgreSQL when `TEST_DATABASE_URL` is set); the flow tests drive the HTTP handler.

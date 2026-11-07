@@ -8,6 +8,7 @@ import {
   judgeDerbyRun,
   minimumRunMs,
   parseDerbySubmission,
+  homeRunDerby,
   publicDerbyResult,
 } from './homeRunDerby.js'
 import {
@@ -68,11 +69,22 @@ import {
   type ReviewBoard,
 } from './leaderboardReview.js'
 import { assertAdmin } from './policy.js'
+import {
+  dailyEventTotals,
+  guestbookTotals,
+  isTownResident,
+  parseSiteEvent,
+  parseStatsDays,
+  residentTalkEvent,
+  residentTotals,
+  statsRange,
+} from './siteStats.js'
 import type { Store } from './store.js'
 import {
   effectiveBallparkRules,
   parseResidentDialogueSource,
   parseTownLayout,
+  rankingDay,
   rankingMonth,
   settleBallparkSettings,
   type ResidentDialogue,
@@ -227,6 +239,33 @@ export class BackendService {
     assertAdmin(actor)
     if (!(await this.store.getGuestbookEntry(entryId))) throw guestbookEntryNotFound()
     await this.store.deleteGuestbookEntry(entryId)
+  }
+
+  /** Adds one to today's total, or does nothing for anything but a listed event with a resident of the town. */
+  async recordSiteEvent(input: Record<string, unknown> | null, now = Date.now()): Promise<void> {
+    const counted = parseSiteEvent(input)
+    if (!counted) return
+    if (counted.event === residentTalkEvent && !isTownResident(await this.store.getTown(), counted.subject)) return
+    await this.store.addSiteEvent(rankingDay(new Date(now).toISOString()), counted.event, counted.subject)
+  }
+
+  /** The totals of the last `days` KST days; the game's months are all of them, since a month is one row. */
+  async getSiteStats(actor: Actor, days: string | null, now = Date.now()) {
+    assertAdmin(actor)
+    const range = statsRange(parseStatsDays(days), now)
+    const [events, notes, derby, town] = await Promise.all([
+      this.store.listSiteEventCounts(range.from, range.to),
+      this.store.countGuestbookEntriesByDay(range.from, range.to),
+      this.store.countGameMonths(homeRunDerby.id),
+      this.store.getTown(),
+    ])
+    return {
+      range,
+      daily: dailyEventTotals(events),
+      residents: residentTotals(events, town?.residents ?? []),
+      guestbook: guestbookTotals(notes),
+      derby,
+    }
   }
 
   /** `currentEmail` is the signed-in admin's own address, which the editor shows as not removable. */

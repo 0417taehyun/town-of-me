@@ -36,6 +36,8 @@ const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 const gameId = '[a-z][a-z0-9-]{0,31}'
 /** A run's result is a few numbers per pitch, so game routes take a small body even without nginx in front. */
 export const gameBodyLimitBytes = 8 * 1024
+/** An event is a name and an id. */
+export const siteEventBodyLimitBytes = 1024
 const readOnlyMethods = new Set(['GET', 'HEAD', 'OPTIONS'])
 const domainErrorStatus: Readonly<Record<DomainError['code'], number>> = {
   AUTH_REQUIRED: 401,
@@ -98,6 +100,10 @@ const routes: readonly Route[] = [
     return json({ entry: ownGuestbookEntry(entry, Date.now()) })
   }),
   route('POST', '/v1/visitor/forget', serveVisitorForget),
+  route('POST', '/v1/events', serveSiteEvent),
+  route('GET', '/v1/admin/stats', async ({ url, actor, dependencies }) =>
+    json(await dependencies.service.getSiteStats(await actor(), url.searchParams.get('days'))),
+  ),
   route('GET', '/v1/admin/guestbook', async ({ actor, dependencies }) => {
     const entries = await dependencies.service.listGuestbookForReview(await actor())
     return json({ entries: entries.map(reviewedGuestbookEntry) })
@@ -306,6 +312,16 @@ export async function serveGuestbookSigning({ request, dependencies }: RouteCont
  */
 export function serveVisitorForget(): Response {
   return new Response(null, { status: 204, headers: { 'Set-Cookie': cookie(visitorCookie, '', 0) } })
+}
+
+/**
+ * Adds to an anonymous daily total and answers the same whatever happened, so the response never says whether anything
+ * was counted; a failure is only logged. It reads and sets no cookie, on purpose: nothing may tie a count to a browser.
+ */
+export async function serveSiteEvent({ request, dependencies }: RouteContext): Promise<Response> {
+  const body = await objectBody(request, siteEventBodyLimitBytes).catch(() => null)
+  await dependencies.service.recordSiteEvent(body).catch((error: unknown) => dependencies.logger.error(error))
+  return new Response(null, { status: 204 })
 }
 
 /** The run's id, its season, and the rules and seed its pitches are planned from: all a client needs to play it. */

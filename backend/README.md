@@ -94,6 +94,7 @@ Create a handler with `createApi({ service, authStore, linkedInOidc, allowedOrig
 - `GET /v1/admin/guestbook` lists the newest 200 entries of every status with `updatedAt`; `POST /v1/admin/guestbook/:id/approval` with `{ updatedAt }` publishes the entry only if it was not revised since that version (`409` otherwise); `DELETE /v1/admin/guestbook/:id` removes it
 - `POST /v1/games/:game/runs` and `POST /v1/games/:game/runs/:id/result` start and record a ranked run, `GET /v1/games/:game/leaderboard`, `GET /v1/games/:game/podium`, and `GET /v1/games/:game/hall-of-fame` read the monthly board, its statues, and every finished season's statues, `PUT` and `DELETE /v1/games/:game/entries/own` change or delete the visitor's records, and `POST /v1/games/:game/entries/:id/report` reports one; see [Ranked runs](#ranked-runs)
 - `POST /v1/visitor/forget` clears this browser's visitor cookie and returns `204`; see [Ranked runs](#ranked-runs)
+- `POST /v1/events` adds one to an anonymous daily total, and `GET /v1/admin/stats?days=` reads the totals for an admin session; see [Usage statistics](#usage-statistics)
 - `GET /v1/admin/games/:game/review`, `GET /v1/admin/games/:game/entries`, `GET /v1/admin/games/:game/runs/:id`, and the `/v1/admin/games/:game/entries/:id/…` and `/v1/admin/games/:game/runs/…` actions review the boards for an admin session; see [Board review](#board-review)
 - `GET /v1/town` returns the deployment's one `{ town }` with `revision`, or `404` until it has one
 - `PUT /v1/admin/town` with `{ baseRevision, name, owner, pet, spawn, movement, venues, objects, residents }` replaces the town for an admin session (`401` signed out, `403` otherwise) and returns the saved `{ town }`; `baseRevision` is `0` for the first save
@@ -107,6 +108,20 @@ Visitors no longer sign in, so the guestbook is anonymous and moderated:
 - An entry keeps the visitor's character name and appearance from the request `profile` (never gender or a LinkedIn link) and starts `pending`. Only `approved` entries are public; a revision returns the entry to `pending`, so the admin always approves the text visitors will read.
 - The first entry gives the browser a random `__Host-tom_visitor` cookie (`HttpOnly`, one year). Only its hash is stored. One browser may write one entry per 24 hours and revise that entry during those 24 hours; another entry in that window returns `409`, and revising someone else's entry returns `404`.
 - Clearing the cookie starts a new visitor, and there is no per-address limit. Because nothing is public before approval, such entries only add to the admin's review list.
+
+## Usage statistics
+
+Cloudflare Web Analytics covers visits; these answer what it cannot, what people do inside the town. They are anonymous daily totals and nothing else: no cookie is read or set, no address is stored, and there is no visitor id or hash, so nothing can link two counts to one person. A funnel here is only totals per step per day. Since nothing identifies a visitor, anyone can inflate them. `src/siteStats.ts` owns the list of events.
+
+- `POST /v1/events` with `{ event, subject? }` (an allowed `Origin`, like any write) adds one to the KST day's total and returns `204` with no body whatever it did, so it never says whether anything was counted: an unknown event, a malformed or oversized body, and a store failure (logged) all answer the same. `event` is one of `entered-town`, `character-finished`, `first-talk`, `resident-talk`, `guestbook-opened`, `contact-opened`, `linkedin-opened`, `map-opened`, `photo-taken`, and `ballpark-entered`. `subject` belongs only to `resident-talk`, where it must be the id of a resident in the town; a subject anywhere else, or one that names no resident, counts nothing, so nobody can write free text into the table. nginx writes neither an access log nor an error log for this route (`docker/nginx.conf`) and guards it against floods with a counter held only in memory.
+- `GET /v1/admin/stats?days=` (a whole number from 1 to 365, `30` when omitted, `400` otherwise) needs an admin session (`401` signed out, `403` otherwise) and is `no-store`. It returns:
+  - `range`: `{ from, to, days }`, the KST days covered, both included, ending today;
+  - `daily`: `[{ day, event, count }]`, each day's total per event, days without a count left out;
+  - `residents`: `[{ id, name, conversations }]`, most conversations first, with every resident of the town and any resident since removed (`name` is `null`);
+  - `guestbook`: `{ byStatus: { pending, approved }, byDay: [{ day, count }] }`, the notes written in the range;
+  - `derby`: `[{ month, runs, records }]`, every season of the game, newest first.
+
+  The notes and the game's numbers come from what those tables already hold, so a deleted note or record no longer counts. Totals have no end date.
 
 ## Ranked runs
 
