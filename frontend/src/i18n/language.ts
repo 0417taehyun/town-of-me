@@ -677,15 +677,14 @@ export const languageCopy = {
         {
           title: 'Hosting and backups',
           lines: [
-            'Requests to this town pass through Cloudflare to servers at Amazon Web Services (AWS), which also hold the database. Both companies handle IP addresses and request contents to do this.',
+            'Requests to this town go to servers at Amazon Web Services (AWS), which also hold the database. AWS handles IP addresses and request contents to do this.',
             'Backups of the server’s disk, which include the database, are kept for 7 days. A note or record you had removed stays in them for that time, and restoring a backup can bring it back.',
           ],
         },
         {
           title: 'Visit statistics',
           lines: [
-            'Cloudflare Web Analytics shows the owner statistics such as page views, where visitors came from, devices, and loading speed on the town’s pages. It does not run on this notice.',
-            'The town also keeps daily totals of what people do inside it, which Cloudflare’s statistics do not report: entering the town, finishing a character, talking with a resident for the first time, starting a conversation and with which resident, opening the guestbook, the map, the contact link, or a resident’s LinkedIn link, and taking a photo. A note’s text, your character, names, and photos are never part of this.',
+            'The town keeps daily totals of what people do inside it: entering the town, finishing a character, talking with a resident for the first time, starting a conversation and with which resident, opening the guestbook, the map, the contact link, or a resident’s LinkedIn link, and taking a photo. A note’s text, your character, names, and photos are never part of this.',
             'Each of these adds 1 to that day’s total. No cookie is read or set, no IP address or visitor id is kept with them, and they hold no link between one count and another, so they cannot be looked up or removed for one visitor. On a day with very few visitors, though, a total can amount to one person’s visit. They have no end date.',
             'These requests leave no trace of who sent them in the server’s logs, and the counter that stops request floods exists only in the server’s memory. Nothing is counted on this notice or in the editor.',
             'If your browser sends Global Privacy Control or Do Not Track, nothing is counted.',
@@ -1771,15 +1770,14 @@ export const languageCopy = {
         {
           title: '호스팅과 백업',
           lines: [
-            '이 마을로 오는 요청은 Cloudflare를 거쳐 Amazon Web Services(AWS)의 서버로 전달되고, 데이터베이스도 AWS에 있어요. 두 회사는 이 과정에서 IP 주소와 요청 내용을 처리해요.',
+            '이 마을로 오는 요청은 Amazon Web Services(AWS)의 서버로 전달되고, 데이터베이스도 AWS에 있어요. AWS는 이 과정에서 IP 주소와 요청 내용을 처리해요.',
             '데이터베이스를 포함한 서버 디스크 백업은 7일 동안 보관돼요. 지운 글이나 기록도 그동안은 백업에 남아 있고, 백업을 복원하면 되살아날 수 있어요.',
           ],
         },
         {
           title: '방문 통계',
           lines: [
-            'Cloudflare Web Analytics로 마을 화면의 페이지 조회 수, 유입 경로, 기기, 로딩 속도 같은 통계를 운영자가 봐요. 이 안내 페이지에서는 실행되지 않아요.',
-            'Cloudflare 통계에는 나오지 않는, 마을 안에서 하는 일도 하루 합계로 세요. 세는 항목은 마을 입장, 캐릭터 완성, 주민과의 첫 대화, 대화 시작과 어느 주민과 시작했는지, 방명록, 지도, 연락처 링크, 주민의 LinkedIn 링크 열기, 사진 찍기예요. 글 내용, 캐릭터, 이름, 사진은 여기에 들어가지 않아요.',
+            '마을 안에서 하는 일을 하루 합계로 세요. 세는 항목은 마을 입장, 캐릭터 완성, 주민과의 첫 대화, 대화 시작과 어느 주민과 시작했는지, 방명록, 지도, 연락처 링크, 주민의 LinkedIn 링크 열기, 사진 찍기예요. 글 내용, 캐릭터, 이름, 사진은 여기에 들어가지 않아요.',
             '이 항목들은 그날의 합계에 1을 더할 뿐이에요. 쿠키를 읽거나 만들지 않고, IP 주소나 방문자 식별자를 함께 남기지 않아요. 합계 안에는 한 번 센 것끼리의 연결이 없어서, 한 사람의 몫만 찾거나 지울 수 없어요. 다만 방문자가 아주 적은 날에는 그날의 합계가 곧 한 사람의 방문을 뜻할 수 있어요. 합계는 기간을 정해 지우지 않아요.',
             '이 요청은 누가 보냈는지 서버 기록에 남기지 않고, 과도한 요청을 막는 계수는 서버 메모리에만 있어요. 이 안내 페이지와 편집 화면에서는 아무것도 세지 않아요.',
             '브라우저가 Global Privacy Control이나 Do Not Track을 보내면 아무것도 세지 않아요.',
