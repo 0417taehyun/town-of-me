@@ -1,5 +1,5 @@
-# Deployment over compose.yaml on one server: a public address, required secrets, a private seed, and no published
-# ports, because visitors arrive only through a Cloudflare Tunnel. docker/README.md has the steps.
+# Deployment over compose.yaml on one server: a public address, required secrets, a private seed, and Caddy as the only
+# service with a published port, holding the HTTPS certificates. docker/README.md has the steps.
 #   docker compose --env-file .env.production -f compose.yaml -f compose.production.yaml up -d --build
 x-capped-logs: &capped-logs
   logging:
@@ -20,10 +20,10 @@ services:
     restart: unless-stopped
     ports: !reset []
     environment:
-      ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN in .env.production}
-      FRONTEND_URL: ${PUBLIC_ORIGIN}/admin
-      LINKED_IN_REDIRECT_URI: ${PUBLIC_ORIGIN}/v1/auth/linkedin/callback
-      OPENROUTER_SITE_URL: ${PUBLIC_ORIGIN}
+      ALLOWED_ORIGINS: https://${PUBLIC_HOST:?Set PUBLIC_HOST in .env.production}
+      FRONTEND_URL: https://${PUBLIC_HOST}/admin
+      LINKED_IN_REDIRECT_URI: https://${PUBLIC_HOST}/v1/auth/linkedin/callback
+      OPENROUTER_SITE_URL: https://${PUBLIC_HOST}
       TOWN_SEED_PATH: /run/town/town.json
     volumes:
       # Used once, while the database has no town. Without create_host_path a missing file stops the start, where Docker
@@ -40,13 +40,24 @@ services:
     restart: unless-stopped
     ports: !reset []
 
-  cloudflared:
+  caddy:
     <<: *capped-logs
-    image: cloudflare/cloudflared:2026.10.7
+    image: caddy:2.11-alpine
     restart: unless-stopped
-    command: tunnel --no-autoupdate run
     environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in .env.production}
+      PUBLIC_HOST: ${PUBLIC_HOST:?Set PUBLIC_HOST in .env.production}
+    # IPv4 only: for an IPv6 visitor Docker would hand Caddy its own gateway's address, and every such visitor would share
+    # one flood-guard counter.
+    ports:
+      - '0.0.0.0:80:80'
+      - '0.0.0.0:443:443'
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      # The certificates and their keys. Losing them means asking Let's Encrypt again, and it limits how often.
+      - caddy-data:/data
     depends_on:
       frontend:
         condition: service_healthy
+
+volumes:
+  caddy-data:

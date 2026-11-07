@@ -44,20 +44,19 @@ sample town in `backend/seed/town.json`; sign in at `/admin` to make it your own
 
 ## Deploying
 
-`compose.production.yaml` runs everything on one server behind a Cloudflare Tunnel. It publishes no port, so the server
-needs no open inbound port, and Cloudflare serves the static files from its edge and holds the HTTPS certificate the
-`__Host-` cookies require. Compose refuses to start without the database password, public address, tunnel token, or seed
-file.
+`compose.production.yaml` runs everything on one server, with Caddy in front holding the HTTPS certificates the `__Host-`
+cookies require and redirecting `www` and plain HTTP. Only Caddy publishes ports, 80 and 443 on IPv4. There is no CDN, so
+the server sends every file itself. Compose refuses to start without the database password, public host, or seed file.
 
-1. Add the domain to Cloudflare and create a tunnel in Zero Trust. Point its public hostname at `http://frontend:80`.
-   Redirect any other hostname, such as `www`, to it, since `PUBLIC_ORIGIN` is the only origin the backend allows.
-2. Create a server with 2 GB of memory, for example a Lightsail instance, and leave only SSH open in its firewall.
-   Building the frontend peaks near 1 GB beside the running site, so add 2 GB of swap. Install Docker with Compose 2.24 or
-   newer. Turn on automatic snapshots: they are the database's only backup, keep the latest 7 days, the period `/privacy`
-   states, and are deleted along with the instance.
+1. Create a server with 2 GB of memory and a static IP, for example a Lightsail instance. In its firewall leave SSH, 80,
+   and 443 open on IPv4 and nothing on IPv6. Building the frontend peaks near 1 GB beside the running site, so add 2 GB of
+   swap. Install Docker with Compose 2.24 or newer. Turn on automatic snapshots: they are the database's only backup, keep
+   the latest 7 days, the period `/privacy` states, and are deleted along with the instance.
+2. Point `A` records for the domain and its `www` at the server, and add no `AAAA` record, since visitors' IPv6 addresses
+   would not reach nginx. Do this before the first start: Let's Encrypt allows 5 failed validations per hostname per hour.
 3. Clone the repository. Copy `.env.production.example` to `.env.production` and fill it in, and put the private town at
    `.seed/town.json`. It is read once, while the database has no town; after that `/admin` is the source of truth.
-4. Register `<PUBLIC_ORIGIN>/v1/auth/linkedin/callback` in the LinkedIn app.
+4. Register `https://<PUBLIC_HOST>/v1/auth/linkedin/callback` in the LinkedIn app.
 5. Start it, and repeat this after `git pull` to update:
 
    ```sh
@@ -68,14 +67,13 @@ file.
    The site keeps running through the build; only replacing the containers interrupts it. If it answers 502 after
    updating only the backend, nginx kept the old address: `docker compose … restart frontend`.
 
-6. Check that `docker compose … logs frontend` shows visitors' addresses. A private `172.x` address there means
-   `CF-Connecting-IP` is not arriving, and every visitor is sharing one flood-guard counter.
+6. Check that `docker compose … logs caddy` shows a certificate obtained for both names, and that `logs frontend` shows
+   visitors' addresses. A private `172.x` address there means Docker is hiding them from Caddy, and every visitor is
+   sharing one flood-guard counter.
 
-Never run `docker compose down -v` on the server: `-v` deletes the database. Containers come back on their own after a
+Never run `docker compose down -v` on the server: `-v` deletes the database and the certificates. Containers come back on their own after a
 crash or a reboot, and committed data survives them; only losing the disk means going back to the last snapshot, at most a
 day old.
 
-In Cloudflare, keep `/v1/` uncached with a cache rule, and leave Rocket Loader off, since it rewrites script tags under
-the pages' Content Security Policy. Cloudflare compresses with Brotli on its own. `/privacy` names Cloudflare and AWS and
-states the backup period and log cap, so changing any of them means changing `privacy` in
-`frontend/src/i18n/language.ts`.
+`/privacy` names AWS as the only company handling visitors' requests and states the backup period and log cap, so changing
+any of them, or putting a CDN in front, means changing `privacy` in `frontend/src/i18n/language.ts`.

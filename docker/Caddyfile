@@ -1,0 +1,16 @@
+# Holds the HTTPS certificates, which Let's Encrypt issues once the domain's A records point here and ports 80 and 443 are
+# open. Caddy replaces any X-Forwarded-For a client sends, which is what lets nginx believe the header.
+{
+	servers {
+		# HTTP/3 needs UDP 443 as well, and only the first visit could use it.
+		protocols h1 h2
+	}
+}
+
+{$PUBLIC_HOST} {
+	reverse_proxy frontend:80
+}
+
+www.{$PUBLIC_HOST} {
+	redir https://{$PUBLIC_HOST}{uri} permanent
+}

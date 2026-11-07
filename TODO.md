@@ -38,7 +38,7 @@ what changed.
 - `toWebRequest` in `backend/server.mjs` resolves `request.url` as a relative reference, so a leading `//` becomes a host
   name. nginx refuses such addresses today; build the URL from the path so the backend is safe on its own.
 - `/privacy` publishes the privacy, retention, and asset-credit notices; what is left is a legal check of its wording,
-  including how it names Cloudflare and AWS, which handle visitors' data.
+  including how it names AWS, which handles visitors' data.
 - Test admin sign-in end to end with the registered LinkedIn redirect URLs. Locally, use `localhost` rather than
   `127.0.0.1` so the cookie host matches.
 - On real desktop and mobile devices, check that admin saves reach visitors, the guestbook write, review, and publish
