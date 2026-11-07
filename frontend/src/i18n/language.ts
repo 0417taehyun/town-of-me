@@ -641,7 +641,8 @@ export const languageCopy = {
           lines: [
             'The character you make (name, look, any gender identity you give, and any LinkedIn address you enter), where you are in the town, and your language stay in this tab and are gone when you close it.',
             'Photos you take are saved straight to your device and are not sent to the server.',
-            'What residents say is already written, so talking with them sends nothing.',
+            'What residents say is already written. Starting a conversation sends only which resident it is with and that it started, counted per day with no cookie or address.',
+            'This tab remembers which of the totals under Visit statistics it has already added to, so a reload does not count them again. That is never sent and is gone when you close the tab.',
           ],
         },
         {
@@ -662,7 +663,7 @@ export const languageCopy = {
         {
           title: 'Server logs',
           lines: [
-            'For each request, the web server (nginx) writes an access log with the IP address, time, requested address, response code and size, previous page, and browser details.',
+            'For each request, except those that add to the totals under Visit statistics, the web server (nginx) writes an access log with the IP address, time, requested address, response code and size, previous page, and browser details.',
             'This log is kept by size, not by date: up to three files of 10 MB each, with the oldest removed first.',
             'IP addresses are not saved in the database.',
           ],
@@ -678,6 +679,10 @@ export const languageCopy = {
           title: 'Visit statistics',
           lines: [
             'Cloudflare Web Analytics shows the owner statistics such as page views, where visitors came from, devices, and loading speed on the town’s pages. It does not run on this notice.',
+            'The town also keeps daily totals of what people do inside it, which Cloudflare cannot see: entering the town, finishing a character, talking with a resident for the first time, starting a conversation and with which resident, opening the guestbook, the map, the contact link, or a resident’s LinkedIn link, and taking a photo. A note’s text, your character, names, and photos are never part of this.',
+            'Each of these adds 1 to that day’s total. No cookie is read or set, no IP address or visitor id is kept, and nothing links one count to another or to a person, so the totals cannot be looked up or removed for one visitor. They have no end date.',
+            'These requests leave no trace of who sent them in the server’s logs, and the counter that stops request floods exists only in the server’s memory. Nothing is counted on this notice or in the editor.',
+            'If your browser sends Global Privacy Control or Do Not Track, nothing is counted.',
           ],
         },
       ],
@@ -693,6 +698,7 @@ export const languageCopy = {
           'If you ask for removal by writing to the address above, the admin removes the name and LinkedIn link and leaves the record anonymous, with its score and place. The character’s look stays stored with the record, because a record needs one, and is hidden from everyone. A LinkedIn address the admin blocks is kept as a hash so it cannot come back.',
           'Your records are found by the __Host-tom_visitor cookie above. It is also made when a ranked game starts, and if you block it a record cannot be saved. “It’s someone else’s turn” clears only the cookie and this tab’s character: the records stay, and this browser can no longer change them.',
           'Requests to the game’s API write no access log, and the counters that stop request floods exist only in the server’s memory. Visit statistics do not run on the game and board pages.',
+          'Walking through the ballpark’s gate in the town adds 1 to a daily total of entries, counted like the totals under Visit statistics. Nothing is counted inside the game or on the board.',
           'The stadium’s crowd and players take the looks of characters from guestbook notes the admin approved, without their names.',
           'This browser also remembers the camera panel’s size and which month’s statues it has already revealed.',
           'The board’s pages ask search engines not to index them, but that cannot stop a copy someone makes of the screen.',
@@ -1723,7 +1729,8 @@ export const languageCopy = {
           lines: [
             '만든 캐릭터(이름, 모습, 넣어 둔 성별 정체성과 LinkedIn 주소), 마을 안의 위치, 고른 언어는 이 탭에만 저장되고, 탭을 닫으면 사라져요.',
             '찍은 사진은 이 기기에 바로 저장되고 서버로 보내지 않아요.',
-            '주민이 하는 말은 미리 준비되어 있어서, 대화해도 서버로 보내는 것이 없어요.',
+            '주민이 하는 말은 미리 준비되어 있어요. 대화를 시작하면 어느 주민과 대화를 시작했는지만 보내고, 쿠키나 IP 주소 없이 하루 합계로 세요.',
+            '이 탭은 아래 방문 통계의 합계 중 이미 더한 항목을 기억해서, 새로 고쳐도 다시 세지 않아요. 이 기억은 서버로 보내지 않고, 탭을 닫으면 사라져요.',
           ],
         },
         {
@@ -1744,7 +1751,7 @@ export const languageCopy = {
         {
           title: '서버 기록',
           lines: [
-            '웹 서버(nginx)는 요청마다 IP 주소, 시각, 요청한 주소, 응답 코드와 크기, 이전 페이지 주소, 브라우저 정보를 접속 기록으로 남겨요.',
+            '아래 방문 통계의 합계를 더하는 요청을 빼면, 웹 서버(nginx)는 요청마다 IP 주소, 시각, 요청한 주소, 응답 코드와 크기, 이전 페이지 주소, 브라우저 정보를 접속 기록으로 남겨요.',
             '이 기록은 기간이 아니라 용량으로 관리해요. 10 MB짜리 파일을 세 개까지 두고, 넘치면 가장 오래된 것부터 지워져요.',
             'IP 주소를 데이터베이스에 저장하지는 않아요.',
           ],
@@ -1760,6 +1767,10 @@ export const languageCopy = {
           title: '방문 통계',
           lines: [
             'Cloudflare Web Analytics로 마을 화면의 페이지 조회 수, 유입 경로, 기기, 로딩 속도 같은 통계를 운영자가 봐요. 이 안내 페이지에서는 실행되지 않아요.',
+            'Cloudflare가 볼 수 없는, 마을 안에서 하는 일도 하루 합계로 세요. 세는 항목은 마을 입장, 캐릭터 완성, 주민과의 첫 대화, 대화 시작과 어느 주민과 시작했는지, 방명록, 지도, 연락처 링크, 주민의 LinkedIn 링크 열기, 사진 찍기예요. 글 내용, 캐릭터, 이름, 사진은 여기에 들어가지 않아요.',
+            '이 항목들은 그날의 합계에 1을 더할 뿐이에요. 쿠키를 읽거나 만들지 않고, IP 주소나 방문자 식별자를 남기지 않아요. 한 번 센 것을 다른 것이나 어떤 사람과도 연결할 수 없어서, 한 사람의 몫만 찾거나 지울 수 없어요. 합계는 기간을 정해 지우지 않아요.',
+            '이 요청은 누가 보냈는지 서버 기록에 남기지 않고, 과도한 요청을 막는 계수는 서버 메모리에만 있어요. 이 안내 페이지와 편집 화면에서는 아무것도 세지 않아요.',
+            '브라우저가 Global Privacy Control이나 Do Not Track을 보내면 아무것도 세지 않아요.',
           ],
         },
       ],
@@ -1775,6 +1786,7 @@ export const languageCopy = {
           '위 주소로 게시 중단을 요청하면 관리자가 이름과 LinkedIn 주소를 지우고 기록을 익명으로 바꿔요. 점수와 순위는 그대로 남아요. 캐릭터 모습은 기록에 꼭 필요해서 함께 저장되지만 누구에게도 보이지 않아요. 관리자가 막은 LinkedIn 주소는 다시 쓰이지 않도록 해시로 계속 보관해요.',
           '내 기록은 위에 적은 __Host-tom_visitor 쿠키로 찾아요. 이 쿠키는 순위 경기를 시작할 때도 만들어지고, 막으면 기록을 저장할 수 없어요. ‘다른 사람이 할 차례예요’는 쿠키와 이 탭의 캐릭터만 지워요. 기록은 그대로 남고, 이 브라우저에서는 더 고칠 수 없어요.',
           '경기 API 요청은 접속 기록에 남기지 않고, 과도한 요청을 막는 계수는 서버 메모리에만 있어요. 경기 화면과 순위 페이지에서는 방문 통계가 실행되지 않아요.',
+          '마을에서 야구장 문으로 들어가면 하루 입장 합계에 1을 더해요. 방문 통계의 합계와 같은 방식이에요. 경기 안과 순위표에서는 아무것도 세지 않아요.',
           '경기장의 관중과 선수는 관리자가 확인한 방명록 글의 캐릭터 모습을 빌려 써요. 이름은 쓰지 않아요.',
           '카메라 패널 크기와 어느 달의 동상 등장을 이미 봤는지는 이 브라우저에 남아요.',
           '순위 페이지는 검색엔진에 색인하지 말라고 요청하지만, 화면을 찍어 옮긴 사본까지 막을 수는 없어요.',

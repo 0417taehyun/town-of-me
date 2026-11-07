@@ -1,5 +1,6 @@
 import type { DialogueMessage, Interaction } from '../scene/playerInteraction'
 import type { ResidentQuestionId } from '../data/residentDialogue'
+import { dialogueLinkEvent, recordSiteEvent } from '../data/siteEvents'
 
 export function Toast({ message }: { message: string | null }) {
   return message ? (
@@ -73,6 +74,7 @@ export function Dialogue({
 }
 
 export function DialogueBox({ message, revealTimes, closeLabel, onChoice, onClose }: DialogueBoxProps) {
+  const link = message.link
   return (
     <section className="dialogue" role="dialog" aria-label={message.speaker}>
       <div className="dialogue-avatar" aria-hidden="true">
@@ -84,15 +86,16 @@ export function DialogueBox({ message, revealTimes, closeLabel, onChoice, onClos
         <p key={message.text} className={revealTimes ? 'is-typing' : undefined} aria-hidden="true">
           {revealTimes ? <TypedLine text={message.text} revealTimes={revealTimes} /> : message.text}
         </p>
-        {message.link && (
+        {link && (
           <a
             className="dialogue-link"
-            href={message.link.href}
+            href={link.href}
             // A mail link opens the visitor's mail app, which would leave a blank tab behind.
-            target={message.link.href.startsWith('mailto:') ? undefined : '_blank'}
+            target={link.href.startsWith('mailto:') ? undefined : '_blank'}
             rel="noopener noreferrer"
+            onClick={() => recordSiteEvent(dialogueLinkEvent(link.href))}
           >
-            {message.link.label}
+            {link.label}
           </a>
         )}
         {message.choices && (

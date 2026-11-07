@@ -5,6 +5,7 @@ import { cameraHeightForFov } from './camera/cameraMath'
 import { useCozyBgm } from './audio/useCozyBgm'
 import { signOut } from './data/adminSession'
 import type { TownGuideStep, Vec3 } from './data/models'
+import { recordConversationStart, recordSiteEvent } from './data/siteEvents'
 import { fetchTownLayout } from './data/townApi'
 import type { EditorCategory } from './editor/objectSelection'
 import type { EditorView } from './editor/townEditing'
@@ -117,6 +118,8 @@ export function TownApp() {
   const dialogueReveal = useDialogueReveal(dialogue, reducedMotion)
   const finishDialogueLine = dialogueReveal.finish
   const dialogueTyping = dialogueReveal.revealTimes !== null
+  // Whom the visitor is talking with: pressing E again or asking something keeps the same conversation.
+  const talkingWith = dialogue?.voice === 'resident' ? dialogue.actorId : null
   const copy = languageCopy[language]
   const markSceneReady = useCallback(() => {
     setSceneProgress(100)
@@ -133,6 +136,10 @@ export function TownApp() {
     void speakDialogue(dialogue.text, dialogue.speaker)
     return stopSpeaking
   }, [dialogue, speakDialogue, stopSpeaking])
+
+  useEffect(() => {
+    if (talkingWith) recordConversationStart(talkingWith)
+  }, [talkingWith])
 
   useEffect(() => {
     if (!session || initialized.current) return
@@ -236,6 +243,7 @@ export function TownApp() {
   const finishPhotoCapture = useCallback(
     (saved: boolean) => {
       showToast(saved ? copy.app.photoSaved : copy.app.photoError)
+      if (saved) recordSiteEvent('photo-taken')
       handleGuideEvent('tried-photo')
     },
     [copy.app.photoError, copy.app.photoSaved, handleGuideEvent, showToast],
@@ -253,6 +261,13 @@ export function TownApp() {
       )
     },
     [guideStep, profile, save, settings, town],
+  )
+  const walkThroughGate = useCallback(
+    (href: string) => {
+      if (town?.venues.ballpark.visible) recordSiteEvent('ballpark-entered')
+      enterVenue(href)
+    },
+    [enterVenue, town],
   )
   const closeGuestbook = useCallback(() => {
     setGuestbookOpen(false)
@@ -315,6 +330,7 @@ export function TownApp() {
   const applyProfile = async (nextProfile: PlayerProfile) => {
     const nextGuideStep = entered ? guideStep : 'move'
     await save(createVisitorSession(playerPosition.current, settings, nextProfile, nextGuideStep))
+    recordSiteEvent('character-finished')
     setProfile(nextProfile)
     setGuideStep(nextGuideStep)
     setEntered(true)
@@ -322,6 +338,7 @@ export function TownApp() {
     showToast(`${copy.app.welcome}, ${nextProfile.name}`)
   }
   const enterAsGuest = () => {
+    recordSiteEvent('entered-town')
     bgm.startAfterEntry()
     if (town.owner.introduction) {
       setIntroductionOpen(true)
@@ -387,11 +404,12 @@ export function TownApp() {
             onGuideEvent={handleGuideEvent}
             language={language}
             onGuestbookOpen={() => {
+              recordSiteEvent('guestbook-opened')
               setDialogue(null)
               setGuestbookOpen(true)
             }}
             onHouseUnavailable={showHouseUnavailable}
-            onVenueEnter={enterVenue}
+            onVenueEnter={walkThroughGate}
             onFovChange={changeFov}
             photoRequest={photoRequest}
             onPhotoCapture={finishPhotoCapture}
@@ -472,7 +490,10 @@ export function TownApp() {
             onLanguageChange={setLanguage}
             onEnvironment={() => setHudPanel((current) => (current === 'environment' ? null : 'environment'))}
             onHelp={() => setHudPanel((current) => (current === 'help' ? null : 'help'))}
-            onMap={() => setHudPanel((current) => (current === 'map' ? null : 'map'))}
+            onMap={() => {
+              recordSiteEvent('map-opened')
+              setHudPanel((current) => (current === 'map' ? null : 'map'))
+            }}
             onPhoto={requestPhoto}
             onSound={bgm.toggle}
           />

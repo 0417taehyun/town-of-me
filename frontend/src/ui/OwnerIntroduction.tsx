@@ -1,3 +1,4 @@
+import { recordSiteEvent } from '../data/siteEvents'
 import { contactEmailHref } from '../data/townApi'
 import type { AppLanguage } from '../i18n/language'
 import { languageCopy } from '../i18n/language'
@@ -17,7 +18,11 @@ export function OwnerContactLink({
   className: string
 }) {
   return (
-    <a className={`contact-link ${className}`} href={contactEmailHref(email)}>
+    <a
+      className={`contact-link ${className}`}
+      href={contactEmailHref(email)}
+      onClick={() => recordSiteEvent('contact-opened')}
+    >
       <span aria-hidden="true">✉</span>
       {languageCopy[language].introduction.contact(ownerName)}
     </a>

@@ -259,6 +259,9 @@ Tests run with `npm test` through `test/run.ts`. `test/storeContract.ts` runs th
   reviews them, held runs, links, and reports afterwards.
 - **Resident dialogue:** an admin drafts it from a reference with OpenRouter and reviews it before saving; visits never
   call an LLM.
+- **Usage statistics:** what a visitor does in the town adds to anonymous daily totals (`data/siteEvents.ts` →
+  `POST /v1/events`): fire and forget, with no cookie, once per tab but for conversations, and never on another page or
+  under Global Privacy Control or Do Not Track. Nothing links two counts to one person.
 
 ## How to extend
 
