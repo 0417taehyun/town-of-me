@@ -72,6 +72,11 @@ describe('the camera panel layout', () => {
     expect(cameraPanelLayout({ ...PLAYING, chasing: true }, LAPTOP, 'right').scoreboardRoom).toBe(right.scoreboardRoom)
   })
 
+  it('grows with V', () => {
+    const medium = cameraPanelLayout(PLAYING, LAPTOP, 'right').width
+    expect(cameraPanelLayout({ ...PLAYING, size: 'large' }, LAPTOP, 'right').width).toBeGreaterThan(medium)
+  })
+
   it('starts medium, cycles medium, large, off with V, and remembers the pick, even where storage is blocked', () => {
     expect([nextPanelSize('medium'), nextPanelSize('large'), nextPanelSize('off')]).toEqual(['large', 'off', 'medium'])
     const stored = new Map<string, string>()

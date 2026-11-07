@@ -530,7 +530,8 @@ export const languageCopy = {
         'town-names': 'Write the owner’s and the pet’s names in both Korean and English.',
         'owner-introduction': 'Write the owner introduction in both Korean and English, or leave both empty.',
         'contact-email': 'Enter a contact email like name@example.com, or leave it empty.',
-        'owner-questions': 'Fill in each of your questions and its answer in both Korean and English, or remove it.',
+        'owner-questions':
+          'Fill in each of your questions and its answer in both Korean and English, or remove it. They are with the resident marked “This is me (the town owner)”; if none is marked, mark one first.',
       },
       showProblem: 'Show me',
       reload: 'Reload saved town',
@@ -1610,7 +1611,8 @@ export const languageCopy = {
         'town-names': '마을 주인과 반려동물 이름을 한국어와 영어로 모두 써 주세요.',
         'owner-introduction': '마을 주인 소개는 한국어와 영어를 모두 쓰거나 둘 다 비워 주세요.',
         'contact-email': 'name@example.com 같은 연락 이메일을 입력하거나 비워 주세요.',
-        'owner-questions': '내 질문과 답을 한국어와 영어로 모두 채우거나 그 질문을 삭제해 주세요.',
+        'owner-questions':
+          '내 질문과 답을 한국어와 영어로 모두 채우거나 그 질문을 삭제해 주세요. 질문은 ‘이 주민이 나예요 (마을 주인)’로 표시한 주민에게 있어요. 표시한 주민이 없으면 먼저 표시해 주세요.',
       },
       showProblem: '바로 가기',
       reload: '저장된 마을 다시 불러오기',

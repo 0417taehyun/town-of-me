@@ -430,7 +430,7 @@ export type LayoutProblemKind =
   | 'resident-texts'
   | 'resident-dialogue'
   | 'owner-questions'
-/** `id` is the object or resident to select to fix it; `null` for what is in the town settings. */
+/** `id` is the object or resident to select to fix it; `null` for the town settings, or for owner questions with no resident to select. */
 export type LayoutProblem = { id: string | null; problem: LayoutProblemKind }
 
 const residentProblems: ReadonlySet<LayoutProblemKind> = new Set([
@@ -502,8 +502,8 @@ export function getTownProblems(town: TownSnapshot): LayoutProblemKind[] {
 }
 
 /**
- * The owner's questions are edited with their resident, so "Show me" selects it; a question or answer missing in
- * either language would be rejected.
+ * The owner's questions are edited with their resident, so "Show me" selects it. Without one nothing can edit them, and
+ * the message says to mark a resident. A question or answer missing in either language would be rejected.
  */
 export function getOwnerQuestionProblems(town: TownSnapshot): LayoutProblem[] {
   const blank = town.owner.questions.some(({ question, answer }) => isBlank(question) || isBlank(answer))

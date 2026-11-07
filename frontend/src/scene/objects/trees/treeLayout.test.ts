@@ -26,6 +26,9 @@ describe('instanced tree trunk collisions', () => {
     expect(spring.length / trees.length).toBeLessThan(0.6)
     expect(autumn.length / trees.length).toBeGreaterThan(0.2)
     expect(autumn.length / trees.length).toBeLessThan(0.6)
+    const winter = getSeasonalTreeSources(trees, 'winter')
+    expect(winter.length / trees.length).toBeGreaterThan(0.2)
+    expect(winter.length / trees.length).toBeLessThan(0.6)
     const remaining = trees.slice(1)
     const springIds = (sources: typeof spring, list: typeof trees) => sources.map(({ treeIndex }) => list[treeIndex].id)
     expect(springIds(getSeasonalTreeSources(remaining, 'spring'), remaining)).toEqual(
