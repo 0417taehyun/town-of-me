@@ -1,6 +1,10 @@
 # Holds the HTTPS certificates, which Let's Encrypt issues once the domain's A records point here and ports 80 and 443 are
 # open. Caddy replaces any X-Forwarded-For a client sends, which is what lets nginx believe the header.
 {
+	log {
+		# With nginx down these name the visitor's address and URL, and /privacy promises that counted events leave none.
+		exclude http.log.error http.handlers.reverse_proxy
+	}
 	servers {
 		# HTTP/3 needs UDP 443 as well, and only the first visit could use it.
 		protocols h1 h2

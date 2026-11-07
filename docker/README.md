@@ -10,12 +10,9 @@ The frontend is served at <http://localhost:8080> and the backend health endpoin
 <http://localhost:3000/healthz>. Override the published ports with `FRONTEND_PORT` and
 `BACKEND_PORT` when needed.
 
-The frontend's Nginx origin compresses text assets and sets cache headers for deployment behind a
-CDN: fingerprinted JS, CSS, WebAssembly, and font files are immutable for a year (a missing one's 404 is
+The frontend's Nginx origin compresses text assets and sets cache headers: fingerprinted JS, CSS, WebAssembly, and font files are immutable for a year (a missing one's 404 is
 not), other assets such as the pose models are revalidated daily, and the HTML entry point and `/v1/`
-responses are not cached. Configure the CDN to honor these origin headers, enable Brotli (and gzip
-fallback) for text assets, and pass `/v1/` through without caching. No CDN provider is required for
-local development.
+responses are not cached.
 
 The home run derby at `/baseball` (and `/baseball/`) is the only document allowed to use the camera,
 and never the microphone or screen capture (`Permissions-Policy: camera=(self), microphone=(),
@@ -27,7 +24,7 @@ only to this origin; and no page may frame it (`frame-ancestors 'none'`). It is 
 `Referrer-Policy: no-referrer`. Its monthly board at `/baseball/ranking` gets the same headers, and
 both carry `X-Robots-Tag: noindex, noarchive`, since the board keeps names and links with no end date.
 Every other document, `/` and `/admin` included, is sent with `camera=()`. Browsers apply these
-headers only on a full page load, so the town and the ballpark link to each other with plain links. A CDN in front must pass them through unchanged.
+headers only on a full page load, so the town and the ballpark link to each other with plain links.
 
 ```sh
 FRONTEND_PORT=8081 BACKEND_PORT=3001 docker compose up --build
@@ -65,11 +62,14 @@ the server sends every file itself. Compose refuses to start without the databas
    ```
 
    The site keeps running through the build; only replacing the containers interrupts it. If it answers 502 after
-   updating only the backend, nginx kept the old address: `docker compose … restart frontend`.
+   updating only the backend, nginx kept the old address: `docker compose … restart frontend`. After a change to
+   `docker/Caddyfile`, run `docker compose … restart caddy`: `git pull` replaces the file, and `up -d` leaves the running
+   Caddy with the old one.
 
 6. Check that `docker compose … logs caddy` shows a certificate obtained for both names, and that `logs frontend` shows
    visitors' addresses. A private `172.x` address there means Docker is hiding them from Caddy, and every visitor is
-   sharing one flood-guard counter.
+   sharing one flood-guard counter. If no certificate came, the start itself still succeeded and HTTPS fails: confirm
+   DNS with `dig` and the firewall, fix them, and restart Caddy once, since its retries back off for up to a day.
 
 Never run `docker compose down -v` on the server: `-v` deletes the database and the certificates. Containers come back on their own after a
 crash or a reboot, and committed data survives them; only losing the disk means going back to the last snapshot, at most a
