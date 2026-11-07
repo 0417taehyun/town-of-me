@@ -46,7 +46,7 @@ export const languageCopy = {
       run: 'to run',
       glance: 'glance',
       interact: 'interact',
-      footnote: 'Guest exploration stays in this session · best with a keyboard',
+      footnote: 'Your character and place in town stay in this session · best with a keyboard',
     },
     introduction: {
       eyebrow: 'Meet the town owner',
@@ -1147,7 +1147,7 @@ export const languageCopy = {
       run: '달리기',
       glance: '시선 이동',
       interact: '상호작용',
-      footnote: '게스트 기록은 현재 세션에만 유지됩니다 · 키보드 사용을 권장합니다',
+      footnote: '캐릭터와 마을 안의 위치는 현재 세션에만 유지됩니다 · 키보드 사용을 권장합니다',
     },
     introduction: {
       eyebrow: '마을 주인을 소개해요',
