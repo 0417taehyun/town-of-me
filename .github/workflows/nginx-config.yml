@@ -37,6 +37,15 @@ jobs:
             http://localhost:8080/v1/games/home-run-derby/runs)"
           sort <<< "$statuses" | uniq -c
           grep -q '^429$' <<< "$statuses"
+      - name: Counted events reach the flood guard and write no log, unlike other requests
+        run: |
+          statuses="$(seq 80 | xargs -P 20 -I{} curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+            http://localhost:8080/v1/events)"
+          sort <<< "$statuses" | uniq -c
+          grep -q '^429$' <<< "$statuses"
+          curl -s -o /dev/null http://localhost:8080/v1/me
+          docker logs nginx-smoke 2>&1 | grep -q '/v1/me'
+          if docker logs nginx-smoke 2>&1 | grep -q '/v1/events'; then exit 1; fi
       - name: Boards are not indexed, and the town is
         run: |
           curl -si http://localhost:8080/v1/games/home-run-derby/leaderboard | grep -qi '^x-robots-tag:'
