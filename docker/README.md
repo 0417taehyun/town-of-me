@@ -62,7 +62,11 @@ file.
 
    ```sh
    docker compose --env-file .env.production -f compose.yaml -f compose.production.yaml up -d --build
+   docker image prune -f
    ```
+
+   The site keeps running through the build; only replacing the containers interrupts it. If it answers 502 after
+   updating only the backend, nginx kept the old address: `docker compose … restart frontend`.
 
 6. Check that `docker compose … logs frontend` shows visitors' addresses. A private `172.x` address there means
    `CF-Connecting-IP` is not arriving, and every visitor is sharing one flood-guard counter.
