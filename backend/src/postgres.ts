@@ -22,6 +22,7 @@ import type {
   SettleEntry,
 } from './leaderboard.js'
 import type { EntryReport, ReportResolution, ReportTarget, VisitorRunCounts } from './leaderboardReview.js'
+import type { GameMonthCount, GuestbookDayCount, SiteEventCount } from './siteStats.js'
 import type { GuestbookEntryChanges, Store } from './store.js'
 import {
   type BallparkRules,
@@ -703,6 +704,46 @@ export class PostgresStore implements Store {
       await client.query('DELETE FROM minigame_entries WHERE game = $1 AND visitor_hash = $2', [game, visitorHash])
       await client.query('DELETE FROM minigame_runs WHERE game = $1 AND visitor_hash = $2', [game, visitorHash])
     })
+  }
+
+  async addSiteEvent(day: string, event: string, subject: string): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO site_event_counts (day, event, subject, count) VALUES ($1, $2, $3, 1)
+       ON CONFLICT (day, event, subject) DO UPDATE SET count = site_event_counts.count + 1`,
+      [day, event, subject],
+    )
+  }
+
+  async listSiteEventCounts(fromDay: string, toDay: string): Promise<SiteEventCount[]> {
+    // As text, since node-postgres reads a `date` as midnight in the server's own time zone.
+    const { rows } = await this.pool.query<SiteEventCount>(
+      `SELECT day::text AS day, event, subject, count FROM site_event_counts
+       WHERE day BETWEEN $1 AND $2 ORDER BY day, event, subject`,
+      [fromDay, toDay],
+    )
+    return rows
+  }
+
+  async countGuestbookEntriesByDay(fromDay: string, toDay: string): Promise<GuestbookDayCount[]> {
+    const { rows } = await this.pool.query<GuestbookDayCount>(
+      `SELECT written.day::text AS day, written.status, count(*)::int AS count
+       FROM (SELECT (created_at AT TIME ZONE INTERVAL '09:00')::date AS day, status FROM guestbook_entries) written
+       WHERE written.day BETWEEN $1 AND $2 GROUP BY written.day, written.status ORDER BY written.day, written.status`,
+      [fromDay, toDay],
+    )
+    return rows
+  }
+
+  async countGameMonths(game: string): Promise<GameMonthCount[]> {
+    const { rows } = await this.pool.query<GameMonthCount>(
+      `SELECT season AS month, COALESCE(runs.total, 0)::int AS runs, COALESCE(records.total, 0)::int AS records
+       FROM (SELECT season, count(*) AS total FROM minigame_runs WHERE game = $1 GROUP BY season) runs
+       FULL JOIN (SELECT season, count(*) AS total FROM minigame_entries WHERE game = $1 GROUP BY season) records
+         USING (season)
+       ORDER BY season DESC`,
+      [game],
+    )
+    return rows
   }
 }
 

@@ -16,7 +16,8 @@ import {
   type SettleEntry,
 } from './leaderboard.js'
 import type { EntryReport, ReportResolution, ReportTarget, VisitorRunCounts } from './leaderboardReview.js'
-import type { TownLayout, TownLayoutInput } from './town.js'
+import type { GameMonthCount, GuestbookDayCount, SiteEventCount } from './siteStats.js'
+import { rankingDay, type TownLayout, type TownLayoutInput } from './town.js'
 
 export interface Store extends AuthStore {
   getUser(id: string): Promise<LinkedUser | null>
@@ -111,6 +112,14 @@ export interface Store extends AuthStore {
   blockLink(profileHash: string, createdAt: string): Promise<void>
   /** Deletes the visitor's runs and records of the game in every season, with the reports on those records. */
   eraseVisitorGameData(game: string, visitorHash: string): Promise<void>
+  /** Adds one to the day's total in one atomic step, so increments at the same moment never lose a count. */
+  addSiteEvent(day: string, event: string, subject: string): Promise<void>
+  /** The totals from `fromDay` to `toDay`, both KST days and both included, by day, event, and subject. */
+  listSiteEventCounts(fromDay: string, toDay: string): Promise<SiteEventCount[]>
+  /** The notes written from `fromDay` to `toDay`, both KST days and both included, by day and status. */
+  countGuestbookEntriesByDay(fromDay: string, toDay: string): Promise<GuestbookDayCount[]>
+  /** Each season of the game with any run or record, newest first. */
+  countGameMonths(game: string): Promise<GameMonthCount[]>
 }
 
 export type GuestbookEntryChanges = Partial<
@@ -133,6 +142,7 @@ export class MemoryStore implements Store {
   readonly leaderboardEntries = new Map<string, LeaderboardEntry>()
   readonly entryReports = new Map<string, EntryReport>()
   readonly linkBlocks = new Map<string, string>()
+  readonly siteEventCounts = new Map<string, SiteEventCount>()
 
   async saveTransaction(transaction: AuthTransaction): Promise<void> {
     this.transactions.set(transaction.id, transaction)
@@ -476,6 +486,44 @@ export class MemoryStore implements Store {
     reportIds.forEach((id) => this.entryReports.delete(id))
     entryIds.forEach((id) => this.leaderboardEntries.delete(id))
     runIds.forEach((id) => this.gameRuns.delete(id))
+  }
+
+  // Nothing is awaited between the read and the write, so this is one step like the PostgreSQL upsert.
+  async addSiteEvent(day: string, event: string, subject: string): Promise<void> {
+    const key = JSON.stringify([day, event, subject])
+    const count = (this.siteEventCounts.get(key)?.count ?? 0) + 1
+    this.siteEventCounts.set(key, { day, event, subject, count })
+  }
+
+  async listSiteEventCounts(fromDay: string, toDay: string): Promise<SiteEventCount[]> {
+    const counts = [...this.siteEventCounts.values()].filter(({ day }) => day >= fromDay && day <= toDay)
+    return structuredClone(counts)
+  }
+
+  async countGuestbookEntriesByDay(fromDay: string, toDay: string): Promise<GuestbookDayCount[]> {
+    const counts = new Map<string, GuestbookDayCount>()
+    const written = [...this.guestbookEntries.values()].map((entry) => ({ ...entry, day: rankingDay(entry.createdAt) }))
+    written
+      .filter(({ day }) => day >= fromDay && day <= toDay)
+      .forEach(({ day, status }) => {
+        const key = `${day}:${status}`
+        counts.set(key, { day, status, count: (counts.get(key)?.count ?? 0) + 1 })
+      })
+    return [...counts.values()]
+  }
+
+  async countGameMonths(game: string): Promise<GameMonthCount[]> {
+    const months = new Map<string, GameMonthCount>()
+    const count = (season: string, field: 'runs' | 'records') => {
+      const month = months.get(season) ?? { month: season, runs: 0, records: 0 }
+      months.set(season, { ...month, [field]: month[field] + 1 })
+    }
+    const isGame = (item: { game: string }) => item.game === game
+    const runs = [...this.gameRuns.values()].filter(isGame)
+    const records = [...this.leaderboardEntries.values()].filter(isGame)
+    runs.forEach(({ season }) => count(season, 'runs'))
+    records.forEach(({ season }) => count(season, 'records'))
+    return [...months.values()].sort((left, right) => textOrder(right.month, left.month))
   }
 }
 

@@ -20,6 +20,7 @@ import {
   type GameRun,
   type LeaderboardEntry,
   type SettleEntry,
+  type SiteEventCount,
   type Store,
   type VerifiedLinkedInIdentity,
 } from '../src/index.js'
@@ -246,6 +247,7 @@ export async function checkStoreContract(store: Store, assert: Assert): Promise<
   await checkEntryStore(store, assert)
   await checkModerationStore(store, assert)
   await checkVisitorRace(store, assert)
+  await checkSiteStatsStore(store, assert)
 }
 
 /** The admin list is seeded once, decides the role at every sign-in, and removing an email ends that role at once. */
@@ -924,6 +926,77 @@ async function checkVisitorRace(store: Store, assert: Assert): Promise<void> {
   assert(
     raced.every(({ results, left }) => results.every(({ status }) => status === 'fulfilled') && left === null),
     "settling and erasing one visitor's records at once never fails, and the erasure leaves no record",
+  )
+}
+
+/**
+ * A daily total only ever grows by one in one step, so increments at the same moment lose nothing; PostgreSQL shows it.
+ * The notes' KST days and the game's months are read from what is already stored, by both stores the same way.
+ */
+async function checkSiteStatsStore(store: Store, assert: Assert): Promise<void> {
+  const day = '2031-03-01'
+  const increments = Array.from({ length: 60 }, () => store.addSiteEvent(day, 'map-opened', ''))
+  await Promise.all(increments)
+  await store.addSiteEvent(day, 'resident-talk', 'fern')
+  await store.addSiteEvent(day, 'resident-talk', 'fern')
+  await store.addSiteEvent(day, 'resident-talk', 'moss')
+  await store.addSiteEvent('2031-02-28', 'map-opened', '')
+  await store.addSiteEvent('2031-03-02', 'map-opened', '')
+  const inOrder = (counts: readonly SiteEventCount[]) =>
+    [...counts].sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)))
+  assert(
+    isDeepStrictEqual(inOrder(await store.listSiteEventCounts(day, day)), [
+      { day, event: 'map-opened', subject: '', count: 60 },
+      { day, event: 'resident-talk', subject: 'fern', count: 2 },
+      { day, event: 'resident-talk', subject: 'moss', count: 1 },
+    ]),
+    'increments at the same moment lose no count, and a total is kept per day, event, and subject',
+  )
+  assert(
+    (await store.listSiteEventCounts('2031-02-28', '2031-03-02')).length === 5 &&
+      (await store.listSiteEventCounts('2031-03-03', '2031-03-09')).length === 0,
+    'a read includes both of its days and no other',
+  )
+
+  const profile = { ...runAppearance, name: 'Sprout' }
+  const note = (time: string, status: 'pending' | 'approved') => ({
+    id: crypto.randomUUID(),
+    visitorHash: `stats-${time}`,
+    appearance: profile,
+    message: 'Hello',
+    locale: 'en' as const,
+    status,
+    createdAt: time,
+    updatedAt: time,
+  })
+  // 00:00 on the 2nd in KST is 15:00 on the 1st in UTC.
+  await store.insertGuestbookEntry(note('2031-03-01T14:59:59.999Z', 'pending'))
+  await store.insertGuestbookEntry(note('2031-03-01T15:00:00.000Z', 'approved'))
+  await store.insertGuestbookEntry(note('2031-03-02T14:59:59.999Z', 'approved'))
+  await store.insertGuestbookEntry(note('2031-03-02T15:00:00.000Z', 'pending'))
+  const notes = await store.countGuestbookEntriesByDay('2031-03-01', '2031-03-02')
+  assert(
+    isDeepStrictEqual(
+      notes.sort((left, right) => left.day.localeCompare(right.day)),
+      [
+        { day: '2031-03-01', status: 'pending', count: 1 },
+        { day: '2031-03-02', status: 'approved', count: 2 },
+      ],
+    ),
+    'notes count on the KST day they were written, by status, and a note on either side of the range counts for neither',
+  )
+
+  await store.issueRun(issuedRun('stats-visitor', '2031-03'))
+  await recordEntry(store, 'stats-visitor', '2031-03', {})
+  await recordEntry(store, 'stats-other', '2031-04', {})
+  await store.issueRun({ ...issuedRun('stats-visitor', '2031-04'), game: 'other-game' })
+  const months = await store.countGameMonths(runGame)
+  assert(
+    isDeepStrictEqual(months.slice(0, 2), [
+      { month: '2031-04', runs: 1, records: 1 },
+      { month: '2031-03', runs: 2, records: 1 },
+    ]) && (await store.countGameMonths('other-game')).length === 1,
+    "a game's months come newest first, each with its runs and records, and another game's stay apart",
   )
 }
 
