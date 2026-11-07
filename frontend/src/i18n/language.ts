@@ -670,7 +670,7 @@ export const languageCopy = {
           title: 'Server logs',
           lines: [
             'For each request, except those that add to the totals under Visit statistics, the web server (nginx) writes an access log with the IP address, time, requested address, response code and size, previous page, and browser details.',
-            'This log is kept by size, not by date: up to three files of 10 MB each, with the oldest removed first.',
+            'This log is kept by size, not by date: up to three files of 10 MB each, with the oldest removed first. The backups described below can hold a copy for 7 more days.',
             'IP addresses are not saved in the database.',
           ],
         },
@@ -678,7 +678,7 @@ export const languageCopy = {
           title: 'Hosting and backups',
           lines: [
             'Requests to this town pass through Cloudflare to servers at Amazon Web Services (AWS), which also hold the database. Both companies handle IP addresses and request contents to do this.',
-            'Database backups are kept for 7 days. A note or record you had removed stays in them for that time, and restoring a backup can bring it back.',
+            'Backups of the server’s disk, which include the database, are kept for 7 days. A note or record you had removed stays in them for that time, and restoring a backup can bring it back.',
           ],
         },
         {
@@ -1764,7 +1764,7 @@ export const languageCopy = {
           title: '서버 기록',
           lines: [
             '아래 방문 통계의 합계를 더하는 요청을 빼면, 웹 서버(nginx)는 요청마다 IP 주소, 시각, 요청한 주소, 응답 코드와 크기, 이전 페이지 주소, 브라우저 정보를 접속 기록으로 남겨요.',
-            '이 기록은 기간이 아니라 용량으로 관리해요. 10 MB짜리 파일을 세 개까지 두고, 넘치면 가장 오래된 것부터 지워져요.',
+            '이 기록은 기간이 아니라 용량으로 관리해요. 10 MB짜리 파일을 세 개까지 두고, 넘치면 가장 오래된 것부터 지워져요. 아래에 적은 백업에는 그 사본이 7일 더 남을 수 있어요.',
             'IP 주소를 데이터베이스에 저장하지는 않아요.',
           ],
         },
@@ -1772,7 +1772,7 @@ export const languageCopy = {
           title: '호스팅과 백업',
           lines: [
             '이 마을로 오는 요청은 Cloudflare를 거쳐 Amazon Web Services(AWS)의 서버로 전달되고, 데이터베이스도 AWS에 있어요. 두 회사는 이 과정에서 IP 주소와 요청 내용을 처리해요.',
-            '데이터베이스 백업은 7일 동안 보관돼요. 지운 글이나 기록도 그동안은 백업에 남아 있고, 백업을 복원하면 되살아날 수 있어요.',
+            '데이터베이스를 포함한 서버 디스크 백업은 7일 동안 보관돼요. 지운 글이나 기록도 그동안은 백업에 남아 있고, 백업을 복원하면 되살아날 수 있어요.',
           ],
         },
         {
