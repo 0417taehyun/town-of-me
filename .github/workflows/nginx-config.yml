@@ -46,6 +46,9 @@ jobs:
           curl -s -o /dev/null http://localhost:8080/v1/me
           docker logs nginx-smoke 2>&1 | grep -q '/v1/me'
           if docker logs nginx-smoke 2>&1 | grep -q '/v1/events'; then exit 1; fi
+      - name: A backslash cannot reach a guarded route around its location
+        run: |
+          test "$(curl --path-as-is -s -o /dev/null -w '%{http_code}' -X POST 'http://localhost:8080/v1/x\..\events')" = 400
       - name: Boards are not indexed, and the town is
         run: |
           curl -si http://localhost:8080/v1/games/home-run-derby/leaderboard | grep -qi '^x-robots-tag:'
