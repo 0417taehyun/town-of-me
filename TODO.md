@@ -35,6 +35,8 @@ what changed.
 
 - Deploy with `compose.production.yaml` ([docker/README.md](docker/README.md#deploying)); add a deployment workflow if
   updating by hand becomes a chore. After the first deployment, add migrations instead of editing applied ones.
+- `toWebRequest` in `backend/server.mjs` resolves `request.url` as a relative reference, so a leading `//` becomes a host
+  name. nginx refuses such addresses today; build the URL from the path so the backend is safe on its own.
 - `/privacy` publishes the privacy, retention, and asset-credit notices; what is left is a legal check of its wording,
   including how it names Cloudflare and AWS, which handle visitors' data.
 - Test admin sign-in end to end with the registered LinkedIn redirect URLs. Locally, use `localhost` rather than
