@@ -119,6 +119,15 @@ const BoardReview = lazy(async () => {
     return { default: BoardReviewUnavailable }
   }
 })
+// Its own chunk too, for the same reasons; its words stay out of what visitors load.
+const UsageStats = lazy(async () => {
+  try {
+    const { UsageStats: LoadedUsageStats } = await import('./UsageStats')
+    return { default: LoadedUsageStats }
+  } catch {
+    return { default: UsageStatsUnavailable }
+  }
+})
 type Edit = TownEditor['edit']
 
 const seatOptions = [1, 2].map((seats) => ({ value: seats, label: String(seats) }))
@@ -1309,17 +1318,31 @@ export function Inspector({
   )
 }
 
-export function BoardReviewUnavailable({ language, onClose }: { language: AppLanguage; onClose: () => void }) {
-  const copy = languageCopy[language].boardReview
+/** What shows when a dialog's chunk fails to load (a deploy replaced it), leaving unsaved edits as they are. */
+export function DialogChunkFailure({
+  copy,
+  onClose,
+}: {
+  copy: { title: string; close: string; unavailable: string }
+  onClose: () => void
+}) {
   return (
     <div className="panel-scrim guestbook-review-scrim" role="presentation">
-      <section className="guestbook-review" role="alertdialog" aria-modal="true" aria-labelledby="board-review-failure">
+      <section className="guestbook-review" role="alertdialog" aria-modal="true" aria-labelledby="dialog-chunk-failure">
         <CloseButton autoFocus onClick={onClose} label={copy.close} />
         <h2>{copy.title}</h2>
-        <p id="board-review-failure">{copy.unavailable}</p>
+        <p id="dialog-chunk-failure">{copy.unavailable}</p>
       </section>
     </div>
   )
+}
+
+export function BoardReviewUnavailable({ language, onClose }: { language: AppLanguage; onClose: () => void }) {
+  return <DialogChunkFailure copy={languageCopy[language].boardReview} onClose={onClose} />
+}
+
+export function UsageStatsUnavailable({ language, onClose }: { language: AppLanguage; onClose: () => void }) {
+  return <DialogChunkFailure copy={languageCopy[language].usageStats} onClose={onClose} />
 }
 
 export function TownEditorPanel({
@@ -1354,7 +1377,7 @@ export function TownEditorPanel({
   const copy = languageCopy[language].editor
   const adminCopy = languageCopy[language].admin
   const { edit, selection, select, undo, notice } = editor
-  const [dialog, setDialog] = useState<'guestbook' | 'board' | 'admins' | null>(null)
+  const [dialog, setDialog] = useState<'guestbook' | 'board' | 'stats' | 'admins' | null>(null)
   const [detailsHidden, setDetailsHidden] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   // Choosing anything to edit, here or on the map, closes the town settings.
@@ -1501,6 +1524,9 @@ export function TownEditorPanel({
           <button className="text-button" type="button" onClick={() => setDialog('board')}>
             {languageCopy[language].boardReview.open}
           </button>
+          <button className="text-button" type="button" onClick={() => setDialog('stats')}>
+            {languageCopy[language].usageStats.open}
+          </button>
           <button className="text-button" type="button" onClick={() => setDialog('admins')}>
             {languageCopy[language].admins.open}
           </button>
@@ -1576,6 +1602,11 @@ export function TownEditorPanel({
       {dialog === 'board' && (
         <Suspense fallback={null}>
           <BoardReview language={language} onClose={() => setDialog(null)} />
+        </Suspense>
+      )}
+      {dialog === 'stats' && (
+        <Suspense fallback={null}>
+          <UsageStats language={language} onClose={() => setDialog(null)} />
         </Suspense>
       )}
       {dialog === 'admins' && <AdminEmails language={language} onClose={() => setDialog(null)} />}

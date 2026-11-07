@@ -1,0 +1,96 @@
+// The usage statistics dialog's words. Only the lazy dialog imports this, so they stay out of `language.ts`, which every
+// page loads. The button that opens the dialog, its title, and the line for a chunk that fails to load stay in
+// `languageCopy.usageStats`.
+
+export const usageStatsCopy = {
+  en: {
+    intro:
+      'Visits, page views, and where people come from are in Cloudflare Web Analytics. This shows what it cannot: what people do inside the town.',
+    caveat:
+      'These are anonymous daily totals and nothing more. Nothing identifies a visitor, so anyone can inflate them, a step can be larger than the one before it, and none of it can be read as people. Most count once per browser tab, and browsers that send Global Privacy Control or Do Not Track are not counted.',
+    range: (from: string, to: string) => `${from} to ${to}, by days in Korea`,
+    loading: 'Loading the totals…',
+    loadError: 'The totals could not be loaded.',
+    retry: 'Try again',
+    empty: 'Nothing has been counted yet. Totals appear here as people use the town.',
+    stepsTitle: 'Steps, as totals',
+    steps: {
+      'entered-town': 'Entered the town',
+      'character-finished': 'Finished a character',
+      'first-talk': 'First talk with a resident',
+      'guestbook-opened': 'Opened the guestbook',
+      'notes-written': 'Notes written',
+    },
+    notesNote: 'Notes written come from the guestbook itself, so a note you deleted no longer counts.',
+    dailyTitle: 'Day by day',
+    dailyNote: 'Every chart shares one scale. Point at a day to read it.',
+    chartLabel: (step: string, total: number) => `${step}: ${total} in these 30 days. The table below has each day.`,
+    table: 'Show as a table',
+    day: 'Day',
+    othersTitle: 'Also counted',
+    others: {
+      'resident-talk': 'Conversations started',
+      'contact-opened': 'Contact link opened',
+      'linkedin-opened': 'Resident’s LinkedIn opened',
+      'map-opened': 'Map opened',
+      'photo-taken': 'Photo taken',
+      'ballpark-entered': 'Ballpark entered',
+    },
+    pending: 'Notes waiting',
+    approved: 'Notes on the board',
+    residentsTitle: 'Residents by conversations',
+    residentsEmpty: 'No conversations yet.',
+    removedResident: (id: string) => `Removed resident (${id})`,
+    derbyTitle: 'Home-run derby by month',
+    derbyNote: 'From the boards themselves, so a deleted record no longer counts. Runs include unfinished ones.',
+    month: 'Month',
+    runs: 'Runs',
+    records: 'Records',
+  },
+  ko: {
+    intro:
+      '방문 수, 페이지 조회 수, 유입 경로는 Cloudflare Web Analytics에 있어요. 여기는 그쪽에서 볼 수 없는, 마을 안에서 하는 일을 보여 줘요.',
+    caveat:
+      '익명의 하루 합계일 뿐이에요. 방문자를 구별하는 것이 없어서 누구나 숫자를 부풀릴 수 있고, 뒤 단계가 앞 단계보다 클 수도 있으며, 사람 수로 읽으면 안 돼요. 대부분 브라우저 탭마다 한 번만 세고, Global Privacy Control이나 Do Not Track을 보내는 브라우저는 세지 않아요.',
+    range: (from: string, to: string) => `${from}부터 ${to}까지, 한국 날짜 기준`,
+    loading: '합계를 불러오는 중…',
+    loadError: '합계를 불러오지 못했어요.',
+    retry: '다시 시도',
+    empty: '아직 센 것이 없어요. 사람들이 마을을 쓰면 여기에 합계가 나타나요.',
+    stepsTitle: '단계별 합계',
+    steps: {
+      'entered-town': '마을 입장',
+      'character-finished': '캐릭터 완성',
+      'first-talk': '주민과 첫 대화',
+      'guestbook-opened': '방명록 열기',
+      'notes-written': '쓴 글',
+    },
+    notesNote: '쓴 글은 방명록에서 바로 세기 때문에, 지운 글은 세지 않아요.',
+    dailyTitle: '날짜별',
+    dailyNote: '모든 차트의 눈금이 같아요. 날짜를 가리키면 숫자가 보여요.',
+    chartLabel: (step: string, total: number) => `${step}: 최근 30일 ${total}. 날짜별 숫자는 아래 표에 있어요.`,
+    table: '표로 보기',
+    day: '날짜',
+    othersTitle: '함께 세는 것',
+    others: {
+      'resident-talk': '대화 시작',
+      'contact-opened': '연락처 링크 열기',
+      'linkedin-opened': '주민 LinkedIn 열기',
+      'map-opened': '지도 열기',
+      'photo-taken': '사진 찍기',
+      'ballpark-entered': '야구장 입장',
+    },
+    pending: '확인을 기다리는 글',
+    approved: '게시된 글',
+    residentsTitle: '대화 많은 주민',
+    residentsEmpty: '아직 대화가 없어요.',
+    removedResident: (id: string) => `지금은 없는 주민 (${id})`,
+    derbyTitle: '홈런 더비 월별',
+    derbyNote: '순위 기록에서 바로 세기 때문에, 지운 기록은 세지 않아요. 판 수에는 끝내지 않은 판도 들어가요.',
+    month: '달',
+    runs: '판',
+    records: '기록',
+  },
+} as const
+
+export type UsageStatsCopy = (typeof usageStatsCopy)[keyof typeof usageStatsCopy]

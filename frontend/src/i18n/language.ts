@@ -559,6 +559,12 @@ export const languageCopy = {
       close: 'Close derby review',
       unavailable: 'The review could not be loaded. Save your edits, then reload the page.',
     },
+    usageStats: {
+      open: 'Usage statistics',
+      title: 'Usage statistics',
+      close: 'Close usage statistics',
+      unavailable: 'The statistics could not be loaded. Save your edits, then reload the page.',
+    },
     admins: {
       open: 'Admins',
       title: 'Admins',
@@ -1645,6 +1651,12 @@ export const languageCopy = {
       title: '홈런 더비 검토',
       close: '홈런 더비 검토 닫기',
       unavailable: '검토 화면을 불러오지 못했어요. 편집 내용을 저장한 뒤 페이지를 새로고침해 주세요.',
+    },
+    usageStats: {
+      open: '사용 통계',
+      title: '사용 통계',
+      close: '사용 통계 닫기',
+      unavailable: '통계를 불러오지 못했어요. 편집한 내용을 저장한 뒤 페이지를 새로 고쳐 주세요.',
     },
     admins: {
       open: '관리자',

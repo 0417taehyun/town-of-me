@@ -47,7 +47,7 @@ skids, ballpark themes, and color roles need no backend change.
 | `App.tsx`          | Routes `/baseball` lazily; `TownApp` (`/`, `/admin`) connects UI and scene.                         |
 | `data/`            | Models, the untrusted API boundary (`townApi.ts`), API clients, the tab's session and language.     |
 | `scene/`           | Everything drawn with Three.js (see below). Loaded as a lazy chunk.                                 |
-| `editor/`          | The admin editor: panels, gestures, history, admins, guestbook and board review. Only on `/admin`.  |
+| `editor/`          | The admin editor: panels, gestures, history, admins, reviews, usage statistics. Only on `/admin`.   |
 | `ui/`              | DOM overlays: entry, HUD, dialogue, guestbook, map, character creator. The `/privacy` page.         |
 | `baseball/`        | The derby at `/baseball`, a lazy chunk; only its gate and `baseballRoute.ts` are in the main chunk. |
 | `camera/`          | Camera defaults and pure camera math.                                                               |
@@ -261,7 +261,8 @@ Tests run with `npm test` through `test/run.ts`. `test/storeContract.ts` runs th
   call an LLM.
 - **Usage statistics:** what a visitor does in the town adds to anonymous daily totals (`data/siteEvents.ts` →
   `POST /v1/events`): fire and forget, with no cookie, once per tab but for conversations, and never on another page or
-  under Global Privacy Control or Do Not Track. Nothing links two counts to one person.
+  under Global Privacy Control or Do Not Track. Nothing links two counts to one person. The admin reads them in a lazy
+  dialog (`editor/UsageStats.tsx`), whose words stay out of what visitors load.
 
 ## How to extend
 
