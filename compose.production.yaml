@@ -37,6 +37,9 @@ services:
 
   frontend:
     <<: *capped-logs
+    build:
+      args:
+        VITE_CLOUDFLARE_WEB_ANALYTICS_TOKEN: ${CLOUDFLARE_WEB_ANALYTICS_TOKEN:-}
     restart: unless-stopped
     ports: !reset []
 

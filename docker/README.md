@@ -75,5 +75,7 @@ Never run `docker compose down -v` on the server: `-v` deletes the database and 
 crash or a reboot, and committed data survives them; only losing the disk means going back to the last snapshot, at most a
 day old.
 
-`/privacy` names AWS as the only company handling visitors' requests and states the backup period and log cap, so changing
-any of them, or putting a CDN in front, means changing `privacy` in `frontend/src/i18n/language.ts`.
+With `CLOUDFLARE_WEB_ANALYTICS_TOKEN` set, the town's page loads Cloudflare Web Analytics, except for browsers that send
+Global Privacy Control or Do Not Track. `/privacy` names AWS for visitors' requests and Cloudflare for those statistics,
+and states the backup period and log cap, so changing any of them, or putting a CDN in front, means changing `privacy` in
+`frontend/src/i18n/language.ts`.
