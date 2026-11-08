@@ -6,3 +6,4 @@ dist
 .env.production
 .seed
 .claude/settings.local.json
+server.pem
