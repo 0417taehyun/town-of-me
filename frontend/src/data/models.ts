@@ -168,6 +168,8 @@ export type TownOwner = TownCharacter & {
   introduction: LocalizedText | null
   /** Behind the HUD's contact button; `null` hides it. */
   contactEmail: string | null
+  /** Offered beside the contact email when the owner's resident says who they are; `null` when there is none. */
+  linkedInProfileUrl: string | null
   /** The resident who is the owner, answering "Who are you?" with `introduction`; `null` when none is. */
   residentId: string | null
   /** What visitors can ask the owner's resident after "Who are you?". */

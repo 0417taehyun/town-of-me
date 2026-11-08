@@ -47,9 +47,11 @@ describe('resident dialogue', () => {
     expect(ids(second.choices)).toEqual(['follow-up-0', 'about-resident'])
     const third = answerResidentQuestion(juno, 'about-resident', second.asked, 'ko', '로빈')
     expect(third.text).toBe('안녕하세요, 저는 Juno입니다.\n역할: 마을 정원사\n로빈과의 관계: 이웃')
-    expect(third.link).toEqual({ href: 'https://www.linkedin.com/in/juno-example', label: '제 LinkedIn 프로필 보기' })
+    expect(third.links).toEqual([
+      { href: 'https://www.linkedin.com/in/juno-example', label: '제 LinkedIn 프로필 보기' },
+    ])
     expect(ids(third.choices)).toEqual(['follow-up-0'])
-    expect(answerResidentQuestion(juno, 'follow-up-0', third.asked, 'ko', '로빈').link).toBeUndefined()
+    expect(answerResidentQuestion(juno, 'follow-up-0', third.asked, 'ko', '로빈').links).toEqual([])
   })
 
   it('still offers the owner question first when the visitor starts with the resident', () => {
@@ -68,12 +70,12 @@ describe('resident dialogue', () => {
     expect(answerResidentQuestion(newcomer, 'about-owner', [], 'en', 'Robin').choices).toHaveLength(1)
     const introduction = answerResidentQuestion(newcomer, 'about-resident', [], 'en', 'Robin')
     expect(introduction.text).toBe("Hi, I'm Pip.")
-    expect(introduction.link).toBeUndefined()
+    expect(introduction.links).toEqual([])
   })
 
   it('never links to anything but a LinkedIn profile', () => {
     const unsafe = { ...juno, linkedInProfileUrl: 'javascript:alert(1)' }
-    expect(answerResidentQuestion(unsafe, 'about-resident', [], 'en', 'Robin').link).toBeUndefined()
+    expect(answerResidentQuestion(unsafe, 'about-resident', [], 'en', 'Robin').links).toEqual([])
   })
 
   it('lets the owner introduce themselves, then offers only their own questions, each once', () => {
@@ -81,17 +83,23 @@ describe('resident dialogue', () => {
       name: { ko: '로빈', en: 'Robin' },
       introduction: { ko: '안녕하세요, 로빈이에요.', en: "Hi, I'm Robin." },
       contactEmail: 'robin+town@example.com',
+      linkedInProfileUrl: 'https://linkedin.com/in/robin-example/',
       questions: dialogue.followUps,
     }
     expect(ids(firstOwnerQuestions('en'))).toEqual(['about-resident'])
     const introduction = answerOwnerQuestion(robin, 'about-resident', [], 'en')
     expect(introduction.text).toBe("Hi, I'm Robin.")
-    expect(introduction.link?.href).toBe('mailto:robin%2Btown%40example.com')
+    expect(introduction.links.map(({ href }) => href)).toEqual([
+      'mailto:robin%2Btown%40example.com',
+      'https://www.linkedin.com/in/robin-example',
+    ])
     expect(ids(introduction.choices)).toEqual(['follow-up-0', 'follow-up-1'])
     const second = answerOwnerQuestion(robin, 'follow-up-1', introduction.asked, 'ko')
     expect(second.text).toBe('모든 빵을 맛봐 줬어요.')
-    expect(second.link).toBeUndefined()
+    expect(second.links).toEqual([])
     expect(ids(second.choices)).toEqual(['follow-up-0'])
     expect(answerOwnerQuestion(robin, 'follow-up-0', second.asked, 'ko').choices).toEqual([])
+    const linkOnly = { ...robin, contactEmail: null, linkedInProfileUrl: 'https://example.com/in/robin' }
+    expect(answerOwnerQuestion(linkOnly, 'about-resident', [], 'en').links).toEqual([])
   })
 })

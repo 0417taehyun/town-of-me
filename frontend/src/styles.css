@@ -1806,9 +1806,14 @@ input[type='range']::-webkit-slider-thumb {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+.dialogue-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-top: 8px;
+}
 .dialogue-link {
   display: inline-block;
-  margin-top: 8px;
   color: var(--leaf-dark);
   font-size: 0.9rem;
   font-weight: 700;

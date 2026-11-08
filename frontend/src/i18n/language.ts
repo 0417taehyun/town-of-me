@@ -401,6 +401,8 @@ export const languageCopy = {
       contactEmail: 'Contact email',
       contactEmailHint: (owner: string) =>
         `Visitors see a “Reach out to ${owner}” button that opens their mail app. Leave it empty to hide the button.`,
+      ownerLinkedInHint:
+        'Visitors who ask your resident who you are see it beside your contact email. It may stay empty.',
       townPet: 'Pet’s name',
       petWalk: (pet: string) => `${pet}’s walk`,
       petWalkDefault: 'Walks the default loop around the fountain.',
@@ -1499,6 +1501,7 @@ export const languageCopy = {
       contactEmail: '연락 이메일',
       contactEmailHint: (owner: string) =>
         `방문자에게 메일 앱을 여는 “${owner}에게 연락하기” 버튼이 보여요. 비워 두면 버튼이 숨겨져요.`,
+      ownerLinkedInHint: '내 주민에게 “누구세요?”라고 물으면 연락 이메일 옆에 보여요. 비워 둬도 돼요.',
       townPet: '반려동물 이름',
       petWalk: (pet: string) => `${pet}의 산책길`,
       petWalkDefault: '분수 주위의 기본 산책길을 걸어요.',

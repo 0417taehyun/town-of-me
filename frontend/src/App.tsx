@@ -218,7 +218,7 @@ export function TownApp() {
       setDialogue({
         ...dialogue,
         text: reply.text,
-        link: reply.link,
+        links: reply.links,
         choices: reply.choices.length ? reply.choices : undefined,
         asked: reply.asked,
         voice: 'resident',

@@ -74,7 +74,7 @@ export function Dialogue({
 }
 
 export function DialogueBox({ message, revealTimes, closeLabel, onChoice, onClose }: DialogueBoxProps) {
-  const link = message.link
+  const links = message.links ?? []
   return (
     <section className="dialogue" role="dialog" aria-label={message.speaker}>
       <div className="dialogue-avatar" aria-hidden="true">
@@ -86,17 +86,22 @@ export function DialogueBox({ message, revealTimes, closeLabel, onChoice, onClos
         <p key={message.text} className={revealTimes ? 'is-typing' : undefined} aria-hidden="true">
           {revealTimes ? <TypedLine text={message.text} revealTimes={revealTimes} /> : message.text}
         </p>
-        {link && (
-          <a
-            className="dialogue-link"
-            href={link.href}
-            // A mail link opens the visitor's mail app, which would leave a blank tab behind.
-            target={link.href.startsWith('mailto:') ? undefined : '_blank'}
-            rel="noopener noreferrer"
-            onClick={() => recordSiteEvent(dialogueLinkEvent(link.href))}
-          >
-            {link.label}
-          </a>
+        {links.length > 0 && (
+          <div className="dialogue-links">
+            {links.map((link) => (
+              <a
+                key={link.href}
+                className="dialogue-link"
+                href={link.href}
+                // A mail link opens the visitor's mail app, which would leave a blank tab behind.
+                target={link.href.startsWith('mailto:') ? undefined : '_blank'}
+                rel="noopener noreferrer"
+                onClick={() => recordSiteEvent(dialogueLinkEvent(link.href))}
+              >
+                {link.label}
+              </a>
+            ))}
+          </div>
         )}
         {message.choices && (
           <div className="dialogue-choices">

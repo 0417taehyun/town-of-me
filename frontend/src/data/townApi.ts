@@ -261,6 +261,7 @@ export function parseTownOwner(value: unknown, residents: readonly TownResident[
         ? null
         : parseLocalizedText(input.introduction, 'town.owner.introduction'),
     contactEmail: normalizeContactEmail(input.contactEmail),
+    linkedInProfileUrl: normalizeLinkedInProfileUrl(input.linkedInProfileUrl),
     residentId: residents.find(({ id }) => id === input.residentId)?.id ?? null,
     questions:
       input.questions === undefined || input.questions === null
@@ -316,6 +317,7 @@ export function serializeTownLayout(town: TownSnapshot) {
       name: town.owner.name,
       introduction: town.owner.introduction && unlessBlank(town.owner.introduction),
       contactEmail: town.owner.contactEmail?.trim() || null,
+      linkedInProfileUrl: town.owner.linkedInProfileUrl?.trim() || null,
       residentId: town.owner.residentId,
       questions: town.owner.questions,
     },

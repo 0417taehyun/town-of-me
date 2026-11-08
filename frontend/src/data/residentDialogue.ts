@@ -6,8 +6,9 @@ import { contactEmailHref } from './townApi'
 
 export type ResidentQuestionId = 'about-owner' | 'about-resident' | `follow-up-${number}`
 export type ResidentQuestion = { id: ResidentQuestionId; label: string }
+export type DialogueLink = { href: string; label: string }
 type Speaker = Pick<TownResident, 'name' | 'role' | 'relationship' | 'linkedInProfileUrl' | 'dialogue'>
-type Owner = Pick<TownOwner, 'name' | 'introduction' | 'contactEmail' | 'questions'>
+type Owner = Pick<TownOwner, 'name' | 'introduction' | 'contactEmail' | 'linkedInProfileUrl' | 'questions'>
 type FollowUps = ResidentDialogue['followUps']
 
 const followUpPrefix = 'follow-up-'
@@ -69,7 +70,7 @@ export function answerResidentQuestion(
   const linkedIn = questionId === 'about-resident' ? normalizeLinkedInProfileUrl(resident.linkedInProfileUrl) : null
   return {
     text: answerText(resident, questionId, language, owner),
-    link: linkedIn ? { href: linkedIn, label: languageCopy[language].residentDialogue.linkedIn } : undefined,
+    links: linkedIn ? [{ href: linkedIn, label: languageCopy[language].residentDialogue.linkedIn }] : [],
     choices: candidates.filter(({ id }) => !nowAsked.includes(id)),
     asked: nowAsked,
   }
@@ -85,8 +86,8 @@ export function answerText(resident: Speaker, questionId: ResidentQuestionId, la
 
 /**
  * What the town owner's resident says to `questionId` and what the visitor may ask next: "Who are you?" is answered
- * with the owner's introduction and the same contact link as the HUD's, then the owner's own questions follow, each
- * offered once.
+ * with the owner's introduction, the same contact link as the HUD's, and their LinkedIn profile, then the owner's own
+ * questions follow, each offered once.
  */
 export function answerOwnerQuestion(
   owner: Owner,
@@ -96,14 +97,26 @@ export function answerOwnerQuestion(
 ) {
   const nowAsked = [...asked, questionId]
   const candidates = [...firstOwnerQuestions(language), ...followUpQuestions(owner.questions, language)]
-  const email = questionId === 'about-resident' ? owner.contactEmail : null
-  const contactLabel = languageCopy[language].introduction.contact(owner.name[language])
   return {
     text: ownerAnswerText(owner, questionId, language),
-    link: email ? { href: contactEmailHref(email), label: contactLabel } : undefined,
+    links: questionId === 'about-resident' ? ownerLinks(owner, language) : [],
     choices: candidates.filter(({ id }) => !nowAsked.includes(id)),
     asked: nowAsked,
   }
+}
+
+/** The owner's contact email and LinkedIn profile, each only when set; the profile only when it is a real one. */
+export function ownerLinks(owner: Owner, language: AppLanguage): DialogueLink[] {
+  const copy = languageCopy[language]
+  const linkedIn = normalizeLinkedInProfileUrl(owner.linkedInProfileUrl)
+  const links = [
+    owner.contactEmail && {
+      href: contactEmailHref(owner.contactEmail),
+      label: copy.introduction.contact(owner.name[language]),
+    },
+    linkedIn && { href: linkedIn, label: copy.residentDialogue.linkedIn },
+  ]
+  return links.filter((link): link is DialogueLink => Boolean(link))
 }
 
 /** Without an introduction, the owner welcomes the visitor instead. */

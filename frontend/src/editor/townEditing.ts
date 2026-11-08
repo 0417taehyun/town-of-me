@@ -497,6 +497,7 @@ export function getTownProblems(town: TownSnapshot): LayoutProblemKind[] {
     [[town.owner.name, town.pet.name].some(isBlank), 'town-names'],
     [Boolean(town.owner.introduction && isHalfWritten(town.owner.introduction)), 'owner-introduction'],
     [isInvalidContactEmail(town.owner.contactEmail), 'contact-email'],
+    [Boolean(linkedInProfileUrlError(town.owner.linkedInProfileUrl ?? '')), 'linkedin'],
   ]
   return problems.filter(([failed]) => failed).map(([, problem]) => problem)
 }

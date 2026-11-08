@@ -1,6 +1,6 @@
 import type { Vector3 } from 'three'
 import type { TownObject, Vec3 } from '../data/models'
-import type { ResidentQuestion, ResidentQuestionId } from '../data/residentDialogue'
+import type { DialogueLink, ResidentQuestion, ResidentQuestionId } from '../data/residentDialogue'
 import type { BenchSeat } from './motion/characterPose'
 import { getHouseApproachPosition } from './objects/houses/houseLayout'
 import type { WorldActor } from './motion/npcMotion'
@@ -13,8 +13,8 @@ export type DialogueMessage = {
   avatar: string
   actorId: string
   voice?: 'resident'
-  /** A validated link shown under the line, such as the resident's LinkedIn or the owner's contact email. */
-  link?: { href: string; label: string }
+  /** Validated links shown under the line, such as a resident's LinkedIn or the owner's contact email and LinkedIn. */
+  links?: readonly DialogueLink[]
   choices?: readonly ResidentQuestion[]
   /** Questions already asked in this conversation, so they are not offered again. */
   asked?: readonly ResidentQuestionId[]

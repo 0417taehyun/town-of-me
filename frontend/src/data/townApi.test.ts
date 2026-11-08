@@ -76,10 +76,15 @@ describe('town layout API boundary', () => {
     ]
     const town = parseTownLayout({
       ...layout,
-      owner: { ...layout.owner, contactEmail: ' Robin@Example.com ' },
+      owner: {
+        ...layout.owner,
+        contactEmail: ' Robin@Example.com ',
+        linkedInProfileUrl: 'https://linkedin.com/in/robin-sample/',
+      },
       pet: { ...layout.pet, route },
     })
     expect(town.owner.contactEmail).toBe('robin@example.com')
+    expect(town.owner.linkedInProfileUrl).toBe('https://www.linkedin.com/in/robin-sample')
     expect(town.pet.route).toEqual(route)
     expect(parseTownLayout({ ...serializeTownLayout(town), revision: 1 })).toEqual(town)
     const emails = ['robin', 'robin@example', 'ro bin@example.com', `${'r'.repeat(250)}@example.com`, 42]
@@ -90,7 +95,7 @@ describe('town layout API boundary', () => {
     expect(emails.map((email) => withEmail(email).owner.contactEmail)).toEqual(emails.map(() => null))
     expect(routes.map((petRoute) => withRoute(petRoute).pet.route)).toEqual(routes.map(() => null))
     const omitted = parseTownLayout({ ...layout, owner: { name: layout.owner.name }, pet: { name: layout.pet.name } })
-    expect(omitted.owner).toMatchObject({ introduction: null, contactEmail: null })
+    expect(omitted.owner).toMatchObject({ introduction: null, contactEmail: null, linkedInProfileUrl: null })
     expect(omitted.pet.route).toBeNull()
   })
 

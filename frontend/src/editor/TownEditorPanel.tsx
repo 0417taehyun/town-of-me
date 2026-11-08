@@ -26,6 +26,7 @@ import { GAIT_STYLES, type GaitStyle } from '../scene/motion/gait'
 import { SKID_STYLES, type SkidStyle } from '../scene/motion/skidTurn'
 import { TOWN_OBJECT_KINDS } from '../scene/objects/kinds'
 import { appearanceFields, DEFAULT_PLAYER_PROFILE } from '../data/playerProfile'
+import { linkedInProfileUrlError } from '../data/linkedInProfile'
 import type { AppLanguage } from '../i18n/language'
 import { languageCopy, monthName } from '../i18n/language'
 import { resolveBallparkPalette } from '../scene/venues/ballpark/ballparkThemes'
@@ -198,6 +199,16 @@ export function TownNameFields({
         onChange={(contactEmail) => changeOwner({ contactEmail })}
       />
       <p className="editor-note">{copy.contactEmailHint(town.owner.name[language])}</p>
+      <TextField
+        label={copy.linkedIn}
+        type="url"
+        value={town.owner.linkedInProfileUrl ?? ''}
+        maxLength={300}
+        invalid={linkedInProfileUrlError(town.owner.linkedInProfileUrl ?? '') ? copy.problems.linkedin : undefined}
+        edit={edit}
+        onChange={(linkedInProfileUrl) => changeOwner({ linkedInProfileUrl })}
+      />
+      <p className="editor-note">{copy.ownerLinkedInHint}</p>
       <LocalizedField
         label={copy.townPet}
         value={town.pet.name}
