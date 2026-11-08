@@ -79,3 +79,8 @@ With `CLOUDFLARE_WEB_ANALYTICS_TOKEN` set, the town's page loads Cloudflare Web 
 Global Privacy Control or Do Not Track. `/privacy` names AWS for visitors' requests and Cloudflare for those statistics,
 and states the backup period and log cap, so changing any of them, or putting a CDN in front, means changing `privacy` in
 `frontend/src/i18n/language.ts`.
+
+A link to the town shows `frontend/public/og-image.jpg` (a picture of the sample town, 1200×630) with `SITE_TITLE` and
+`SITE_DESCRIPTION`, or "Town of Me" and a general line while they are empty; the build points crawlers at
+`https://PUBLIC_HOST/og-image.jpg`. LinkedIn, KakaoTalk, and Slack keep a preview for days, so after changing either,
+refresh it with LinkedIn's Post Inspector or Kakao's sharing debugger.

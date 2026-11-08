@@ -40,6 +40,9 @@ services:
     build:
       args:
         VITE_CLOUDFLARE_WEB_ANALYTICS_TOKEN: ${CLOUDFLARE_WEB_ANALYTICS_TOKEN:-}
+        SITE_ORIGIN: https://${PUBLIC_HOST}
+        SITE_TITLE: ${SITE_TITLE:-}
+        SITE_DESCRIPTION: ${SITE_DESCRIPTION:-}
     restart: unless-stopped
     ports: !reset []
 
