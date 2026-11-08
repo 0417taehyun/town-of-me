@@ -68,14 +68,14 @@ live in the code.
 
 ## Status
 
-The project runs locally and in containers but has not been deployed. LinkedIn sign-in and OpenRouter drafts are
-implemented and need end-to-end tests against the live services. Visitors never sign in; their characters stay in the
-browser tab.
+The project runs in production with Docker Compose on a single server ([docker/README.md](docker/README.md)), with
+LinkedIn sign-in for the admin and OpenRouter drafts of resident dialogue. Visitors never sign in; their characters stay
+in the browser tab.
 
 ## License
 
-Town of Me is source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE.md): anyone may use, change,
-and share it for noncommercial purposes, and commercial use needs separate permission. It is not an OSI-approved open
-source license. Bundled third-party assets keep their own licenses (the Kenney Nature Kit and the bark recording are
+Town of Me is open source under the [Apache License 2.0](LICENSE): anyone may use, change, and share it, including
+commercially, as long as copies keep the license and the [NOTICE](NOTICE) file. The license does not grant use of the
+Town of Me name. Bundled third-party assets keep their own licenses (the Kenney Nature Kit and the bark recording are
 CC0); [`frontend/public/assets/CREDITS.md`](frontend/public/assets/CREDITS.md) lists each one with its author and
 source.

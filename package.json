@@ -2,7 +2,7 @@
   "name": "town-of-me-workspace",
   "private": true,
   "version": "0.1.0",
-  "license": "PolyForm-Noncommercial-1.0.0",
+  "license": "Apache-2.0",
   "scripts": {
     "dev": "node scripts/run-parallel.mjs dev:frontend dev:backend",
     "dev:frontend": "npm run dev --workspace frontend",

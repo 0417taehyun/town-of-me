@@ -48,8 +48,8 @@ what changed.
 
 ## Publishing the repository
 
-- Confirm the copyright line in `LICENSE.md`.
-- Enable private vulnerability reporting in the GitHub repository settings, which `SECURITY.md` relies on.
-- Enable Dependabot alerts and security updates in the repository settings; `.github/dependabot.yml` only covers
-  version updates.
-- Before the first commit, check with `git status` that `.env` and `.seed/` stay untracked.
+- Enable private vulnerability reporting, which `SECURITY.md` relies on, and Dependabot security updates, since
+  `.github/dependabot.yml` only covers version updates.
+- Add a `main` ruleset that blocks force pushes and deletion and requires `Module scope`; the other checks run only when
+  their paths change, so requiring them would leave unrelated pull requests waiting.
+- Require approval before Actions run on pull requests from outside contributors.

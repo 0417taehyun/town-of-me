@@ -48,8 +48,8 @@ town. Real content belongs in a database through `/admin`, or in a private seed 
 
 ## License of contributions
 
-The project is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). By opening a pull request you
-agree that your contribution is licensed under the same terms.
+The project is licensed under the [Apache License 2.0](LICENSE). As its section 5 says, a contribution you submit is
+licensed under the same terms unless you state otherwise.
 
 ## Security issues
 
