@@ -103,6 +103,7 @@ async function checkTownStore(store: Store, assert: Assert): Promise<void> {
       name: { ko: '로빈 리', en: 'Robin Lee' },
       introduction: { ko: '안녕하세요.\n로빈이에요.', en: 'Hello.\nI am Robin.' },
       contactEmail: 'robin@example.com',
+      linkedInProfileUrl: 'https://www.linkedin.com/in/robin-sample',
       residentId: 'maple',
       questions: [
         {
@@ -138,7 +139,7 @@ async function checkTownStore(store: Store, assert: Assert): Promise<void> {
     isDeepStrictEqual(loaded.movement, edited.movement) &&
       isDeepStrictEqual(loaded.owner, edited.owner) &&
       isDeepStrictEqual(loaded.pet, edited.pet),
-    "a later save replaces the movement setting, the owner's introduction, contact email, resident, and questions, and the pet's route",
+    "a later save replaces the movement setting, the owner's introduction, contact email, LinkedIn link, resident, and questions, and the pet's route",
   )
   assert(
     isDeepStrictEqual(loaded.venues, edited.venues) && !loaded.venues.ballpark.visible,
@@ -1124,17 +1125,18 @@ export async function checkPostgresStoreContract(connectionString: string | unde
     assert((await applyMigrations(pool, migrationsDirectory)).length === 0, 'migrations must apply only once')
     await checkStoreContract(new PostgresStore(pool), assert)
     await pool.query(
-      `UPDATE towns SET owner = owner - 'introduction' - 'contactEmail' - 'residentId' - 'questions', pet = pet - 'route',
-         venues = '{}'`,
+      `UPDATE towns SET owner = owner - 'introduction' - 'contactEmail' - 'linkedInProfileUrl' - 'residentId' - 'questions',
+         pet = pet - 'route', venues = '{}'`,
     )
     const earlier = await new PostgresStore(pool).getTown()
     assert(
       earlier?.owner.introduction === null &&
         earlier.owner.contactEmail === null &&
+        earlier.owner.linkedInProfileUrl === null &&
         earlier.owner.residentId === null &&
         isDeepStrictEqual(earlier.owner.questions, []) &&
         earlier.pet.route === null,
-      "a town saved before the introduction, contact email, owner's resident and questions, and pet route existed reads them as null or empty",
+      "a town saved before the introduction, contact email, LinkedIn link, owner's resident and questions, and pet route existed reads them as null or empty",
     )
     assert(
       isDeepStrictEqual(earlier.venues, {

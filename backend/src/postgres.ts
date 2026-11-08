@@ -1059,7 +1059,14 @@ export function toTownResidentRecord(resident: TownLayoutInput['residents'][numb
 export function toTown(row: TownRow): TownLayout {
   return {
     name: row.name,
-    owner: { introduction: null, contactEmail: null, residentId: null, questions: [], ...row.owner },
+    owner: {
+      introduction: null,
+      contactEmail: null,
+      linkedInProfileUrl: null,
+      residentId: null,
+      questions: [],
+      ...row.owner,
+    },
     pet: { route: null, ...row.pet },
     spawn: row.spawn,
     movement: row.movement,

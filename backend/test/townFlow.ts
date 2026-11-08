@@ -217,6 +217,10 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
       'an owner contact email without a domain',
       { ...firstSave, owner: { ...firstSave.owner, contactEmail: 'robin@example' } },
     ],
+    [
+      'an owner LinkedIn link to another site',
+      { ...firstSave, owner: { ...firstSave.owner, linkedInProfileUrl: 'https://example.com/in/robin-sample' } },
+    ],
     ['an owner resident that is not in the town', { ...firstSave, owner: { ...firstSave.owner, residentId: 'robin' } }],
     [
       'more than five owner questions',
@@ -292,10 +296,11 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
   assert(
     town.owner.introduction === null &&
       town.owner.contactEmail === null &&
+      town.owner.linkedInProfileUrl === null &&
       town.owner.residentId === null &&
       isDeepStrictEqual(town.owner.questions, []) &&
       town.pet.route === null,
-    "a town saved without an introduction, contact email, owner's resident or questions, or pet route reads them as null or empty",
+    "a town saved without an introduction, contact email, LinkedIn link, owner's resident or questions, or pet route reads them as null or empty",
   )
   const loadedHouse = town.objects.find(({ id }) => id === house.id)
   const loadedRoad = town.objects.find(({ id }) => id === road.id)
@@ -332,6 +337,7 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
         ...firstSave.owner,
         introduction,
         contactEmail: ' Robin@Example.com ',
+        linkedInProfileUrl: 'https://linkedin.com/in/robin-sample/',
         residentId: resident.id,
         questions: ownerQuestions,
       },
@@ -359,10 +365,11 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
       ...firstSave.owner,
       introduction,
       contactEmail: 'robin@example.com',
+      linkedInProfileUrl: 'https://www.linkedin.com/in/robin-sample',
       residentId: resident.id,
       questions: ownerQuestions,
     }) && isDeepStrictEqual(secondTown.pet, { ...firstSave.pet, route: petRoute }),
-    "the owner's introduction, trimmed lowercase contact email, resident without a reference or dialogue, five questions, and the pet's route are saved",
+    "the owner's introduction, trimmed lowercase contact email, canonical LinkedIn link, resident without a reference or dialogue, five questions, and the pet's route are saved",
   )
   const secondResident = secondTown.residents[0]
   assert(

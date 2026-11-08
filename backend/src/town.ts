@@ -97,6 +97,8 @@ export interface TownOwner {
   introduction: LocalizedText | null
   /** Opened as a `mailto:` link by the contact button; `null` hides the button. */
   contactEmail: string | null
+  /** Offered beside the contact email when visitors ask the owner's resident who they are; canonical when set. */
+  linkedInProfileUrl: string | null
   /** The resident who is the owner, so visitors can walk up and talk to them; `null` when no resident is. */
   residentId: string | null
   /** What visitors may ask the owner after the introduction, answered in the owner's own words. */
@@ -227,8 +229,8 @@ export function parseTownLayout(value: unknown): TownLayoutInput {
   }
 }
 
-// Towns saved before the introduction, contact email, owner's resident, questions, and pet route existed keep
-// working, so each may be omitted. The layout checks that `residentId` names one of its residents.
+// Towns saved before the introduction, contact email, LinkedIn link, owner's resident, questions, and pet route existed
+// keep working, so each may be omitted. The layout checks that `residentId` names one of its residents.
 export function parseTownOwner(value: unknown): TownOwner {
   const input = inputRecord(value, 'owner')
   return {
@@ -237,6 +239,7 @@ export function parseTownOwner(value: unknown): TownOwner {
       localizedText(introduction, 'owner.introduction', multilineText, introductionLimit),
     ),
     contactEmail: optionalInput(input.contactEmail, (email) => adminEmail(email, 'owner.contactEmail')),
+    linkedInProfileUrl: linkedInProfileUrl(input.linkedInProfileUrl),
     residentId: optionalInput(input.residentId, (residentId) => townIdentifier(residentId, 'owner.residentId')),
     questions: parseFollowUps(input.questions ?? [], 'owner.questions', ownerQuestionLimit),
   }

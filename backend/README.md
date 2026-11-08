@@ -23,6 +23,9 @@ transaction.
     skips that step.
   - `owner.contactEmail`: stored trimmed and lowercase, with the admin list's shape (at most 254 characters,
     `name@example.com`); anything else returns `400`. `null` hides the contact button, which opens a `mailto:` link.
+  - `owner.linkedInProfileUrl`: a LinkedIn profile link, stored canonically like a resident's
+    (`https://www.linkedin.com/in/<id>`); any other link returns `400`, and `null` or `""` means none. Visitors are
+    offered it beside the contact email when they ask the owner's resident who they are.
   - `owner.residentId`: the resident who is the owner, so visitors can talk to them. It must name a resident in the
     same layout, like a resident's bench, or the save returns `400`; `null` means no resident is the owner. That
     resident, like every resident, needs no `reference` or `dialogue`.
