@@ -21,7 +21,12 @@ import {
 } from '../playerInteraction'
 import type { Control } from '../controls'
 import { movementHoldDuration, shouldSprint } from '../controls'
-import { getGreetingStretch, isActorConversationInRange, type WorldActor } from '../motion/npcMotion'
+import {
+  getGreetingStretch,
+  holdConversationPartner,
+  isActorConversationInRange,
+  type WorldActor,
+} from '../motion/npcMotion'
 import { getBenchPose, getMovementAnimation, type BenchSeat } from '../motion/characterPose'
 import { petResponse, type PetSound } from '../animals/petInteraction'
 import { PLAYER_RUN_SPEED, PLAYER_WALK_SPEED } from '../motion/playerMotion'
@@ -69,6 +74,8 @@ type Props = {
   interactionRequest: InteractionRequest
   onInteractionChange: (interaction: Interaction | null) => void
   onDialogue: (message: DialogueMessage | null) => void
+  /** The resident whose conversation is open in the dialogue box, held in place until it closes. */
+  talkingWith: string | null
   onPetSound: (sound: PetSound) => void
   /** `intensity` grows with the running speed the skid started from. */
   onSkid: (sound: SkidSound, intensity: number, length: SquealLength) => void
@@ -138,6 +145,7 @@ export function Player({
   interactionRequest,
   onInteractionChange,
   onDialogue,
+  talkingWith,
   onPetSound,
   onSkid,
   skidStyle,
@@ -366,6 +374,7 @@ export function Player({
     const delta = Math.min(rawDelta, 0.05)
     const keys = getKeys()
     const now = performance.now()
+    holdConversationPartner(actors.current, talkingWith, now)
     const pettingActor = actors.current.find(
       (actor) => actor.id === dialogueActorId.current && actor.kind === 'dog' && actor.pettingUntil > now,
     )

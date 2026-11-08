@@ -60,6 +60,8 @@ type Props = {
   interactionRequest: InteractionRequest
   onInteractionChange: (interaction: Interaction | null) => void
   onDialogue: (message: DialogueMessage | null) => void
+  /** The resident whose conversation is open in the dialogue box; they stay put until it closes. */
+  talkingWith: string | null
   onPetSound: (sound: PetSound) => void
   onSkid: (sound: SkidSound, intensity: number, length: SquealLength) => void
   /** A step on the ground the player's own `surfaceAt` reads there, the shown venues' paths included. */
@@ -112,6 +114,7 @@ export function TownScene({
   interactionRequest,
   onInteractionChange,
   onDialogue,
+  talkingWith,
   onPetSound,
   onSkid,
   onFootstep,
@@ -255,6 +258,7 @@ export function TownScene({
             interactionRequest={interactionRequest}
             onInteractionChange={onInteractionChange}
             onDialogue={onDialogue}
+            talkingWith={talkingWith}
             onPetSound={onPetSound}
             onSkid={onSkid}
             skidStyle={town.movement.skid}

@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { Vector3 } from 'three'
 import {
   canActorOccupyPosition,
+  CONVERSATION_LINGER_MS,
   createAmbientConversation,
   createResidentMotion,
   createResidentSpecs,
   createWorldActors,
   getHeadYawToward,
   getResidentSkyGazeTilt,
+  holdConversationPartner,
   isActorConversationInRange,
   nextRouteIndex,
   stepResidentMotion,
@@ -141,6 +143,21 @@ describe('resident seating and interaction', () => {
     expect(conversation?.messages.every(({ text }) => text.length > 0)).toBe(true)
     actors[0].interactionUntil = 101
     expect(createAmbientConversation(actors, 0, 100, [['Hello!', 'Hi!']])).toBeNull()
+  })
+
+  it('holds only the resident the visitor is talking with, for as long as the dialogue is open', () => {
+    const actors = createSeedWorldActors()
+    const [listener, bystander] = actors
+    listener.interactionUntil = 0
+    bystander.interactionUntil = 0
+    holdConversationPartner(actors, listener.id, 60_000)
+    expect(listener.interactionUntil).toBe(60_000 + CONVERSATION_LINGER_MS)
+    expect(bystander.interactionUntil).toBe(0)
+    listener.interactionUntil = 90_000
+    holdConversationPartner(actors, listener.id, 60_000)
+    expect(listener.interactionUntil).toBe(90_000)
+    holdConversationPartner(actors, null, 60_000)
+    expect([listener.interactionUntil, bystander.interactionUntil]).toEqual([90_000, 0])
   })
 
   it('keeps a conversation only while its actor remains nearby', () => {

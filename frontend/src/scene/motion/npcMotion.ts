@@ -321,6 +321,18 @@ export function getConversationTarget(
   return talkingToPlayer ? playerPosition : null
 }
 
+/** How long a resident lingers after the visitor closes their conversation, before walking on. */
+export const CONVERSATION_LINGER_MS = 1500
+
+/**
+ * Keeps the resident the visitor is talking with (`actorId`) in place while the dialogue is open, however long the
+ * visitor reads or chooses, and lets them linger briefly once it closes. A longer hold, such as a chat, is kept.
+ */
+export function holdConversationPartner(actors: readonly WorldActor[], actorId: string | null, now: number) {
+  const actor = actors.find(({ id }) => id === actorId)
+  if (actor) actor.interactionUntil = Math.max(actor.interactionUntil, now + CONVERSATION_LINGER_MS)
+}
+
 export function isActorConversationInRange(
   actorId: string | null,
   playerPosition: Vector3,

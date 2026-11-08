@@ -395,6 +395,7 @@ export function TownApp() {
             interactionRequest={interactionRequest}
             onInteractionChange={setInteraction}
             onDialogue={handleDialogueChange}
+            talkingWith={talkingWith}
             onPetSound={(sound) =>
               void bgm[sound]().then((played) => !played && showToast(copy.app.petAudioError(petName)))
             }
