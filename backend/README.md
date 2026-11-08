@@ -45,8 +45,10 @@ transaction.
 - **Residents** are not users. They have a name, the character appearance fields, a walking route, a bench that must
   exist, the route index where they stop at it, and optionally a `role` and `relationship` with the owner (one line each
   in Korean and English), a canonical `linkedInProfileUrl`, a `reference` about the owner in both languages, and a
-  `dialogue`: `aboutOwner` plus up to three `followUps` of `{ question, answer }`, each `{ ko, en }`. The dialogue is
-  drafted from the reference ahead of time and reviewed before saving, so a conversation never waits for an LLM.
+  `dialogue`: an optional `aboutResident` (the resident's own answer to "Who are you?"), `aboutOwner`, and up to three
+  `followUps` of `{ question, answer }`, each `{ ko, en }`. Dialogue saved before `aboutResident` existed stays valid
+  without it. The dialogue is drafted from the reference ahead of time and reviewed before saving, so a conversation
+  never waits for an LLM.
 - **Movement:** `movement.gait` and `movement.skid` match the same identifier pattern as types; an omitted setting or
   field defaults to `{ gait: 'plantedFeet', skid: 'long' }`.
 - **Venues:** the large venues at the town's edge, keyed by id. Only `ballpark` exists; unknown ids are dropped. An
@@ -275,7 +277,7 @@ shows it: a record changed since is `409` and stays as it is. Each answers `{ en
 
 ## OpenRouter dialogue drafts
 
-When `OPENROUTER_API_KEY` is present, the server injects an OpenRouter resident-dialogue drafter; otherwise drafting returns `503 NOT_CONFIGURED` and the admin can still write the dialogue by hand. `OPENROUTER_MODEL` defaults to `openrouter/auto`; optional `OPENROUTER_SITE_URL` and `OPENROUTER_SITE_NAME` headers identify the application. The drafter sends only the resident's name, role, relationship, reference, and the owner's name as quoted data, asks for strict bilingual JSON grounded only in the reference, keeps at most three follow-up questions, and validates the result with the same rules as a town save. It asks reasoning models for low reasoning effort within a 6,000-token budget, because `openrouter/auto` can route to a model that otherwise spends the whole budget thinking and writes nothing; set `OPENROUTER_MODEL` to pin one model instead. A timeout, provider error, or unusable result returns `503` with the reason for the admin: OpenRouter's own message for a refused request (such as an unknown model ID), or the routed model and finish reason when the model wrote nothing.
+When `OPENROUTER_API_KEY` is present, the server injects an OpenRouter resident-dialogue drafter; otherwise drafting returns `503 NOT_CONFIGURED` and the admin can still write the dialogue by hand. `OPENROUTER_MODEL` defaults to `openrouter/auto`; optional `OPENROUTER_SITE_URL` and `OPENROUTER_SITE_NAME` headers identify the application. The drafter sends only the resident's name, role, relationship, reference, and the owner's name as quoted data, asks for strict bilingual JSON in which the resident introduces themselves from their role and relationship and every other line is grounded only in the reference, keeps at most three follow-up questions, and validates the result with the same rules as a town save. It asks reasoning models for low reasoning effort within a 6,000-token budget, because `openrouter/auto` can route to a model that otherwise spends the whole budget thinking and writes nothing; set `OPENROUTER_MODEL` to pin one model instead. A timeout, provider error, or unusable result returns `503` with the reason for the admin: OpenRouter's own message for a refused request (such as an unknown model ID), or the routed model and finish reason when the model wrote nothing.
 
 ## Town seed
 

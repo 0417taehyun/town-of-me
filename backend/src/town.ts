@@ -69,6 +69,8 @@ export interface TownResident {
 
 /** Lines prepared ahead of time from the reference, so a conversation never waits for or depends on an LLM. */
 export interface ResidentDialogue {
+  /** Answers "Who are you?" in the resident's own words; dialogue saved before it existed has none. */
+  aboutResident?: LocalizedText
   /** Answers "What kind of person is <owner>?" */
   aboutOwner: LocalizedText
   /** Questions the reference can answer, offered to the visitor after `aboutOwner`. */
@@ -76,8 +78,8 @@ export interface ResidentDialogue {
 }
 
 /**
- * `role` and `relationship` only set the resident's voice; every line comes from `reference`. `owner` is the
- * town owner's name, whom the lines are about.
+ * `role` and `relationship` give the resident's introduction and set their voice; every other line comes from
+ * `reference`. `owner` is the town owner's name, whom the lines are about.
  */
 export type ResidentDialogueSource = Pick<TownResident, 'name' | 'role' | 'relationship'> & {
   reference: LocalizedText
@@ -510,7 +512,9 @@ export function parseResidentDialogueSource(value: unknown): ResidentDialogueSou
 /** Applies to both admin-edited and generated dialogue, so a draft that passes here can always be saved. */
 export function parseResidentDialogue(value: unknown, field: string): ResidentDialogue {
   const input = inputRecord(value, field)
+  const aboutResident = optionalInput(input.aboutResident, (line) => dialogueLine(line, `${field}.aboutResident`))
   return {
+    ...(aboutResident ? { aboutResident } : {}),
     aboutOwner: dialogueLine(input.aboutOwner, `${field}.aboutOwner`),
     followUps: parseFollowUps(input.followUps, `${field}.followUps`, followUpLimit),
   }

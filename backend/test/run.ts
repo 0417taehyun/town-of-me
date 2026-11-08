@@ -5,6 +5,7 @@ import {
   createOpenRouterDialogueGenerator,
   DomainError,
   MemoryStore,
+  parseResidentDialogue,
   verifyLinkedInIdToken,
 } from '../src/index.js'
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose'
@@ -167,6 +168,10 @@ const wrongNonce = await linkedInReturning({ sub: 'linkedin-subject', name: 'Lin
 assert(wrongNonce instanceof DomainError, 'an ID token carrying a different nonce must be rejected')
 
 const draftedLines = {
+  aboutResident: {
+    ko: '안녕하세요, 저는 Maple이에요. 모퉁이 빵집에서 빵을 굽고 있어요.',
+    en: "Hi, I'm Maple. I bake bread at the corner bakery.",
+  },
   aboutOwner: { ko: '로빈은 먼저 작게 만들어 보는 사람이에요.', en: 'Robin builds a small version first.' },
   followUps: [1, 2, 3, 4].map((number) => ({
     question: { ko: `질문 ${number}`, en: `Question ${number}` },
@@ -193,8 +198,14 @@ const drafted = await createOpenRouterDialogueGenerator(
   openRouterReturning(draftedLines),
 )(dialogueSource)
 assert(
-  drafted.aboutOwner.en === draftedLines.aboutOwner.en && drafted.followUps.length === 3,
-  'drafted dialogue keeps its lines and drops follow-up questions past the limit',
+  drafted.aboutResident?.ko === draftedLines.aboutResident.ko &&
+    drafted.aboutOwner.en === draftedLines.aboutOwner.en &&
+    drafted.followUps.length === 3,
+  "drafted dialogue keeps the resident's own introduction and its lines, and drops follow-up questions past the limit",
+)
+assert(
+  !('aboutResident' in parseResidentDialogue({ aboutOwner: draftedLines.aboutOwner, followUps: [] }, 'dialogue')),
+  'dialogue saved before the introduction line existed is still valid without one',
 )
 assert(
   !String(openRouterRequest?.body).includes('openrouter-secret') &&
@@ -205,6 +216,7 @@ assert(
 for (const [label, generator] of [
   ['an empty line', openRouterReturning({ ...draftedLines, aboutOwner: { ko: ' ', en: 'Hi' } })],
   ['a missing language', openRouterReturning({ ...draftedLines, aboutOwner: { ko: '안녕하세요' } })],
+  ['an introduction in one language', openRouterReturning({ ...draftedLines, aboutResident: { ko: '', en: 'Hi' } })],
   ['text that is not JSON', async () => Response.json({ choices: [{ message: { content: 'Sure!' } }] })],
   ['a provider error', openRouterReturning(draftedLines, 401)],
 ] as const) {
