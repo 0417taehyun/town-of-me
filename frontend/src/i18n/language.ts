@@ -304,6 +304,7 @@ export const languageCopy = {
       steps: (owner: string, pet: string) => ({
         inactive: '',
         move: 'Use WASD or the touch control to take a few steps.',
+        run: 'Keep moving until you break into a run (or hold Shift), then turn sharply back the other way.',
         glance: 'Drag the scene with your mouse to glance around. On touch, drag with two fingers.',
         view: 'Use the mouse wheel, or pinch with two fingers, to adjust the view.',
         bench: 'Follow the golden arrow to a bench, then press E to sit.',
@@ -1408,6 +1409,7 @@ export const languageCopy = {
       steps: (owner: string, pet: string) => ({
         inactive: '',
         move: 'WASD 또는 터치 조작으로 몇 걸음 움직여 보세요.',
+        run: '계속 움직이면 달리기 시작해요(Shift를 눌러도 돼요). 달리다가 반대 방향으로 홱 틀어 보세요.',
         glance: '마우스로 화면을 드래그해 주변을 둘러보세요. 터치에서는 두 손가락으로 움직여 보세요.',
         view: '마우스 휠 또는 두 손가락 확대·축소로 시야를 조절해 보세요.',
         bench: '황금색 화살표가 가리키는 벤치 앞에서 E를 눌러 앉아 보세요.',

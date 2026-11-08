@@ -115,6 +115,7 @@ const FEET_BELOW_CENTER = 0.87
 const LONGEST_MOVE_SECONDS = 0.5
 const attachedGuideSteps = new Set<TownGuideStep>([
   'move',
+  'run',
   'glance',
   'view',
   'bench',
@@ -233,6 +234,7 @@ export function Player({
       return
     }
     if (event.type !== 'skid' && event.type !== 'brake') return
+    if (event.type === 'skid') onGuideEvent('skidded')
     if (!event.quiet)
       onSkid(event.type, clamp(event.speed / PLAYER_RUN_SPEED, 0.45, 1.05), motion.style === 'short' ? 'short' : 'long')
     const ahead = { x: feet.x + motion.slideDirection.x * 0.35, y: feet.y, z: feet.z + motion.slideDirection.z * 0.35 }

@@ -2,6 +2,7 @@ import type { TownGuideStep, TownObject, TownSnapshot } from './models'
 
 export type TownGuideEvent =
   | 'moved'
+  | 'skidded'
   | 'glanced'
   | 'adjusted-view'
   | 'sat-on-bench'
@@ -18,8 +19,17 @@ export function normalizeGuideStep(step: string | undefined): TownGuideStep | un
   return step as TownGuideStep | undefined
 }
 
-export function nextTownGuideStep(current: TownGuideStep, event: TownGuideEvent, hasResidents: boolean): TownGuideStep {
-  if (current === 'move' && event === 'moved') return 'glance'
+/** What a town lets a visitor practice: talk with a resident other than the owner, and skid turning at a run. */
+export type TownGuideLessons = { hasResidents: boolean; canSkid: boolean }
+
+export function nextTownGuideStep(
+  current: TownGuideStep,
+  event: TownGuideEvent,
+  { hasResidents, canSkid }: TownGuideLessons,
+): TownGuideStep {
+  if (current === 'move' && event === 'moved') return canSkid ? 'run' : 'glance'
+  // A town whose admin turned skids off after the visit reached this lesson has nothing to practice there.
+  if (current === 'run' && (event === 'skidded' || !canSkid)) return 'glance'
   if (current === 'glance' && event === 'glanced') return 'view'
   if (current === 'view' && event === 'adjusted-view') return 'bench'
   if (current === 'bench' && event === 'sat-on-bench') return 'photo'

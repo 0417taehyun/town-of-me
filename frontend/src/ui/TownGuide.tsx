@@ -4,15 +4,16 @@ import { languageCopy } from '../i18n/language'
 
 const stepNumber: Record<Exclude<TownGuideStep, 'inactive'>, number> = {
   move: 1,
-  glance: 2,
-  view: 3,
-  bench: 4,
-  photo: 5,
-  appearance: 6,
-  environment: 7,
-  pet: 8,
-  resident: 9,
-  guestbook: 10,
+  run: 2,
+  glance: 3,
+  view: 4,
+  bench: 5,
+  photo: 6,
+  appearance: 7,
+  environment: 8,
+  pet: 9,
+  resident: 10,
+  guestbook: 11,
 }
 const stepCount = Object.keys(stepNumber).length
 

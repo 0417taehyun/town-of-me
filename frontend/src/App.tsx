@@ -200,7 +200,8 @@ export function TownApp() {
       if (!town) return
       // The owner is never asked what kind of person they are, so only other residents can finish that lesson.
       const hasResidents = town.residents.some(({ id }) => id !== town.owner.residentId)
-      const nextStep = nextTownGuideStep(guideStep, event, hasResidents)
+      const canSkid = town.movement.skid !== 'off'
+      const nextStep = nextTownGuideStep(guideStep, event, { hasResidents, canSkid })
       if (nextStep === guideStep) return
       saveGuideStep(nextStep)
     },

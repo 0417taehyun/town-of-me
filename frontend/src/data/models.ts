@@ -11,6 +11,7 @@ export type TownPoint = readonly [number, number]
 export type TownGuideStep =
   | 'inactive'
   | 'move'
+  | 'run'
   | 'glance'
   | 'view'
   | 'bench'
