@@ -5,8 +5,8 @@ what changed.
 
 ## Town and editor
 
-- Decide whether the derby review's queue should show a visitor's other runs: the spec lists them for each item (§3.9,
-  leaderboard-spec.md line 601), and today it shows only their held runs and their record's best run.
+- Decide whether the derby review's queue should show a visitor's other runs; today it shows only their held runs and
+  their record's best run.
 - Editor phase 2: a scatter tool that fills an area with trees, flowers, grass, birds, or clouds at a chosen density
   (as OpenRCT2's scenery scatter tool does), and an area tool that clears one category.
 - Let route handles (residents' and the pet's) move with the keyboard, not only by dragging.
@@ -26,30 +26,21 @@ what changed.
 - Revisit an address-based guestbook limit if visitors clear cookies to flood it; today that only lengthens the review
   list.
 - Recheck that LinkedIn still rejects PKCE for web apps and omits the nonce, and restore both if that changes.
-- Choose the dialogue-drafting provider (OpenRouter today; `OPENROUTER_MODEL` can select OpenAI models) and check draft
-  quality against real references.
 - Decide what happens after an account is deleted (`deleted_at`): erasure or anonymization, retention periods, and
   database backup and restore.
+- `toWebRequest` in `backend/server.mjs` resolves `request.url` as a relative reference, so a leading `//` becomes a
+  host name. nginx refuses such addresses today; build the URL from the path so the backend is safe on its own.
 
-## Deployment
+## Deployment and devices
 
-- Deploy with `compose.production.yaml` ([docker/README.md](docker/README.md#deploying)); add a deployment workflow if
-  updating by hand becomes a chore. After the first deployment, add migrations instead of editing applied ones.
-- `toWebRequest` in `backend/server.mjs` resolves `request.url` as a relative reference, so a leading `//` becomes a host
-  name. nginx refuses such addresses today; build the URL from the path so the backend is safe on its own.
+- Add a deployment workflow if updating the server by hand ([docker/README.md](docker/README.md#deploying)) becomes a
+  chore.
 - `/privacy` publishes the privacy, retention, and asset-credit notices; what is left is a legal check of its wording,
   including how it names AWS, which handles visitors' data.
-- Test admin sign-in end to end with the registered LinkedIn redirect URLs. Locally, use `localhost` rather than
-  `127.0.0.1` so the cookie host matches.
 - On real desktop and mobile devices, check that admin saves reach visitors, the guestbook write, review, and publish
   cycle, and resident conversations. Also measure frame pacing while walking, running, moving the camera, and talking,
   and try keyboard-only use, reduced motion, muted audio, the WebGL fallback, and the editor's touch controls on a real
   tablet and phone.
-
-## Publishing the repository
-
-- Enable private vulnerability reporting, which `SECURITY.md` relies on, and Dependabot security updates, since
-  `.github/dependabot.yml` only covers version updates.
-- Add a `main` ruleset that blocks force pushes and deletion and requires `Module scope`; the other checks run only when
-  their paths change, so requiring them would leave unrelated pull requests waiting.
-- Require approval before Actions run on pull requests from outside contributors.
+- Phones: once a real device has been profiled, cut draw calls further by instancing lamps and houses (each is its own
+  mesh today, against the rendering rules in ARCHITECTURE.md) and by sharing materials or merging parts in characters
+  (17 or more meshes each). Drop the HUD's `backdrop-filter` on touch devices if compositing shows up in the profile.
