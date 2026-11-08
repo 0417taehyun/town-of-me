@@ -1680,21 +1680,40 @@ input[type='range']::-webkit-slider-thumb {
   width: 100%;
   margin-top: 11px;
 }
+/* The lesson itself is what a first-time visitor must read, so it is the largest, darkest text on an opaque card. */
 .town-guide.town-guide-player {
   position: relative;
   top: auto;
   left: auto;
-  width: 360px;
+  width: 430px;
+  background: var(--cream-solid);
 }
 .town-guide-player small {
-  font-size: 0.78rem;
+  font-size: 0.86rem;
 }
 .town-guide-player strong {
   font-size: 1.12rem;
 }
 .town-guide-player p {
-  font-size: 1.02rem;
-  line-height: 1.5;
+  color: var(--ink);
+  font-size: 1.36rem;
+  font-weight: 700;
+  line-height: 1.42;
+  word-break: keep-all;
+}
+.icon-button.is-guided {
+  background: #fff1bf;
+  box-shadow:
+    0 0 0 3px #e9b93c,
+    0 7px 22px rgba(47, 72, 63, 0.12);
+  animation: guided-control 1.3s ease-in-out infinite;
+}
+@keyframes guided-control {
+  50% {
+    box-shadow:
+      0 0 0 9px rgba(233, 185, 60, 0.3),
+      0 7px 22px rgba(47, 72, 63, 0.12);
+  }
 }
 .interaction-prompt {
   position: absolute;
@@ -2346,6 +2365,12 @@ input[type='range']::-webkit-slider-thumb {
     top: 142px;
     left: 14px;
     width: min(330px, calc(100vw - 28px));
+  }
+  .town-guide.town-guide-player {
+    width: min(360px, calc(100vw - 32px));
+  }
+  .town-guide-player p {
+    font-size: 1.24rem;
   }
   .drawer {
     top: 96px;

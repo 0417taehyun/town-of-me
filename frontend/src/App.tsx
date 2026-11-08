@@ -21,7 +21,7 @@ import { languageCopy } from './i18n/language'
 import type { DialogueMessage, Interaction, InteractionRequest } from './scene/playerInteraction'
 import type { DayPeriod } from './scene/environment/dayCycle'
 import type { Season } from './scene/environment/season'
-import { nextTownGuideStep, type TownGuideEvent } from './data/townGuide'
+import { guidedHudControl, nextTownGuideStep, type TownGuideEvent } from './data/townGuide'
 import { Dialogue, InteractionPrompt, Toast } from './ui/OverlayUI'
 import { useDialogueReveal } from './ui/useDialogueReveal'
 import { EntryOverlay } from './ui/EntryOverlay'
@@ -470,9 +470,11 @@ export function TownApp() {
           <Hud
             language={language}
             playerName={profile.name}
+            guidedControl={guidedHudControl(guideStep)}
             onCharacter={() => {
               setHudPanel(null)
               setCreatorOpen(true)
+              handleGuideEvent('opened-character')
             }}
             townName={town.name}
             ownerName={ownerName}
@@ -488,7 +490,10 @@ export function TownApp() {
             seasonLabel={copy.seasons[season]}
             previewingEnvironment={previewingEnvironment}
             onLanguageChange={setLanguage}
-            onEnvironment={() => setHudPanel((current) => (current === 'environment' ? null : 'environment'))}
+            onEnvironment={() => {
+              if (hudPanel !== 'environment') handleGuideEvent('opened-environment')
+              setHudPanel((current) => (current === 'environment' ? null : 'environment'))
+            }}
             onHelp={() => setHudPanel((current) => (current === 'help' ? null : 'help'))}
             onMap={() => {
               recordSiteEvent('map-opened')

@@ -9,7 +9,17 @@ export type Vec3 = { x: number; y: number; z: number }
 export type TownPoint = readonly [number, number]
 
 export type TownGuideStep =
-  'inactive' | 'move' | 'glance' | 'view' | 'bench' | 'photo' | 'pet' | 'resident' | 'guestbook'
+  | 'inactive'
+  | 'move'
+  | 'glance'
+  | 'view'
+  | 'bench'
+  | 'photo'
+  | 'appearance'
+  | 'environment'
+  | 'pet'
+  | 'resident'
+  | 'guestbook'
 
 // The kinds this build can draw. The backend accepts any identifier, so a town may hold kinds an older build drops.
 export const TOWN_OBJECT_TYPES = [

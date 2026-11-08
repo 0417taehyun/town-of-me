@@ -6,6 +6,8 @@ export type TownGuideEvent =
   | 'adjusted-view'
   | 'sat-on-bench'
   | 'tried-photo'
+  | 'opened-character'
+  | 'opened-environment'
   | 'greeted-pet'
   | 'heard-owner-reference'
   | 'visited-guestbook'
@@ -21,12 +23,24 @@ export function nextTownGuideStep(current: TownGuideStep, event: TownGuideEvent,
   if (current === 'glance' && event === 'glanced') return 'view'
   if (current === 'view' && event === 'adjusted-view') return 'bench'
   if (current === 'bench' && event === 'sat-on-bench') return 'photo'
-  if (current === 'photo' && event === 'tried-photo') return 'pet'
+  if (current === 'photo' && event === 'tried-photo') return 'appearance'
+  if (current === 'appearance' && event === 'opened-character') return 'environment'
+  if (current === 'environment' && event === 'opened-environment') return 'pet'
   if (current === 'pet' && event === 'greeted-pet' && !hasResidents) return 'guestbook'
   if (current === 'pet' && event === 'greeted-pet') return 'resident'
   if (current === 'resident' && event === 'heard-owner-reference') return 'guestbook'
   if (current === 'guestbook' && event === 'visited-guestbook') return 'inactive'
   return current
+}
+
+export type GuidedHudControl = 'photo' | 'character' | 'environment'
+
+/** The HUD button the current lesson asks the visitor to press, which the HUD marks so they can find it. */
+export function guidedHudControl(step: TownGuideStep): GuidedHudControl | null {
+  if (step === 'photo') return 'photo'
+  if (step === 'appearance') return 'character'
+  if (step === 'environment') return 'environment'
+  return null
 }
 
 export function getGuideBench(town: TownSnapshot): TownObject | null {

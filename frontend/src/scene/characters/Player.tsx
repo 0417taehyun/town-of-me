@@ -112,6 +112,8 @@ const attachedGuideSteps = new Set<TownGuideStep>([
   'view',
   'bench',
   'photo',
+  'appearance',
+  'environment',
   'pet',
   'resident',
   'guestbook',

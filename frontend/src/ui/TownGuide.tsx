@@ -8,10 +8,13 @@ const stepNumber: Record<Exclude<TownGuideStep, 'inactive'>, number> = {
   view: 3,
   bench: 4,
   photo: 5,
-  pet: 6,
-  resident: 7,
-  guestbook: 8,
+  appearance: 6,
+  environment: 7,
+  pet: 8,
+  resident: 9,
+  guestbook: 10,
 }
+const stepCount = Object.keys(stepNumber).length
 
 /** `ownerName` and `petName` are the town's names in `language`. */
 export function TownGuide({
@@ -35,7 +38,7 @@ export function TownGuide({
         🧭
       </div>
       <div>
-        <small>{copy.progress(stepNumber[step], 8)}</small>
+        <small>{copy.progress(stepNumber[step], stepCount)}</small>
         <strong>{copy.title}</strong>
         <p>{copy.steps(ownerName, petName)[step]}</p>
       </div>

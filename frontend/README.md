@@ -31,8 +31,9 @@ npm run build
 - **Language:** Korean or English, following the browser and switchable at any time. The tab remembers the choice, so
   the ballpark at `/baseball` and the town open in the same language.
 - **The town:** loaded from `GET /v1/town`. If the request fails, visitors see `Try again`; there is no built-in
-  town. A short guide walks first-time visitors through moving, looking around, sitting, the pet, residents, and the
-  guestbook.
+  town. A short guide walks first-time visitors through moving, looking around, sitting, taking a photo, changing
+  their character and the season or time of day from the top-right buttons (marked while their lesson is on), the
+  pet, residents, and the guestbook.
 - **Residents:** walk their routes, sit on benches, and chat with each other. Talking to one offers "Who are you?",
   answered from their role, relationship with the owner, and LinkedIn link, and "What kind of person is <owner>?",
   answered with lines the admin prepared from their reference. Up to three follow-up questions follow, never repeating

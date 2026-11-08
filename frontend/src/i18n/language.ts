@@ -308,6 +308,8 @@ export const languageCopy = {
         view: 'Use the mouse wheel, or pinch with two fingers, to adjust the view.',
         bench: 'Follow the golden arrow to a bench, then press E to sit.',
         photo: 'While seated, press C or tap the camera button to save a photo.',
+        appearance: 'Tap the 🪞 button at the top right to change how your character looks.',
+        environment: 'Tap the 🌤️ button at the top right to try another season or time of day.',
         pet: `Meet ${pet}, the town corgi, and press G to say hello.`,
         resident: `Meet a resident and ask, “What kind of person is ${owner}?”`,
         guestbook:
@@ -1407,6 +1409,8 @@ export const languageCopy = {
         view: '마우스 휠 또는 두 손가락 확대·축소로 시야를 조절해 보세요.',
         bench: '황금색 화살표가 가리키는 벤치 앞에서 E를 눌러 앉아 보세요.',
         photo: '벤치에 앉은 채 C를 누르거나 카메라 버튼을 눌러 사진을 저장해 보세요.',
+        appearance: '오른쪽 위 🪞 버튼을 눌러 내 캐릭터의 모습을 바꿔 보세요.',
+        environment: '오른쪽 위 🌤️ 버튼을 눌러 다른 계절과 시간대로 바꿔 보세요.',
         pet: `마을의 귀염둥이 웰시코기 ${withKoreanParticle(pet, '을', '를')} 만나 G를 눌러 인사해 보세요.`,
         resident: `주민 한 명을 만나 “${withKoreanParticle(owner, '은', '는')} 어떤 사람이에요?”를 선택해 물어보세요.`,
         guestbook: '황금색 길을 따라 방명록으로 가서 E를 눌러 보세요. 글을 남기거나 그냥 닫아도 괜찮아요.',

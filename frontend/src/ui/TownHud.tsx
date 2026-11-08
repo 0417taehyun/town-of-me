@@ -1,4 +1,5 @@
 import type { MusicStatus } from '../audio/cozyMusic'
+import type { GuidedHudControl } from '../data/townGuide'
 import type { AppLanguage } from '../i18n/language'
 import { languageCopy } from '../i18n/language'
 import { dayPeriods, type DayPeriod } from '../scene/environment/dayCycle'
@@ -28,6 +29,8 @@ export interface HudProps {
   periodLabel: string
   seasonLabel: string
   previewingEnvironment: boolean
+  /** The button the town guide is pointing at, marked so a first-time visitor finds it. */
+  guidedControl: GuidedHudControl | null
   onCharacter: () => void
   onEnvironment: () => void
   onHelp: () => void
@@ -54,6 +57,7 @@ export function Hud({
   periodLabel,
   seasonLabel,
   previewingEnvironment,
+  guidedControl,
   onEnvironment,
   onHelp,
   onMap,
@@ -62,6 +66,7 @@ export function Hud({
   onLanguageChange,
 }: HudProps) {
   const copy = languageCopy[language].hud
+  const guided = (control: GuidedHudControl) => (guidedControl === control ? 'is-guided' : '')
   return (
     <>
       <div className="town-chip">
@@ -81,7 +86,7 @@ export function Hud({
       <nav className="hud-actions" aria-label={copy.controlsLabel}>
         <LanguageSelect language={language} className="hud-language-select" onChange={onLanguageChange} />
         <button
-          className="icon-button player-button"
+          className={`icon-button player-button ${guided('character')}`}
           type="button"
           onClick={onCharacter}
           aria-label={`${copy.editCharacter}: ${playerName}`}
@@ -103,7 +108,7 @@ export function Hud({
           ?
         </button>
         <button
-          className="icon-button"
+          className={`icon-button ${guided('photo')}`}
           type="button"
           aria-label={copy.takePhoto}
           title={copy.takePhoto}
@@ -112,7 +117,7 @@ export function Hud({
           <span aria-hidden="true">📷</span>
         </button>
         <button
-          className="icon-button"
+          className={`icon-button ${guided('environment')}`}
           type="button"
           aria-label={copy.environment}
           aria-pressed={environmentOpen}
