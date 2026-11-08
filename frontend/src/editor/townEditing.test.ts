@@ -222,11 +222,17 @@ describe('town editing', () => {
     expect(getLayoutProblems(halfWritten)).toEqual([{ id: 'maple', problem: 'resident-texts' }])
     const blankLine = updateResident(SAMPLE_TOWN, 'maple', {
       dialogue: {
+        aboutResident: null,
         aboutOwner: { ko: '좋아요', en: 'Great' },
         followUps: [{ question: { ko: '', en: '' }, answer: { ko: '네', en: 'Yes' } }],
       },
     })
     expect(getLayoutProblems(blankLine)).toEqual([{ id: 'maple', problem: 'resident-dialogue' }])
+    const written = { aboutOwner: { ko: '좋아요', en: 'Great' }, followUps: [] }
+    const withIntroduction = (aboutResident: { ko: string; en: string }) =>
+      getLayoutProblems(updateResident(SAMPLE_TOWN, 'maple', { dialogue: { ...written, aboutResident } }))
+    expect(withIntroduction({ ko: '', en: ' ' })).toEqual([])
+    expect(withIntroduction({ ko: '안녕하세요', en: '' })).toEqual([{ id: 'maple', problem: 'resident-dialogue' }])
   })
 
   it('switches between the top view and visitor eye level without losing the spot or the heading', () => {

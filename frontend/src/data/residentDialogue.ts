@@ -79,7 +79,9 @@ export function answerResidentQuestion(
 export function answerText(resident: Speaker, questionId: ResidentQuestionId, language: AppLanguage, owner: string) {
   const copy = languageCopy[language].residentDialogue
   const dialogue = resident.dialogue
-  if (questionId === 'about-resident') return introduceResident(resident, language, owner)
+  if (questionId === 'about-resident') {
+    return dialogue?.aboutResident?.[language].trim() || introduceResident(resident, language, owner)
+  }
   if (questionId === 'about-owner') return dialogue?.aboutOwner[language] ?? copy.noReference(owner)
   return followUpAnswer(dialogue?.followUps ?? [], questionId, language) ?? copy.noReference(owner)
 }

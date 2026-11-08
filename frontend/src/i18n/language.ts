@@ -487,7 +487,7 @@ export const languageCopy = {
       role: 'Role',
       relationship: (owner: string) => `Relationship with ${owner}`,
       introductionHint:
-        'Asked “Who are you?”, the resident introduces themselves with their name, role, relationship, and LinkedIn link.',
+        'Asked “Who are you?”, the resident answers with the introduction drafted below, or else with their name, role, and relationship, and offers their LinkedIn link.',
       reference: (owner: string) => `Reference about ${owner}`,
       textLanguages: { ko: 'Korean', en: 'English' },
       draftHint: (owner: string) =>
@@ -499,6 +499,7 @@ export const languageCopy = {
       writeByHand: 'Write by hand',
       draftError: 'The dialogue could not be drafted. Please try again.',
       draftUnavailable: (reason: string) => `The dialogue could not be drafted. ${reason}`,
+      aboutResidentLine: 'Answer to “Who are you?”',
       aboutOwner: (owner: string) => `Answer to “What kind of person is ${owner}?”`,
       followUpQuestion: (number: number) => `Follow-up question ${number}`,
       followUpAnswer: (number: number) => `Answer to follow-up ${number}`,
@@ -1585,7 +1586,8 @@ export const languageCopy = {
       conversation: '대화',
       role: '역할',
       relationship: (owner: string) => `${withKoreanParticle(owner, '과', '와')}의 관계`,
-      introductionHint: '“당신은 누구예요?”라고 물으면 주민은 이름, 역할, 관계, LinkedIn 링크로 자기소개를 해요.',
+      introductionHint:
+        '“당신은 누구예요?”라고 물으면 주민은 아래 대화의 자기소개로 답하고, 자기소개가 없으면 이름, 역할, 관계로 답해요. LinkedIn 링크도 함께 보여요.',
       reference: (owner: string) => `${owner}에 대한 Reference`,
       textLanguages: { ko: '한국어', en: '영어' },
       draftHint: (owner: string) =>
@@ -1597,6 +1599,7 @@ export const languageCopy = {
       writeByHand: '직접 쓰기',
       draftError: '대화를 만들지 못했어요. 다시 시도해 주세요.',
       draftUnavailable: (reason: string) => `대화를 만들지 못했어요. ${reason}`,
+      aboutResidentLine: '“당신은 누구예요?”에 대한 답',
       aboutOwner: (owner: string) => `“${withKoreanParticle(owner, '은', '는')} 어떤 사람이에요?”에 대한 답`,
       followUpQuestion: (number: number) => `추가 질문 ${number}`,
       followUpAnswer: (number: number) => `추가 질문 ${number}에 대한 답`,

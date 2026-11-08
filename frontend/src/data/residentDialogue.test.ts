@@ -8,6 +8,7 @@ import {
 } from './residentDialogue'
 
 const dialogue: ResidentDialogue = {
+  aboutResident: null,
   aboutOwner: { ko: '로빈은 먼저 만들어 봐요.', en: 'Robin builds first.' },
   followUps: [
     {
@@ -71,6 +72,17 @@ describe('resident dialogue', () => {
     const introduction = answerResidentQuestion(newcomer, 'about-resident', [], 'en', 'Robin')
     expect(introduction.text).toBe("Hi, I'm Pip.")
     expect(introduction.links).toEqual([])
+  })
+
+  it('introduces themselves in their own words once the dialogue has an introduction', () => {
+    const aboutResident = {
+      ko: '안녕하세요, 저는 Juno예요. 마을 정원을 가꿔요.',
+      en: "Hi, I'm Juno. I tend the town garden.",
+    }
+    const introduced = { ...juno, dialogue: { ...dialogue, aboutResident } }
+    const reply = answerResidentQuestion(introduced, 'about-resident', [], 'ko', '로빈')
+    expect(reply.text).toBe(aboutResident.ko)
+    expect(reply.links.map(({ href }) => href)).toEqual(['https://www.linkedin.com/in/juno-example'])
   })
 
   it('never links to anything but a LinkedIn profile', () => {

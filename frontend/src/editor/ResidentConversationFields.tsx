@@ -22,6 +22,7 @@ const ownerQuestionLimit = 5
 const textLanguages = ['ko', 'en'] as const
 
 const emptyDialogue: ResidentDialogue = {
+  aboutResident: EMPTY_LOCALIZED_TEXT,
   aboutOwner: EMPTY_LOCALIZED_TEXT,
   followUps: [],
 }
@@ -183,6 +184,14 @@ export function DialogueFields({
 }) {
   return (
     <>
+      <LocalizedField
+        label={copy.aboutResidentLine}
+        value={dialogue.aboutResident ?? EMPTY_LOCALIZED_TEXT}
+        maxLength={dialogueLineLimit}
+        copy={copy}
+        edit={edit}
+        onChange={(aboutResident) => onChange({ ...dialogue, aboutResident })}
+      />
       <LocalizedField
         label={copy.aboutOwner(ownerName)}
         value={dialogue.aboutOwner}

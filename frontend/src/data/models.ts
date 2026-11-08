@@ -100,6 +100,8 @@ export interface TownResident {
 export type LocalizedText = Record<AppLanguage, string>
 
 export interface ResidentDialogue {
+  /** Answers "Who are you?" in the resident's own words; `null` falls back to their name, role, and relationship. */
+  aboutResident: LocalizedText | null
   /** Answers "What kind of person is <owner>?" */
   aboutOwner: LocalizedText
   /** Questions the reference can answer, offered after `aboutOwner`. */

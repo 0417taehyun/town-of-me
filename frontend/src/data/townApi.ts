@@ -134,6 +134,10 @@ export function parseFollowUp(value: unknown, label: string): ResidentDialogue['
 export function parseResidentDialogue(value: unknown, label: string): ResidentDialogue {
   const input = requireRecord(value, label)
   return {
+    aboutResident:
+      input.aboutResident === undefined || input.aboutResident === null
+        ? null
+        : parseLocalizedText(input.aboutResident, `${label}.aboutResident`),
     aboutOwner: parseLocalizedText(input.aboutOwner, `${label}.aboutOwner`),
     followUps: requireList(input.followUps, `${label}.followUps`).map((item, index) =>
       parseFollowUp(item, `${label}.followUps[${index}]`),
@@ -309,6 +313,11 @@ export function unlessBlank(source: LocalizedText) {
   return source.ko.trim() || source.en.trim() ? source : null
 }
 
+/** An introduction left empty in both languages is saved as none, so the resident falls back to their own fields. */
+export function serializeDialogue(dialogue: ResidentDialogue) {
+  return { ...dialogue, aboutResident: dialogue.aboutResident && unlessBlank(dialogue.aboutResident) }
+}
+
 /** The save body without `baseRevision`; residents keep only how they look, never a visitor's identity fields. */
 export function serializeTownLayout(town: TownSnapshot) {
   return {
@@ -326,14 +335,17 @@ export function serializeTownLayout(town: TownSnapshot) {
     movement: town.movement,
     venues: town.venues,
     objects: town.objects.map((object) => ({ ...object, color: object.color ?? null })),
-    residents: town.residents.map(({ profile, role, relationship, linkedInProfileUrl, reference, ...resident }) => ({
-      ...resident,
-      appearance: profileAppearance(profile),
-      role: unlessBlank(role),
-      relationship: unlessBlank(relationship),
-      linkedInProfileUrl: linkedInProfileUrl || null,
-      reference: unlessBlank(reference),
-    })),
+    residents: town.residents.map(
+      ({ profile, role, relationship, linkedInProfileUrl, reference, dialogue, ...resident }) => ({
+        ...resident,
+        appearance: profileAppearance(profile),
+        role: unlessBlank(role),
+        relationship: unlessBlank(relationship),
+        linkedInProfileUrl: linkedInProfileUrl || null,
+        reference: unlessBlank(reference),
+        dialogue: dialogue && serializeDialogue(dialogue),
+      }),
+    ),
   }
 }
 

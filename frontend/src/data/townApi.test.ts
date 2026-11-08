@@ -7,11 +7,13 @@ import {
   fetchTownLayout,
   parseTownLayout,
   saveTownLayout,
+  serializeDialogue,
   serializeTownLayout,
   TownSaveError,
 } from './townApi'
 
 const dialogue = {
+  aboutResident: { ko: '안녕하세요, 저는 메이플이에요. 빵을 구워요.', en: "Hi, I'm Maple. I bake bread." },
   aboutOwner: { ko: '로빈은 먼저 만들어 봐요.', en: 'Robin builds first.' },
   followUps: [
     {
@@ -223,6 +225,7 @@ describe('town layout API boundary', () => {
     expect(sentSecond.role).toBeNull()
     expect(sentSecond.linkedInProfileUrl).toBeNull()
     expect(sentSecond.dialogue).toBeNull()
+    expect(serializeDialogue({ ...dialogue, aboutResident: { ko: ' ', en: '' } }).aboutResident).toBeNull()
     const loaded = parseTownLayout({ ...serializeTownLayout(town), revision: 2 })
     expect(loaded.residents[0]).toMatchObject({ dialogue, relationship: first.relationship })
     expect(loaded.residents[1]).toMatchObject({ role: { ko: '', en: '' }, dialogue: null })

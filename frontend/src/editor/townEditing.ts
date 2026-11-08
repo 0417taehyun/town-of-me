@@ -463,6 +463,13 @@ export function dialogueLines(dialogue: ResidentDialogue) {
   return [dialogue.aboutOwner, ...dialogue.followUps.flatMap(({ question, answer }) => [question, answer])]
 }
 
+/** Every line needs both languages, except the resident's own introduction, which may also be left out entirely. */
+export function isUnfinishedDialogue(dialogue: ResidentDialogue) {
+  return (
+    dialogueLines(dialogue).some(isBlank) || Boolean(dialogue.aboutResident && isHalfWritten(dialogue.aboutResident))
+  )
+}
+
 /** The backend needs the reference in both languages to draft what the resident says about the town owner. */
 export function canDraftDialogue(resident: TownResident) {
   return Boolean(resident.name.trim()) && !isBlank(resident.reference)
@@ -473,7 +480,7 @@ export function getResidentProblems(resident: TownResident): LayoutProblemKind[]
     [!resident.name.trim(), 'resident-name'],
     [Boolean(linkedInProfileUrlError(resident.linkedInProfileUrl ?? '')), 'resident-linkedin'],
     [[resident.role, resident.relationship, resident.reference].some(isHalfWritten), 'resident-texts'],
-    [Boolean(resident.dialogue && dialogueLines(resident.dialogue).some(isBlank)), 'resident-dialogue'],
+    [Boolean(resident.dialogue && isUnfinishedDialogue(resident.dialogue)), 'resident-dialogue'],
   ]
   return problems.filter(([failed]) => failed).map(([, problem]) => problem)
 }
