@@ -37,6 +37,7 @@ import { TownGuideMarker } from './TownGuideMarker'
 import { groupTownObjects } from './townObjectGroups'
 import type { TownLayerProps } from './objects/townObjectKind'
 import { installWorldCurve } from './worldCurve'
+import { isTouchOnlyDevice } from './renderQuality'
 import { getGroundRoads, getStatueSpots, getVenueCollision, getVenueEntrances } from './venues/venuePlacements'
 
 // Before any town material compiles; the editor's scene renders inside this one, so `/admin` bends too.
@@ -153,6 +154,7 @@ export function TownScene({
   const occupiedSeat = useRef<string | null>(null)
   // The fog and background start in the opening period's colors; Atmosphere fades them after that.
   const [openingLight] = useState(() => dayPeriods[period])
+  const [touchOnly] = useState(isTouchOnlyDevice)
   const dayChange = useDayChange(period, reducedMotion)
   const lampsOn = useLampsOn(dayPeriods[period].lamps, reducedMotion)
   const seasonChange = useSeasonChange(season, reducedMotion)
@@ -202,7 +204,7 @@ export function TownScene({
     <KeyboardControls map={controlsEnabled ? keyboardMap : []}>
       <GraphicsCanvas
         language={language}
-        shadows="percentage"
+        shadows={touchOnly ? false : 'percentage'}
         camera={{ fov: settings.fov, near: 0.1, far: 300 }}
         gl={{ antialias: true, alpha: false, powerPreference: 'high-performance', toneMapping: NeutralToneMapping }}
         aria-label={`Interactive 3D view of ${town.name}`}

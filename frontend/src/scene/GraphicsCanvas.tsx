@@ -2,10 +2,8 @@ import { PerformanceMonitor } from '@react-three/drei'
 import { Canvas, type CanvasProps } from '@react-three/fiber'
 import { Component, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { type AppLanguage, languageCopy } from '../i18n/language'
+import { FRAME_RATE_BOUNDS, PIXEL_RATIO_FACTOR, pixelRatioFor } from './renderQuality'
 import { CHROME_GRAPHICS_SETTINGS, copyStatus, copyText, supportsWebGL } from './webglSupport'
-
-/** The sharpest pixel ratio a scene renders at; devices that cannot hold the frame rate drop to 1. */
-const SHARP_PIXEL_RATIO = 1.35
 
 /**
  * A button that copies `address`, the address itself to select and copy by hand, and a status line: `messages.untried`
@@ -83,8 +81,9 @@ class GraphicsBoundary extends Component<
 /**
  * A 3D canvas that shows the graphics fallback in `language` when WebGL 2 is missing, lost, or fails while drawing,
  * and then calls `onUnavailable`. The fallback replaces the canvas rather than sitting inside it as canvas fallback
- * content, which Chrome hands to screen readers even while WebGL works. Without a fixed `dpr`, it renders up to
- * SHARP_PIXEL_RATIO and drops to 1 while the device cannot hold the frame rate.
+ * content, which Chrome hands to screen readers even while WebGL works. Without a fixed `dpr`, it starts halfway between
+ * a pixel ratio of 1 and the screen's own (at most 2), then steps a quarter up while the device holds 60 fps and a
+ * quarter down while it cannot. After several changes it settles where it is, so the canvas stops resizing.
  */
 export function GraphicsCanvas({
   language,
@@ -98,7 +97,12 @@ export function GraphicsCanvas({
   const [supported, setSupported] = useState(() =>
     supportsWebGL(() => document.createElement('canvas').getContext('webgl2')),
   )
-  const [sharpest, setSharpest] = useState(SHARP_PIXEL_RATIO)
+  // Read through globalThis because the fallback is also rendered to static markup, where there is no window.
+  const [pixelRatio, setPixelRatio] = useState(() =>
+    pixelRatioFor(PIXEL_RATIO_FACTOR.start, globalThis.devicePixelRatio ?? 1),
+  )
+  const stepPixelRatio = ({ factor }: { factor: number }) =>
+    setPixelRatio(pixelRatioFor(factor, window.devicePixelRatio))
   const canvas = useRef<HTMLCanvasElement | null>(null)
   const contextLost = useCallback((event: Event) => {
     event.preventDefault()
@@ -114,7 +118,7 @@ export function GraphicsCanvas({
     <GraphicsBoundary language={language} preview={preview} onFailed={() => setSupported(false)}>
       <Canvas
         {...props}
-        dpr={dpr ?? [1, sharpest]}
+        dpr={dpr ?? pixelRatio}
         onCreated={(state) => {
           canvas.current = state.gl.domElement
           canvas.current.addEventListener('webglcontextlost', contextLost)
@@ -123,10 +127,14 @@ export function GraphicsCanvas({
       >
         {!dpr && (
           <PerformanceMonitor
-            flipflops={3}
-            onDecline={() => setSharpest(1)}
-            onIncline={() => setSharpest(SHARP_PIXEL_RATIO)}
-            onFallback={() => setSharpest(1)}
+            factor={PIXEL_RATIO_FACTOR.start}
+            step={PIXEL_RATIO_FACTOR.step}
+            bounds={() => FRAME_RATE_BOUNDS}
+            flipflops={6}
+            // Not onChange: drei compares against a last factor that every render resets to 0, so a step down to 0
+            // would never arrive there and a slow phone would stay at 1.25.
+            onIncline={stepPixelRatio}
+            onDecline={stepPixelRatio}
           />
         )}
         {children}

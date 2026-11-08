@@ -111,7 +111,9 @@ copies of the variant lists, so adding a variant never changes how existing obje
 - `scene/worldCurve.ts` bends every material's vertices in a shared shader chunk once `TownScene.tsx` calls
   `installWorldCurve()`; importing the module alone does not, so the ballpark stays flat. Back-side materials (sky, sun,
   stars) skip it, and a large flat mesh needs enough subdivisions to bend smoothly.
-- The pixel ratio adapts to the frame rate in every `GraphicsCanvas` given no fixed `dpr` (the town and the derby).
+- The pixel ratio adapts to the frame rate in every `GraphicsCanvas` given no fixed `dpr` (the town and the derby): it
+  steps a quarter at a time between 1 and the screen's own ratio, at most 2, aiming at 60 fps (`scene/renderQuality.ts`).
+  Phones and tablets skip the town's shadow map, which doubled their draw calls; contact shadows ground everything there.
   A canvas whose WebGL 2 is missing, lost, or fails while drawing shows the fallback and calls `onUnavailable`.
 
 ### `baseball/`

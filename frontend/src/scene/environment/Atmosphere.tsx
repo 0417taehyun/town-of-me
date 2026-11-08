@@ -26,12 +26,23 @@ import { Fireflies, Stars } from './NightLights'
 import { seasonClock, type SeasonChange } from './seasonTransition'
 import { advanceAtmosphereTime, LEAF_DROP_CAPACITY, SEASONAL_PARTICLE_COUNT } from './atmosphereMotion'
 
-/** Petals, leaves, or snowflakes; the frame loop sets how many show. */
+/**
+ * Petals, leaves, or snowflakes; the frame loop sets how many show. A flat disc shows one face at a time, so a single
+ * pass looks the same, and spares three.js from choosing a shader program twice per frame for a double-sided
+ * transparent material.
+ */
 export function FallingParticles({ ref, capacity }: { ref: Ref<InstancedMesh>; capacity: number }) {
   return (
     <instancedMesh ref={ref} args={[undefined, undefined, capacity]} count={0} frustumCulled={false} renderOrder={2}>
       <circleGeometry args={[1, 8]} />
-      <meshBasicMaterial transparent opacity={0.86} side={DoubleSide} toneMapped={false} depthWrite={false} />
+      <meshBasicMaterial
+        transparent
+        opacity={0.86}
+        side={DoubleSide}
+        forceSinglePass
+        toneMapped={false}
+        depthWrite={false}
+      />
     </instancedMesh>
   )
 }
