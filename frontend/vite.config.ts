@@ -1,6 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
-import { sharePreviewTags } from './sharePreview'
+import { sharePreviewTags } from './sharePreview.ts'
 
 export default defineConfig(({ mode }) => {
   const environment = loadEnv(mode, '.', ['BACKEND_', 'SITE_'])
