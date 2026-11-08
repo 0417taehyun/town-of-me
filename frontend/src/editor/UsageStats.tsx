@@ -292,7 +292,7 @@ export function UsageStatsBody({
   )
 }
 
-/** Anonymous totals of what people do inside the town. Nothing here identifies anyone. */
+/** Anonymous totals of what people do inside the town. Cloudflare covers visits, and nothing here identifies anyone. */
 export function UsageStats({ language, onClose }: { language: AppLanguage; onClose: () => void }) {
   const copy = usageStatsCopy[language]
   const shellCopy = languageCopy[language].usageStats

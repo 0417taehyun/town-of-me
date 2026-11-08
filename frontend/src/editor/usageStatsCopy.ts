@@ -4,7 +4,8 @@
 
 export const usageStatsCopy = {
   en: {
-    intro: 'This shows what people do inside the town.',
+    intro:
+      'Visits, page views, and where people come from are in Cloudflare Web Analytics. This shows what it cannot: what people do inside the town.',
     caveat:
       'These are anonymous daily totals and nothing more. Nothing identifies a visitor, so anyone can inflate them, a step can be larger than the one before it, and none of it can be read as people. Most count once per browser tab, and browsers that send Global Privacy Control or Do Not Track are not counted.',
     range: (from: string, to: string) => `${from} to ${to}, by days in Korea`,
@@ -47,7 +48,8 @@ export const usageStatsCopy = {
     records: 'Records',
   },
   ko: {
-    intro: '마을 안에서 사람들이 하는 일을 보여 줘요.',
+    intro:
+      '방문 수, 페이지 조회 수, 유입 경로는 Cloudflare Web Analytics에 있어요. 여기는 그쪽에서 볼 수 없는, 마을 안에서 하는 일을 보여 줘요.',
     caveat:
       '익명의 하루 합계일 뿐이에요. 방문자를 구별하는 것이 없어서 누구나 숫자를 부풀릴 수 있고, 뒤 단계가 앞 단계보다 클 수도 있으며, 사람 수로 읽으면 안 돼요. 대부분 브라우저 탭마다 한 번만 세고, Global Privacy Control이나 Do Not Track을 보내는 브라우저는 세지 않아요.',
     range: (from: string, to: string) => `${from}부터 ${to}까지, 한국 날짜 기준`,

@@ -19,7 +19,7 @@ export type TabEvent =
   | 'ballpark-entered'
 
 type TabStore = Pick<Storage, 'getItem' | 'setItem'>
-type PrivacySignals = { globalPrivacyControl?: boolean; doNotTrack?: string | null }
+export type PrivacySignals = { globalPrivacyControl?: boolean; doNotTrack?: string | null }
 
 const TOWN_PATH = '/'
 const COUNTED_KEY_PREFIX = 'town-of-me-counted:'
