@@ -1,0 +1,39 @@
+# The Caddyfile for a town behind CloudFront, mounted in place of docker/Caddyfile when .env.production sets
+# CADDYFILE=Caddyfile.cloudfront (docker/README.md#behind-cloudfront). Visitors reach CloudFront at PUBLIC_HOST, and
+# CloudFront reaches this server at ORIGIN_HOST, whose certificate Let's Encrypt still issues here.
+{
+	log {
+		# With nginx down these name the visitor's address and URL, and /privacy promises that counted events leave none.
+		exclude http.log.error http.handlers.reverse_proxy
+	}
+	servers {
+		# CloudFront speaks HTTP/3 to visitors and HTTP/1.1 or HTTP/2 to this server.
+		protocols h1 h2
+	}
+}
+
+{$ORIGIN_HOST} {
+	# Only CloudFront knows the secret it adds to every request, so nobody else can use this name to go around it.
+	@outside not header X-Origin-Verify {$ORIGIN_VERIFY_SECRET}
+	respond @outside 403
+
+	reverse_proxy frontend:80 {
+		# nginx and the backend see the name visitors use, not this one.
+		header_up Host {$PUBLIC_HOST}
+		# Caddy would replace the header with CloudFront's own address, and every visitor would share one flood-guard
+		# counter. CloudFront appends the visitor's address to whatever the visitor sent, and nginx believes only the
+		# last address (real_ip_recursive is off), so a forged one in front changes nothing.
+		header_up X-Forwarded-For {http.request.header.X-Forwarded-For}
+		header_up -X-Origin-Verify
+	}
+}
+
+# Until DNS points PUBLIC_HOST at CloudFront, and again after pointing it back. Behind CloudFront this certificate can no
+# longer be renewed, so delete this block once the move has settled.
+{$PUBLIC_HOST} {
+	reverse_proxy frontend:80
+}
+
+www.{$PUBLIC_HOST} {
+	redir https://{$PUBLIC_HOST}{uri} permanent
+}

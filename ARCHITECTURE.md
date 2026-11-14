@@ -26,10 +26,10 @@ deployment is one town: no code, URL, or response names it.
 | Data                                                                                                                           | Stored in                                                  | Changed by                      |
 | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- | ------------------------------- |
 | Town: objects, residents, owner (name, introduction, contact email, own resident, questions), pet (name, walk), movement style | database (`towns`, `town_objects`, `town_residents`)       | admins at `/admin`              |
-| Venue settings: whether visitors see the ballpark, its colors, pitch count, and difficulty, and next month's rules             | database (`towns.venues`)                                  | admins at `/admin`              |
+| Venue settings: whether visitors see the ballpark, its colors, pitch count, and difficulty, and next week's rules              | database (`towns.venues`)                                  | admins at `/admin`              |
 | Admin emails                                                                                                                   | database (`admin_emails`), filled from `ADMIN_EMAILS` once | admins at `/admin`              |
 | Guestbook notes                                                                                                                | database (`guestbook_entries`)                             | visitors write, admins approve  |
-| Ranked derby runs, each visitor's best record per KST month, its optional LinkedIn link, reports, and blocked links            | database (`minigame_*`)                                    | visitors play, admins review    |
+| Ranked derby runs, each visitor's best record per KST week, its optional LinkedIn link, reports, and blocked links             | database (`minigame_*`)                                    | visitors play, admins review    |
 | Anonymous daily totals of what people do in the town                                                                           | database (`site_event_counts`)                             | visitors' browsers add to them  |
 | A visitor's character, camera settings, guide progress, language                                                               | the browser tab (`sessionStorage`)                         | the visitor                     |
 | Object kinds, variants, walks, skids, copy, procedural geometry                                                                | frontend code                                              | contributors                    |
@@ -53,7 +53,7 @@ skids, ballpark themes, and color roles need no backend change.
 | `camera/`          | Camera defaults and pure camera math.                                                               |
 | `audio/`           | Procedural music, voices, footsteps, skid squeal, derby sounds, and the bark sample.                |
 | `i18n/language.ts` | All copy, in Korean and English.                                                                    |
-| `hooks/`           | Session, page language, local time and season, reduced motion, retryable loading, monthly statues.  |
+| `hooks/`           | Session, page language, local time and season, reduced motion, retryable loading, weekly statues.   |
 | `motionMath.ts`    | Shared damping and interpolation helpers; reuse them instead of redefining them.                    |
 | `testing/`         | The sample town as a test fixture. It never reaches the production bundle.                          |
 
@@ -124,7 +124,7 @@ browser. Why each rule and number is what it is lives in the commit messages.
 - **Top level:** the visibility gate (`BaseballGate.tsx`, `useBallparkGate.ts`), the path, previews, and exits
   (`baseballRoute.ts`, in the main chunk), the page (`BaseballApp.tsx`), the camera and vision tasks run for the page
   (`cameraTracking.ts`), the device check (`deviceGate.ts`), the character check (`baseballSession.ts`), ranked runs on
-  the monthly board (`useRankedRuns.ts` over `data/leaderboardApi.ts`), and the median and percentile helpers
+  the weekly board (`useRankedRuns.ts` over `data/leaderboardApi.ts`), and the median and percentile helpers
   (`statistics.ts`).
 - **`game/`:** scoring a server can mirror: run plans and seeds, the pitch schedule, judging, landing, calibration, the
   live derby on `gameClock.ts` time (`derby.ts`), and its replay (`derbyScore.ts`). `flight.ts` only draws a path to
@@ -144,7 +144,7 @@ browser. Why each rule and number is what it is lives in the commit messages.
 - **`ui/`:** DOM overlays: the HUD and what it may show (`DerbyHud.tsx`, `derbyCues.ts`), the camera panel and its
   layout (`cameraPanelLayout.ts`), the setup, practice, result, listing, and blocked screens, and the diagnostics
   panel.
-- **`board/`:** the monthly board at `/baseball/ranking`, its own lazy chunk (`BoardPage.tsx`): the painted statues in
+- **`board/`:** the weekly board at `/baseball/ranking`, its own lazy chunk (`BoardPage.tsx`): the painted statues in
   one canvas (`BoardPodium.tsx`, `podiumScene.ts`), the list's portraits from one offscreen renderer
   (`portraitImages.ts`), seasons (`boardSeason.ts`), and what rows show (`boardView.ts`). `?view=hall-of-fame` opens
   every finished season's statues (`HallOfFamePage.tsx`) behind the same gate; the own card lists the visitor's past
@@ -168,7 +168,7 @@ Keep these when changing the derby:
    (`bodyVolumes.ts`, `batterOverlap.*.test.ts`); the aim is solved over several frames (`settleBatter`).
 6. The camera picture never leaves the device: `/baseball`'s CSP has `connect-src 'self'` (`docker/nginx.conf`),
    `@mediapipe/tasks-vision` stays pinned to 0.10.35 (1.0.0 and later send usage logs), and the models are committed in
-   `public/assets/models/`.
+   `src/baseball/vision/models/`.
 7. Every swing is the camera's: keys only press the focused button, leave with Escape, and cycle the camera panel with
    V (D and L in a dev build).
 8. `baseball/` never imports `editor/`, `TownScene.tsx`, or the kinds registry.
@@ -184,21 +184,21 @@ coming-soon card, and neither the derby's chunk nor the camera loads. The town r
 the hedge opens at the end of the north road onto the ballpark's exterior and gate, whose prompt saves the visit and
 leaves by a full page load (`window.location.assign`), so `/baseball` gets its own CSP and camera permission and the
 visitor comes back to the gate, and a branch of that road, painted into the ground with it, leads to the podium garden
-beside it, whose approach the editor keeps clear. There this KST month's top three stand as painted statues, still but
-for a twinkle, read from the public `/podium` (`hooks/usePodium.ts`, again every few minutes and as the month turns;
+beside it, whose approach the editor keeps clear. There this KST week's top three stand as painted statues, still but
+for a twinkle, read from the public `/podium` (`hooks/usePodium.ts`, again every few minutes and as the week turns;
 a failed read leaves the pedestals waiting), and walking up to one opens its card (`ui/StatueCard.tsx`) through the
 player's nearby interaction, after a resident. While it is hidden, nothing in the town hints at it, nor reads
 `/podium`. The board at `/baseball/ranking` opens behind the same gate with no preview, so nothing ranked shows while
 the ballpark is hidden.
 
 `BaseballApp.tsx` then checks the device (a phone or tablet, then WebGL 2, later a computer too slow to track), the
-character, and plays the derby. Each run asks the monthly board for a ranked run as it starts and plays the rules and
+character, and plays the derby. Each run asks the weekly board for a ranked run as it starts and plays the rules and
 seed the server issued (`useRankedRuns.ts`); without an answer within 3 s, while the ballpark is hidden, or after a
-practice that timed fewer than three swings, it plays unranked on the rules of the KST month it starts in and a
+practice that timed fewer than three swings, it plays unranked on the rules of the KST week it starts in and a
 `crypto` seed (`flow/derbyFlow.ts`), and its result says so in a line. A ranked result sends only the
 `DerbyInputLog`, the claimed totals, and the character's look with the board name (`rankedRunBody`), never gender, a
 LinkedIn link, or anything the tracker saw; the server scores it again. The editor's previews, `?rules=next` (next
-month's rules, or this month's when none are scheduled) and `?rules=current`, are badged `Preview · not ranked`, never
+week's rules, or this week's when none are scheduled) and `?rules=current`, are badged `Preview · not ranked`, never
 ask the board, and return to `/admin` (`baseballExit`). The rules card's one click turns the camera on, unlocks the
 sounds, and asks for full screen and a wake lock. Then the setup (batting side), practice, the run, and its result each
 go on by the focused button or by holding the batting stance about three seconds. Practice tells each swing early,
@@ -209,9 +209,9 @@ also says where the run left the visitor on the board; its listing card (`ui/Lis
 after the visitor ticks the box, with the name (or none, an anonymous batter) and, opted in, the character's LinkedIn
 link, whose ownership code it then shows.
 
-`board/BoardPage.tsx` shows a season's board (`?season=YYYY-MM` for one of the last twelve final boards), which works
+`board/BoardPage.tsx` shows a season's board (`?season=YYYY-MM-DD` for one of the last twelve final boards), which works
 on phones too: the top three as painted statues over DOM name plates (read 1, 2, 3, shown 2, 1, 3; the canvas is
-`aria-hidden`), which rise third to first the first time a browser sees a month; places 4 to 50 as an `<ol>`; and the
+`aria-hidden`), which rise third to first the first time a browser sees a week; places 4 to 50 as an `<ol>`; and the
 visitor's own record between them, which the same listing card posts, hides, or changes (a past season's record can
 still turn its LinkedIn link off). It shows names only once approved, a LinkedIn chip only on a statue whose link the
 admin approved, and the server's order, whose ties go to the earlier record. Every row's menu reports its name,
@@ -231,7 +231,7 @@ server.mjs (Node runtime: .env, store, seeding, HTTP)
 
 | File                           | Owns                                                                               |
 | ------------------------------ | ---------------------------------------------------------------------------------- |
-| `town.ts`                      | Town layout validation: shapes, bounds, structural rules, monthly ballpark rules.  |
+| `town.ts`                      | Town layout validation: shapes, bounds, structural rules, weekly ballpark rules.   |
 | `guestbook.ts`, `character.ts` | Guestbook entries and character appearances.                                       |
 | `admins.ts`, `auth.ts`         | Admin emails, sessions, and setting the role from the admin list at every sign-in. |
 | `linkedin.ts`                  | LinkedIn OIDC adapter (ID tokens verified with `jose`).                            |
@@ -240,7 +240,7 @@ server.mjs (Node runtime: .env, store, seeding, HTTP)
 | `validation.ts`                | Shared input helpers; every request body passes through them.                      |
 | `derbyJudge/`                  | Copy of the frontend's `baseball/game/` judge: scores a run again from its log.    |
 | `homeRunDerby.ts`              | The ranked derby: its result's shape, the server's score, and the review checks.   |
-| `leaderboard.ts`               | Runs, monthly records, the public order, and how a scored run changes a record.    |
+| `leaderboard.ts`               | Runs, weekly records, the public order, and how a scored run changes a record.     |
 | `leaderboardIdentity.ts`       | What a record shows of its player: the board's name check and LinkedIn link check. |
 | `leaderboardReview.ts`         | The admin's review queue and actions on records and held runs, and reports.        |
 | `siteStats.ts`                 | The anonymous daily totals: the list of events and what the admin reads.           |
@@ -255,10 +255,10 @@ Tests run with `npm test` through `test/run.ts`. `test/storeContract.ts` runs th
 - **Edit:** LinkedIn sign-in → session cookie → `/admin` loads the saved town → edits stay local → `PUT
 /v1/admin/town` with the revision it loaded (a stale revision gets `409`).
 - **Guestbook:** anyone writes one note a day per browser cookie; notes stay pending until an admin approves them.
-- **Ranked run:** the derby asks for a run (rules for the KST month, a seed) → plays it → sends the raw swing numbers
-  → the server scores them again and keeps the visitor's best record for the month the run was issued in. A listed
-  record joins the public board, whose first three are the statues (`/podium`); they stand unchecked, and an admin
-  reviews them, held runs, links, and reports afterwards.
+- **Ranked run:** the derby asks for a run (rules for the KST week, a seed) → plays it → sends the raw swing numbers
+  → the server scores them again and keeps the visitor's best record for the week the run was issued in. A listed
+  record joins the public board, whose first three are the statues (`/podium`); a place among those three stays empty
+  until an admin approves its record, and an admin reviews held runs, links, and reports.
 - **Resident dialogue:** an admin drafts it from a reference with OpenRouter and reviews it before saving; visits never
   call an LLM.
 - **Usage statistics:** what a visitor does in the town adds to anonymous daily totals (`data/siteEvents.ts` →

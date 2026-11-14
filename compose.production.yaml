@@ -52,13 +52,16 @@ services:
     restart: unless-stopped
     environment:
       PUBLIC_HOST: ${PUBLIC_HOST:?Set PUBLIC_HOST in .env.production}
+      # Read only by docker/Caddyfile.cloudfront, which refuses to start while either is empty.
+      ORIGIN_HOST: ${ORIGIN_HOST:-}
+      ORIGIN_VERIFY_SECRET: ${ORIGIN_VERIFY_SECRET:-}
     # IPv4 only: for an IPv6 visitor Docker would hand Caddy its own gateway's address, and every such visitor would share
     # one flood-guard counter.
     ports:
       - '0.0.0.0:80:80'
       - '0.0.0.0:443:443'
     volumes:
-      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./docker/${CADDYFILE:-Caddyfile}:/etc/caddy/Caddyfile:ro
       # The certificates and their keys. Losing them means asking Let's Encrypt again, and it limits how often.
       - caddy-data:/data
     depends_on:

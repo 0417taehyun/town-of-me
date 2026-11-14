@@ -17,9 +17,9 @@ what changed.
   hands-on session with a real webcam; they come from synthetic swings and one draft log only. Measure there how late
   a swing reaches the stage: `LATE_SWING_MARGIN_MS` (`game/derby.ts`) allows the tracker's 150 ms finish window, a
   15 fps frame, and 100 ms more, and a pitch nobody swings at waits that long behind the batter before the catch.
-- Near a KST month boundary, an admin device whose clock runs fast treats the stored ballpark schedule as already in
+- Near a KST week boundary, an admin device whose clock runs fast treats the stored ballpark schedule as already in
   effect, so a rules edit can still save without the schedule, which the backend takes as a cancel. A schedule moved to
-  any month but the server's next one is already refused.
+  any week but the server's next one is already refused.
 
 ## Backend and security
 
