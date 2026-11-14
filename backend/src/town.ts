@@ -133,14 +133,14 @@ export interface BallparkRules {
   difficulty: BallparkDifficulty
 }
 
-/** Rules that take over at the start of `fromMonth`, a KST calendar month written `YYYY-MM`. */
+/** Rules that take over at the start of `fromWeek`, a KST week named by its Monday, `YYYY-MM-DD`. */
 export interface ScheduledBallparkRules {
-  fromMonth: string
+  fromWeek: string
   rules: BallparkRules
 }
 
 export interface BallparkSettings extends VenueLook {
-  /** The rules in effect. Only the server changes them, by promoting a schedule whose month has come. */
+  /** The rules in effect. Only the server changes them, by promoting a schedule whose week has come. */
   rules: BallparkRules
   /** Present only while a change is scheduled. */
   scheduledRules?: ScheduledBallparkRules
@@ -190,16 +190,18 @@ const characterNameLimit = 24
 export const followUpLimit = 3
 const ownerQuestionLimit = 5
 // Mirrors frontend/src/data/models.ts BASEBALL_DIFFICULTIES, PITCH_COUNT_RANGE, DEFAULT_TOWN_VENUES, and
-// RANKING_MONTH_PATTERN. Stored towns are read with these same checks, so a published range or id is never narrowed
+// RANKING_WEEK_PATTERN. Stored towns are read with these same checks, so a published range or id is never narrowed
 // without a data migration.
 const ballparkDifficulties = ['easy', 'normal', 'hard'] as const
 // At least three pitches, so each of the three pitch types comes up at least once.
 const ballparkPitchCountRange = { minimum: 3, maximum: 10 }
 const defaultBallparkRules: BallparkRules = { pitchCount: 5, difficulty: 'normal' }
-const rankingMonthPattern = /^\d{4}-(0[1-9]|1[0-2])$/u
+const rankingWeekPattern = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/u
 const venueColorLimit = 12
-// Korea keeps no daylight saving time, so a fixed offset gives the KST calendar month.
+// Korea keeps no daylight saving time, so a fixed offset gives the KST calendar day and week.
 const kstOffsetMs = 9 * 60 * 60 * 1000
+const dayMs = 24 * 60 * 60 * 1000
+const weekMs = 7 * dayMs
 
 type Bounds = typeof groundBounds
 export type BallparkDifficulty = (typeof ballparkDifficulties)[number]
@@ -323,37 +325,52 @@ export function parseBallparkRules(value: unknown, field: string): BallparkRules
   }
 }
 
-// Only the shape is checked here, so a stored schedule whose month has come still reads; saves check the month.
+// Only the shape is checked here, so a stored schedule whose week has come still reads; saves check the week.
 export function parseScheduledBallparkRules(value: unknown): ScheduledBallparkRules {
   const field = 'venues.ballpark.scheduledRules'
   const input = inputRecord(value, field)
   return {
-    fromMonth: rankingMonthInput(input.fromMonth, `${field}.fromMonth`),
+    fromWeek: rankingWeekInput(input.fromWeek, `${field}.fromWeek`),
     rules: parseBallparkRules(input.rules, `${field}.rules`),
   }
 }
 
-// Mirrors frontend/src/data/ballparkRules.ts rankingMonth, nextRankingMonth, and effectiveBallparkRules.
+// Mirrors frontend/src/data/ballparkRules.ts rankingWeek, nextRankingWeek, and effectiveBallparkRules.
 
-/** The KST calendar month, `YYYY-MM`, that `now` falls in, whatever the time zone of the machine. */
-export function rankingMonth(now: number): string {
-  return new Date(now + kstOffsetMs).toISOString().slice(0, 7)
+/**
+ * The KST week that `now` falls in, named by its Monday, `YYYY-MM-DD`, whatever the time zone of the machine: a week
+ * runs from Monday 00:00 KST to the next Monday.
+ */
+export function rankingWeek(now: number): string {
+  const kstTime = new Date(now + kstOffsetMs)
+  // getUTCDay counts from Sunday, so this is how many days the KST day is past its Monday.
+  const daysSinceMonday = (kstTime.getUTCDay() + 6) % 7
+  return new Date(kstTime.getTime() - daysSinceMonday * dayMs).toISOString().slice(0, 10)
 }
 
-/** The ranking month after a `YYYY-MM` month: the only month a new or changed schedule may start in. */
-export function nextRankingMonth(month: string): string {
-  // Date.UTC counts months from 0, so the 1-based month number is already the month after.
-  return new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 1)).toISOString().slice(0, 7)
+/** The ranking week after `week`: the only week a new or changed schedule may start in. */
+export function nextRankingWeek(week: string): string {
+  return rankingWeek(rankingWeekStart(week) + weekMs)
 }
 
-/** A `YYYY-MM` ranking month as a client writes it; whether that month has come is up to the caller. */
-export function rankingMonthInput(value: unknown, field: string): string {
-  return matchingText(value, rankingMonthPattern, field, 'a YYYY-MM month')
+export function previousRankingWeek(week: string): string {
+  return rankingWeek(rankingWeekStart(week) - weekMs)
 }
 
-/** When a `YYYY-MM` ranking month starts: 00:00 KST on its first day, in epoch ms. */
-export function rankingMonthStart(month: string): number {
-  return Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, 1) - kstOffsetMs
+/**
+ * A ranking week as a client writes it: the `YYYY-MM-DD` of a real Monday, since any other day would name a board no
+ * run can be on. Whether that week has come is up to the caller.
+ */
+export function rankingWeekInput(value: unknown, field: string): string {
+  const week = matchingText(value, rankingWeekPattern, field, 'the YYYY-MM-DD of a Monday')
+  // A day that is not on the calendar (02-30) rolls over to another date, so it fails this check as well.
+  if (rankingWeek(rankingWeekStart(week)) !== week) throw invalidInput(`${field} must be the YYYY-MM-DD of a Monday`)
+  return week
+}
+
+/** When a ranking week starts: 00:00 KST on its Monday, in epoch ms. */
+export function rankingWeekStart(week: string): number {
+  return Date.UTC(Number(week.slice(0, 4)), Number(week.slice(5, 7)) - 1, Number(week.slice(8, 10))) - kstOffsetMs
 }
 
 /** The KST calendar day, `YYYY-MM-DD`, that an ISO time falls on. */
@@ -361,25 +378,25 @@ export function rankingDay(time: string): string {
   return new Date(Date.parse(time) + kstOffsetMs).toISOString().slice(0, 10)
 }
 
-/** The rules played in `month`; `YYYY-MM` months sort as text. */
-export function effectiveBallparkRules(ballpark: BallparkSettings, month: string): BallparkRules {
+/** The rules played in `week`; weeks sort as text. */
+export function effectiveBallparkRules(ballpark: BallparkSettings, week: string): BallparkRules {
   const scheduled = ballpark.scheduledRules
-  return scheduled && scheduled.fromMonth <= month ? scheduled.rules : ballpark.rules
+  return scheduled && scheduled.fromWeek <= week ? scheduled.rules : ballpark.rules
 }
 
 /**
- * The server owns the rules in effect, so within one KST month they never change: a save keeps the stored rules for
- * `month`, promoting a schedule whose month has come, and ignores the submitted ones, so a stale editor tab neither
+ * The server owns the rules in effect, so within one KST week they never change: a save keeps the stored rules for
+ * `week`, promoting a schedule whose week has come, and ignores the submitted ones, so a stale editor tab neither
  * fails nor changes them. A town saved for the first time starts with the default rules. Visibility and the look apply
  * at once.
  */
 export function settleBallparkSettings(
   submitted: BallparkSettings,
   stored: BallparkSettings | null,
-  month: string,
+  week: string,
 ): BallparkSettings {
-  const rules = stored ? effectiveBallparkRules(stored, month) : defaultBallparkRules
-  const scheduledRules = settleScheduledRules(submitted.scheduledRules, stored?.scheduledRules, month)
+  const rules = stored ? effectiveBallparkRules(stored, week) : defaultBallparkRules
+  const scheduledRules = settleScheduledRules(submitted.scheduledRules, stored?.scheduledRules, week)
   return {
     visible: submitted.visible,
     theme: submitted.theme,
@@ -390,21 +407,23 @@ export function settleBallparkSettings(
 }
 
 /**
- * A new or changed schedule must start in the month after `month`, the server's KST month, so an admin device whose
- * clock is off near a month boundary gets an error instead of a schedule shifted to another month. The stored schedule
- * sent back unchanged is kept until its month comes; from then on it is a stale tab rather than a mistake, and
+ * A new or changed schedule must start in the week after `week`, the server's KST week, so an admin device whose
+ * clock is off near a week boundary gets an error instead of a schedule shifted to another week. The stored schedule
+ * sent back unchanged is kept until its week comes; from then on it is a stale tab rather than a mistake, and
  * `settleBallparkSettings` has already promoted it, so it is dropped.
  */
 export function settleScheduledRules(
   submitted: ScheduledBallparkRules | undefined,
   stored: ScheduledBallparkRules | undefined,
-  month: string,
+  week: string,
 ): ScheduledBallparkRules | undefined {
   if (!submitted) return undefined
-  if (isDeepStrictEqual(submitted, stored)) return submitted.fromMonth > month ? submitted : undefined
-  const nextMonth = nextRankingMonth(month)
-  if (submitted.fromMonth === nextMonth) return submitted
-  throw invalidInput(`venues.ballpark.scheduledRules.fromMonth must be ${nextMonth}, the KST month after ${month}`)
+  if (isDeepStrictEqual(submitted, stored)) return submitted.fromWeek > week ? submitted : undefined
+  const nextWeek = nextRankingWeek(week)
+  if (submitted.fromWeek === nextWeek) return submitted
+  throw invalidInput(
+    `venues.ballpark.scheduledRules.fromWeek must be ${nextWeek}, the Monday after the KST week ${week}`,
+  )
 }
 
 export function parseTownObject(value: unknown, index: number): TownObject {

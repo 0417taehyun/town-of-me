@@ -16,7 +16,7 @@ import {
   type SettleEntry,
 } from './leaderboard.js'
 import type { EntryReport, ReportResolution, ReportTarget, VisitorRunCounts } from './leaderboardReview.js'
-import type { GameMonthCount, GuestbookDayCount, SiteEventCount } from './siteStats.js'
+import type { GameWeekCount, GuestbookDayCount, SiteEventCount } from './siteStats.js'
 import { rankingDay, type TownLayout, type TownLayoutInput } from './town.js'
 
 export interface Store extends AuthStore {
@@ -68,7 +68,10 @@ export interface Store extends AuthStore {
   getBoardEntryByVisitor(board: BoardKey, visitorHash: string): Promise<LeaderboardEntry | null>
   /** 1 + the records ahead of `entry` in its board's public order: for an unlisted record, the place it would take. */
   rankOf(entry: LeaderboardEntry): Promise<number>
-  /** The top of the board's public order (listed and not disqualified); its first three are the statues. */
+  /**
+   * The top of the board's public order (listed and not disqualified), every record at its place. What of it anyone
+   * may see is decided by `publishedPlaces`, which leaves out a statue's place still waiting for approval.
+   */
   listBoard(board: BoardKey, limit: number): Promise<LeaderboardEntry[]>
   /**
    * Applies `changes` only while the record is still at `expectedUpdatedAt`; `null` if it is missing or changed. A record
@@ -84,8 +87,11 @@ export interface Store extends AuthStore {
   listRunsForReview(board: BoardKey): Promise<GameRun[]>
   /** Per visitor with a run for the board: how many they started, abandoned, and had held. */
   countRunsByVisitor(board: BoardKey): Promise<VisitorRunCounts[]>
-  /** Whether the visitor has sent a result for any run of the game. */
-  hasSubmittedRun(game: string, visitorHash: string): Promise<boolean>
+  /**
+   * Whether the server judged a run of the game by the visitor: one it scored or held. A run rejected as too fast
+   * does not count, since sending one takes no play.
+   */
+  hasJudgedRun(game: string, visitorHash: string): Promise<boolean>
   /**
    * Accepts a held run nobody has reviewed: it becomes `scored`, its profile goes, since the record now holds what may be
    * kept, and `settle` decides the visitor's record, in one step; if `settle` throws, nothing changes. `null`, with
@@ -105,8 +111,6 @@ export interface Store extends AuthStore {
   listReports(board: BoardKey): Promise<EntryReport[]>
   /** Resolves the record's open reports on `target`. */
   resolveReports(entryId: string, target: ReportTarget, resolution: ReportResolution, resolvedAt: string): Promise<void>
-  /** Deletes the record's reports on `targets` that the admin resolved as kept, once what they kept is gone. */
-  forgetKeptReports(entryId: string, targets: readonly ReportTarget[]): Promise<void>
   isLinkBlocked(profileHash: string): Promise<boolean>
   /** Blocks the profile once; blocking it again changes nothing. */
   blockLink(profileHash: string, createdAt: string): Promise<void>
@@ -119,7 +123,7 @@ export interface Store extends AuthStore {
   /** The notes written from `fromDay` to `toDay`, both KST days and both included, by day and status. */
   countGuestbookEntriesByDay(fromDay: string, toDay: string): Promise<GuestbookDayCount[]>
   /** Each season of the game with any run or record, newest first. */
-  countGameMonths(game: string): Promise<GameMonthCount[]>
+  countGameWeeks(game: string): Promise<GameWeekCount[]>
 }
 
 export type GuestbookEntryChanges = Partial<
@@ -399,9 +403,10 @@ export class MemoryStore implements Store {
     return [...counts.values()]
   }
 
-  async hasSubmittedRun(game: string, visitorHash: string): Promise<boolean> {
+  async hasJudgedRun(game: string, visitorHash: string): Promise<boolean> {
     return [...this.gameRuns.values()].some(
-      (run) => run.game === game && run.visitorHash === visitorHash && run.submittedAt !== null,
+      (run) =>
+        run.game === game && run.visitorHash === visitorHash && (run.status === 'scored' || run.status === 'flagged'),
     )
   }
 
@@ -460,13 +465,6 @@ export class MemoryStore implements Store {
     open.forEach((report) => this.entryReports.set(report.id, { ...report, resolvedAt, resolution }))
   }
 
-  async forgetKeptReports(entryId: string, targets: readonly ReportTarget[]): Promise<void> {
-    const kept = [...this.entryReports.values()].filter(
-      (report) => report.entryId === entryId && targets.includes(report.target) && report.resolution === 'kept',
-    )
-    kept.forEach((report) => this.entryReports.delete(report.id))
-  }
-
   async isLinkBlocked(profileHash: string): Promise<boolean> {
     return this.linkBlocks.has(profileHash)
   }
@@ -512,18 +510,18 @@ export class MemoryStore implements Store {
     return [...counts.values()]
   }
 
-  async countGameMonths(game: string): Promise<GameMonthCount[]> {
-    const months = new Map<string, GameMonthCount>()
+  async countGameWeeks(game: string): Promise<GameWeekCount[]> {
+    const weeks = new Map<string, GameWeekCount>()
     const count = (season: string, field: 'runs' | 'records') => {
-      const month = months.get(season) ?? { month: season, runs: 0, records: 0 }
-      months.set(season, { ...month, [field]: month[field] + 1 })
+      const week = weeks.get(season) ?? { week: season, runs: 0, records: 0 }
+      weeks.set(season, { ...week, [field]: week[field] + 1 })
     }
     const isGame = (item: { game: string }) => item.game === game
     const runs = [...this.gameRuns.values()].filter(isGame)
     const records = [...this.leaderboardEntries.values()].filter(isGame)
     runs.forEach(({ season }) => count(season, 'runs'))
     records.forEach(({ season }) => count(season, 'records'))
-    return [...months.values()].sort((left, right) => textOrder(right.month, left.month))
+    return [...weeks.values()].sort((left, right) => textOrder(right.week, left.week))
   }
 }
 

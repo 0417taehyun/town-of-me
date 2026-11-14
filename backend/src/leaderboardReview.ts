@@ -8,6 +8,7 @@ import {
   entryChanges,
   isPublicEntry,
   statueCount,
+  wouldBePlace,
   type BoardCandidate,
   type BoardKey,
   type BoardPlace,
@@ -17,12 +18,13 @@ import {
   type SettleEntry,
 } from './leaderboard.js'
 import { comparisonForm, isTownProfile, profileIdOf, reservedNames, townNames } from './leaderboardIdentity.js'
-import { nextRankingMonth, rankingMonthStart, type TownLayout } from './town.js'
+import { nextRankingWeek, rankingWeekStart, type TownLayout } from './town.js'
 import { inputList, invalidInput, matchingText, oneOf } from './validation.js'
 
-// The admin's side of the monthly boards: the review queue, what each action on a record changes, and the reports
-// visitors send. A statue stands without anyone's check, so the queue puts what visitors already see first, and every
-// action names the version the admin read, so nothing they have not seen is approved.
+// The admin's side of the weekly boards: the review queue, what each action on a record changes, and the reports
+// visitors send. A place among the statues is published only once the admin approved its record, so the queue puts
+// what waits for one first, and every action names the version the admin read, so nothing they have not seen is
+// approved.
 
 /** A held run of a season that has ended may still be accepted this long after; then its board stays as it is. */
 export const lateAcceptanceMs = 7 * 24 * 60 * 60_000
@@ -51,7 +53,7 @@ export type ReportTarget = (typeof reportTargets)[number]
 /** `mine` is a profile's owner saying they did not link it, so it is only for a link. */
 export const reportReasons = ['mine', 'other'] as const
 export type ReportReason = (typeof reportReasons)[number]
-/** `kept` shows the reported thing again; `removed` takes it off the record. */
+/** `kept` leaves the reported thing on the record, approved; `removed` takes it off. */
 export const reportResolutions = ['kept', 'removed'] as const
 export type ReportResolution = (typeof reportResolutions)[number]
 
@@ -74,7 +76,7 @@ export interface VisitorRunCounts {
   flagged: number
 }
 
-/** The queue's order, most urgent first: what visitors already see, then what would change it, then the rest. */
+/** The queue's order, most urgent first: a statue's place waiting for approval, a run that would take one, the rest. */
 export const reviewKinds = ['statue', 'statue-run', 'report', 'linkedin', 'past-run', 'run', 'name'] as const
 export type ReviewKind = (typeof reviewKinds)[number]
 
@@ -199,15 +201,18 @@ export function reviewKindOf(subject: ReviewSubject): ReviewKind | null {
   return reviewChecks.find(([, holds]) => holds(subject))?.[0] ?? null
 }
 
-/** A statue no one has approved, or whose name waits: it already stands, so it comes first. */
+/**
+ * A record among the statues that no one has approved, so its place stays empty until someone does, or one whose name
+ * waits: it comes first.
+ */
 export function standsUnreviewed(subject: ReviewSubject): boolean {
   const entry = subject.entry
   return isStatue(subject) && (entry?.reviewStatus === 'pending' || entry?.nameStatus === 'pending')
 }
 
-/** A held run of this season that would stand as a statue once accepted. */
+/** A held run that would stand as a statue once accepted, of this season or of a past one still open to it. */
 export function wouldStand(subject: ReviewSubject): boolean {
-  return subject.current && subject.runPlace !== null && subject.runPlace <= statueCount
+  return subject.acceptable && subject.runPlace !== null && subject.runPlace <= statueCount
 }
 
 export function isReported(subject: ReviewSubject): boolean {
@@ -270,15 +275,6 @@ export function heldRunOrder(left: GameRun, right: GameRun): number {
 /** Where a run would fall on its board if it were the record. */
 export function runBoardPlace(run: GameRun): BoardPlace {
   return { id: run.id, score: run.score ?? 0, tiebreak: run.tiebreak ?? 0, achievedAt: run.submittedAt ?? run.issuedAt }
-}
-
-/** The place `place` would take among the public records, the visitor's own record aside. */
-export function wouldBePlace(
-  publicEntries: readonly LeaderboardEntry[],
-  place: BoardPlace,
-  visitorHash: string,
-): number {
-  return publicEntries.filter((entry) => entry.visitorHash !== visitorHash && boardOrder(entry, place) < 0).length + 1
 }
 
 /** One queue item: everything the admin needs to decide, for one visitor on one board. */
@@ -485,7 +481,7 @@ export function disqualificationChanges(entry: LeaderboardEntry, _input: unknown
   return entryChanges(entry, { reviewStatus: 'disqualified' }, now)
 }
 
-/** Back on the board, waiting for review again. */
+/** Back on the board, waiting for review again; among the statues its place stays empty until it is approved. */
 export function restorationChanges(entry: LeaderboardEntry, _input: unknown, now: string): EntryChanges {
   if (entry.reviewStatus !== 'disqualified') throw new DomainError('CONFLICT', 'The record is not disqualified')
   return entryChanges(entry, { reviewStatus: 'pending' }, now)
@@ -587,92 +583,35 @@ export function forgetQuietReporters(reportTimes: Map<string, number[]>, now: nu
 }
 
 /**
- * The report targets an owner's change leaves without the admin's keep: it covered the name or appearance they saw,
- * so a new one, or a record put back on the board, is hidden by the next report again.
- */
-export function supersededKeeps(before: LeaderboardEntry, after: LeaderboardEntry): ReportTarget[] {
-  const relisted = after.listed && !before.listed
-  const changed: Record<ReportTarget, boolean> = {
-    name: relisted || after.authorName !== before.authorName,
-    character: relisted || !isDeepStrictEqual(after.appearance, before.appearance),
-    link: false,
-  }
-  return reportTargets.filter((target) => changed[target])
-}
-
-/**
- * What a report hides at once: an approved name or the appearance, unless the admin kept it after an earlier report,
- * and a link whose profile's owner says it is theirs, which then needs a new code. `null` when it hides nothing.
+ * What a report changes at once: only a link whose profile's owner says it is theirs, which is hidden and then needs a
+ * new code. Every other report waits for the admin, so no visitor can take a name or a character off the board.
+ * `null` when it changes nothing.
  */
 export function reportedChanges(
   entry: LeaderboardEntry,
   report: Pick<EntryReport, 'target' | 'reason'>,
-  kept: boolean,
   freshCode: string,
   now: string,
 ): EntryChanges | null {
-  const hidden = reportEffects[report.target](entry, report.reason, kept, freshCode)
-  return hidden && entryChanges(entry, hidden, now)
-}
-
-type ReportEffect = (
-  entry: LeaderboardEntry,
-  reason: ReportReason,
-  kept: boolean,
-  freshCode: string,
-) => Partial<EntryChanges> | null
-
-export const reportEffects: Readonly<Record<ReportTarget, ReportEffect>> = {
-  name: hiddenName,
-  character: hiddenAppearance,
-  link: hiddenLink,
-}
-
-export function hiddenName(
-  entry: LeaderboardEntry,
-  _reason: ReportReason,
-  kept: boolean,
-): Partial<EntryChanges> | null {
-  return entry.nameStatus === 'approved' && !kept ? { nameStatus: 'pending' } : null
-}
-
-export function hiddenAppearance(
-  entry: LeaderboardEntry,
-  _reason: ReportReason,
-  kept: boolean,
-): Partial<EntryChanges> | null {
-  return entry.appearancePublic && !kept ? { appearancePublic: false } : null
-}
-
-export function hiddenLink(
-  entry: LeaderboardEntry,
-  reason: ReportReason,
-  _kept: boolean,
-  freshCode: string,
-): Partial<EntryChanges> | null {
   const linkedIn = entry.linkedIn
-  return linkedIn && reason === 'mine' ? { linkedIn: { ...linkedIn, status: 'reported', code: freshCode } } : null
+  if (!linkedIn || report.target !== 'link' || report.reason !== 'mine') return null
+  return entryChanges(entry, { linkedIn: { ...linkedIn, status: 'reported', code: freshCode } }, now)
 }
 
 /** Until when a held run of `season` may be accepted. */
 export function acceptanceDeadline(season: string): number {
-  return rankingMonthStart(nextRankingMonth(season)) + lateAcceptanceMs
+  return rankingWeekStart(nextRankingWeek(season)) + lateAcceptanceMs
 }
 
 /**
- * Whether a past season's record still takes its visitor's listing like this month's: its best run, issued in the
+ * Whether a past season's record still takes its visitor's listing like this week's: its best run, issued in the
  * season, arrived or was accepted only after the season ended, so the visitor never had the chance. Only until the
  * season's held runs can no longer be accepted; then that board is final.
  */
 export function listableAfterSeason(bestRun: GameRun | null, now: number): boolean {
   const settledAt = bestRun?.reviewedAt ?? bestRun?.submittedAt
   if (!bestRun || !settledAt || now >= acceptanceDeadline(bestRun.season)) return false
-  return Date.parse(settledAt) >= rankingMonthStart(nextRankingMonth(bestRun.season))
-}
-
-export function previousRankingMonth(month: string): string {
-  // Date.UTC counts months from 0, so two back from the 1-based number is the month before.
-  return new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 2, 1)).toISOString().slice(0, 7)
+  return Date.parse(settledAt) >= rankingWeekStart(nextRankingWeek(bestRun.season))
 }
 
 /**

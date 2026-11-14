@@ -5,8 +5,12 @@ import {
   DomainError,
   hashToken,
   MemoryStore,
+  nextRankingWeek,
   parseTownLayout,
   parseTownVenues,
+  previousRankingWeek,
+  rankingWeek,
+  rankingWeekStart,
 } from '../src/index.js'
 
 type Assert = (condition: unknown, message: string) => asserts condition
@@ -418,16 +422,39 @@ export async function checkTownFlow(assert: Assert): Promise<void> {
   await checkBallparkRuleSchedule(assert)
 }
 
-/** The ballpark rules change only between KST months, and the server decides which rules are in effect. */
+/** A season is a KST week, Monday to Monday, named by its Monday, whatever month or year the week crosses. */
+function checkRankingWeeks(assert: Assert): void {
+  // Monday 2025-12-29 00:00 in Seoul, which keeps no daylight saving time; UTC is still on Sunday.
+  const mondayMidnight = Date.parse('2025-12-28T15:00:00.000Z')
+  assert(
+    rankingWeek(mondayMidnight) === '2025-12-29' && rankingWeek(mondayMidnight - 1) === '2025-12-22',
+    'a week starts at Monday 00:00 KST: Sunday 23:59:59.999 KST is still the week before',
+  )
+  assert(
+    rankingWeek(Date.parse('2026-01-01T12:00:00+09:00')) === '2025-12-29' &&
+      rankingWeek(Date.parse('2026-01-04T23:59:59.999+09:00')) === '2025-12-29' &&
+      rankingWeek(Date.parse('2026-01-05T00:00:00+09:00')) === '2026-01-05',
+    'a week that crosses the new year keeps the name of its Monday in the old year, through its Sunday',
+  )
+  assert(
+    nextRankingWeek('2025-12-29') === '2026-01-05' &&
+      previousRankingWeek('2026-01-05') === '2025-12-29' &&
+      rankingWeekStart('2025-12-29') === mondayMidnight,
+    'the weeks either side of a week are seven days away across a year boundary, and a week starts at its midnight KST',
+  )
+}
+
+/** The ballpark rules change only between KST weeks, and the server decides which rules are in effect. */
 async function checkBallparkRuleSchedule(assert: Assert): Promise<void> {
+  checkRankingWeeks(assert)
   const store = new MemoryStore()
   const service = new BackendService(store)
   const admin = { kind: 'linked', userId: 'schedule-admin', role: 'admin' } as const
-  // 23:59:59 on December 31 in Seoul, which keeps no daylight saving time.
-  const lastSecondOfDecember = Date.parse('2025-12-31T14:59:59Z')
-  // Midnight on January 1 in Seoul, while UTC and the Americas are still in December.
-  const firstSecondOfJanuary = Date.parse('2025-12-31T15:00:00Z')
-  const january = { fromMonth: '2026-01', rules: { pitchCount: 7, difficulty: 'hard' } }
+  // 23:59:59 on Sunday December 28 in Seoul, the last second of the week of Monday December 22.
+  const lastSecondOfWeek = Date.parse('2025-12-28T14:59:59Z')
+  // Midnight on Monday December 29 in Seoul, while UTC and the Americas are still on Sunday.
+  const firstSecondOfNextWeek = Date.parse('2025-12-28T15:00:00Z')
+  const nextWeek = { fromWeek: '2025-12-29', rules: { pitchCount: 7, difficulty: 'hard' } }
   const saveIn = (townService: BackendService, ballpark: Record<string, unknown>, baseRevision: number, now: number) =>
     townService.saveTown(admin, { ...sampleTownLayout, venues: { ballpark }, baseRevision }, now)
   const save = (ballpark: Record<string, unknown>, baseRevision: number, now: number) =>
@@ -440,34 +467,34 @@ async function checkBallparkRuleSchedule(assert: Assert): Promise<void> {
 
   assert(
     (await refusalCode(
-      { scheduledRules: { ...january, rules: { pitchCount: 11, difficulty: 'hard' } } },
+      { scheduledRules: { ...nextWeek, rules: { pitchCount: 11, difficulty: 'hard' } } },
       0,
-      lastSecondOfDecember,
+      lastSecondOfWeek,
     )) === 'INVALID_INPUT',
-    'a schedule for the next KST month is still refused for a pitch count over ten',
+    'a schedule for the next KST week is still refused for a pitch count over ten',
   )
   const first = await save(
-    { rules: { pitchCount: 9, difficulty: 'easy' }, scheduledRules: january },
+    { rules: { pitchCount: 9, difficulty: 'easy' }, scheduledRules: nextWeek },
     0,
-    lastSecondOfDecember,
+    lastSecondOfWeek,
   )
   assert(
     isDeepStrictEqual(first.venues.ballpark.rules, defaultRules),
     'a town saved for the first time starts with the default rules, whatever rules it sends',
   )
   assert(
-    isDeepStrictEqual(first.venues.ballpark.scheduledRules, january),
-    'the last second of a KST month may still schedule the next month',
+    isDeepStrictEqual(first.venues.ballpark.scheduledRules, nextWeek),
+    'the last second of a KST week may still schedule the next week',
   )
   assert(
-    (await refusalCode({ scheduledRules: { ...january, fromMonth: '2026-02' } }, 1, lastSecondOfDecember)) ===
+    (await refusalCode({ scheduledRules: { ...nextWeek, fromWeek: '2026-01-05' } }, 1, lastSecondOfWeek)) ===
       'INVALID_INPUT',
-    'at the last second of a KST month, a device whose clock already reads the next month cannot move the schedule a month on',
+    'at the last second of a KST week, a device whose clock already reads the next week cannot move the schedule a week on',
   )
   const stale = await save(
-    { rules: { pitchCount: 3, difficulty: 'easy' }, scheduledRules: january },
+    { rules: { pitchCount: 3, difficulty: 'easy' }, scheduledRules: nextWeek },
     1,
-    lastSecondOfDecember,
+    lastSecondOfWeek,
   )
   assert(
     isDeepStrictEqual(stale.venues.ballpark.rules, defaultRules),
@@ -481,92 +508,94 @@ async function checkBallparkRuleSchedule(assert: Assert): Promise<void> {
       theme: 'garden',
       colors: {},
       rules: defaultRules,
-      scheduledRules: january,
+      scheduledRules: nextWeek,
     }),
-    'reads never check the clock: a stored schedule for 2026-01, a month the real clock has passed, still reads as saved',
+    'reads never check the clock: a stored schedule for a week the real clock has passed still reads as saved',
   )
-  // A save accepts only the next month, so the YYYY-MM shape now guards stored towns and seeds, read by this parse.
-  const readRefusalCode = (fromMonth: string) => {
+  // A save accepts only the next week, so the Monday check now guards stored towns and seeds, read by this parse.
+  const readRefusalCode = (fromWeek: string) => {
     try {
-      parseTownVenues({ ballpark: { scheduledRules: { fromMonth, rules: defaultRules } } })
+      parseTownVenues({ ballpark: { scheduledRules: { fromWeek, rules: defaultRules } } })
       return null
     } catch (error) {
       return error instanceof DomainError ? error.code : error
     }
   }
-  for (const fromMonth of ['2026-1', '2026-13']) {
+  for (const fromWeek of ['2026-01', '2026-1-05', '2026-01-06', '2026-02-30']) {
     assert(
-      readRefusalCode(fromMonth) === 'INVALID_INPUT',
-      `a stored schedule from ${fromMonth} is refused on read, since months compare as YYYY-MM text`,
+      readRefusalCode(fromWeek) === 'INVALID_INPUT',
+      `a stored schedule from ${fromWeek} is refused on read: a week is the YYYY-MM-DD of a real Monday`,
     )
   }
+  assert(readRefusalCode('2026-01-05') === null, 'a stored schedule from a Monday reads')
 
   for (const scheduledRules of [
-    { ...january, rules: { pitchCount: 4, difficulty: 'easy' } },
-    { ...january, fromMonth: '2025-12' },
+    { ...nextWeek, rules: { pitchCount: 4, difficulty: 'easy' } },
+    { ...nextWeek, fromWeek: '2025-12-22' },
   ]) {
     assert(
-      (await refusalCode({ scheduledRules }, 2, firstSecondOfJanuary)) === 'INVALID_INPUT',
-      `from the first second of the KST month 2026-01, a changed schedule from ${scheduledRules.fromMonth} is refused`,
+      (await refusalCode({ scheduledRules }, 2, firstSecondOfNextWeek)) === 'INVALID_INPUT',
+      `from the first second of the KST week 2025-12-29, a changed schedule from ${scheduledRules.fromWeek} is refused`,
     )
   }
-  const promoted = await save({ rules: defaultRules, scheduledRules: january }, 2, firstSecondOfJanuary)
+  const promoted = await save({ rules: defaultRules, scheduledRules: nextWeek }, 2, firstSecondOfNextWeek)
   assert(
-    isDeepStrictEqual(promoted.venues.ballpark.rules, january.rules) && !('scheduledRules' in promoted.venues.ballpark),
-    'from the first second of its KST month, resending the stored schedule is accepted and promotes it into the rules',
+    isDeepStrictEqual(promoted.venues.ballpark.rules, nextWeek.rules) &&
+      !('scheduledRules' in promoted.venues.ballpark),
+    'from the first second of its KST week, resending the stored schedule is accepted and promotes it into the rules',
   )
   assert(
-    (await refusalCode({ scheduledRules: january }, 2, firstSecondOfJanuary)) === 'CONFLICT',
-    'a tab that loaded the schedule before another tab promoted it is told the town changed, not that the month is wrong',
+    (await refusalCode({ scheduledRules: nextWeek }, 2, firstSecondOfNextWeek)) === 'CONFLICT',
+    'a tab that loaded the schedule before another tab promoted it is told the town changed, not that the week is wrong',
   )
   assert(
     (await refusalCode(
-      { scheduledRules: { ...january, rules: { pitchCount: 4, difficulty: 'easy' } } },
+      { scheduledRules: { ...nextWeek, rules: { pitchCount: 4, difficulty: 'easy' } } },
       3,
-      firstSecondOfJanuary,
+      firstSecondOfNextWeek,
     )) === 'INVALID_INPUT',
-    'a town with no schedule cannot schedule the KST month already under way',
+    'a town with no schedule cannot schedule the KST week already under way',
   )
-  const afterPromotion = await save({ rules: { pitchCount: 3, difficulty: 'easy' } }, 3, firstSecondOfJanuary)
+  const afterPromotion = await save({ rules: { pitchCount: 3, difficulty: 'easy' } }, 3, firstSecondOfNextWeek)
   assert(
-    isDeepStrictEqual(afterPromotion.venues.ballpark.rules, january.rules),
-    'once promoted, the rules stay in effect for the month, whatever rules a later save sends',
+    isDeepStrictEqual(afterPromotion.venues.ballpark.rules, nextWeek.rules),
+    'once promoted, the rules stay in effect for the week, whatever rules a later save sends',
   )
-  const february = { fromMonth: '2026-02', rules: { pitchCount: 4, difficulty: 'easy' } }
-  const scheduledInJanuary = await save({ scheduledRules: february }, 4, firstSecondOfJanuary)
+  const weekAfter = { fromWeek: '2026-01-05', rules: { pitchCount: 4, difficulty: 'easy' } }
+  const scheduledNext = await save({ scheduledRules: weekAfter }, 4, firstSecondOfNextWeek)
   assert(
-    isDeepStrictEqual(scheduledInJanuary.venues.ballpark.scheduledRules, february),
-    'from the first second of a KST month, the month after it may be scheduled',
+    isDeepStrictEqual(scheduledNext.venues.ballpark.scheduledRules, weekAfter),
+    'from the first second of a KST week, the week after it may be scheduled, in the next year too',
   )
 
-  // Two months ahead, as a server that let any later month be scheduled could have stored.
-  const march = { fromMonth: '2026-03', rules: { pitchCount: 8, difficulty: 'hard' } }
+  // Three weeks ahead, as a server that let any later week be scheduled could have stored.
+  const laterWeek = { fromWeek: '2026-01-12', rules: { pitchCount: 8, difficulty: 'hard' } }
   const earlierStore = new MemoryStore()
   await earlierStore.saveTown(
-    parseTownLayout({ ...sampleTownLayout, venues: { ballpark: { scheduledRules: march } } }),
+    parseTownLayout({ ...sampleTownLayout, venues: { ballpark: { scheduledRules: laterWeek } } }),
     0,
   )
-  const resent = await saveIn(new BackendService(earlierStore), { scheduledRules: march }, 1, lastSecondOfDecember)
+  const resent = await saveIn(new BackendService(earlierStore), { scheduledRules: laterWeek }, 1, lastSecondOfWeek)
   assert(
-    isDeepStrictEqual(resent.venues.ballpark.scheduledRules, march),
-    'a stored schedule sent back unchanged is kept, even for a month a new schedule could not start in',
+    isDeepStrictEqual(resent.venues.ballpark.scheduledRules, laterWeek),
+    'a stored schedule sent back unchanged is kept, even for a week a new schedule could not start in',
   )
 
   const unsent = new BackendService(new MemoryStore())
-  await saveIn(unsent, { scheduledRules: january }, 0, lastSecondOfDecember)
-  const promotedUnsent = await saveIn(unsent, {}, 1, firstSecondOfJanuary)
+  await saveIn(unsent, { scheduledRules: nextWeek }, 0, lastSecondOfWeek)
+  const promotedUnsent = await saveIn(unsent, {}, 1, firstSecondOfNextWeek)
   assert(
-    isDeepStrictEqual(promotedUnsent.venues.ballpark.rules, january.rules) &&
+    isDeepStrictEqual(promotedUnsent.venues.ballpark.rules, nextWeek.rules) &&
       !('scheduledRules' in promotedUnsent.venues.ballpark),
-    'from the first second of its KST month, a save that leaves the schedule out still promotes it into the rules',
+    'from the first second of its KST week, a save that leaves the schedule out still promotes it into the rules',
   )
 
   const cancelledTown = new BackendService(new MemoryStore())
-  await saveIn(cancelledTown, { scheduledRules: january }, 0, lastSecondOfDecember)
-  const cancelled = await saveIn(cancelledTown, {}, 1, lastSecondOfDecember)
+  await saveIn(cancelledTown, { scheduledRules: nextWeek }, 0, lastSecondOfWeek)
+  const cancelled = await saveIn(cancelledTown, {}, 1, lastSecondOfWeek)
   assert(
     !('scheduledRules' in cancelled.venues.ballpark),
-    'before its KST month comes, a save that leaves the schedule out cancels it',
+    'before its KST week comes, a save that leaves the schedule out cancels it',
   )
 }
 

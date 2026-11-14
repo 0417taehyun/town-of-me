@@ -66,6 +66,14 @@ export const DERBY_REVIEW_RULES = {
   clockSkewMs: 2000,
 }
 
+/**
+ * The flag of a result whose request did not look like the game page's own `fetch` from a browser. Only this yes or no
+ * is kept, never a header's value, so nothing about the visitor or their device is stored. A script can send the same
+ * headers a browser does, so it proves nothing by its absence: it only catches the lazy ones, and holds them for the
+ * admin like any other flag.
+ */
+export const notFromBrowserFlag = 'not-from-browser'
+
 /** What a run's result says beyond the log: the client's own totals, which only decide whether the run is held. */
 export interface DerbySubmission {
   log: DerbyInputLog

@@ -6,17 +6,23 @@ import { DomainError } from './domain.js'
 import type { DerbyRunRecord, PublicDerbyResult } from './homeRunDerby.js'
 import { parseLinkedInRequest, profileHint, type LinkedInLink } from './leaderboardIdentity.js'
 import type { BallparkRules } from './town.js'
-import { nextRankingMonth, rankingDay, rankingMonthInput, rankingMonthStart } from './town.js'
+import { nextRankingWeek, rankingDay, rankingWeekInput, rankingWeekStart } from './town.js'
 import { inputRecord, invalidInput, optionalInput, singleLineText } from './validation.js'
 
-// The monthly boards, apart from any one game: a board is a game and a KST month (its season), and each visitor has at
+// The weekly boards, apart from any one game: a board is a game and a KST week (its season), and each visitor has at
 // most one record on it, their best accepted run. The public order is home runs, then their distance, then whoever got
-// there first; its first three are the statues. A run held for review never touches a record, so it never stands.
+// there first; its first three are the statues. A run held for review never touches a record, so it never stands, and
+// a place among the statues is published only once the admin has approved its record (`publishedPlaces`).
 
 /** A run is open this long after it is issued: a five-pitch run takes about two minutes, pauses included. */
 export const runLifetimeMs = 10 * 60_000
-/** The public order's first places, which stand as statues. */
+/** The public order's first places, which stand as statues, and which only an approved record is published in. */
 export const statueCount = 3
+/**
+ * Why a run with nothing else against it is held: it would be its visitor's best and place among the statues, where
+ * nothing is published before the admin has seen it.
+ */
+export const podiumPlaceFlag = 'podium-place'
 /** How many places the leaderboard lists. */
 export const leaderboardLength = 50
 
@@ -27,7 +33,7 @@ export type RunStatus = 'issued' | 'abandoned' | 'scored' | 'flagged' | 'rejecte
 export interface GameRun {
   id: string
   game: string
-  /** The KST month it was issued in, `YYYY-MM`: its board, whenever its result arrives. */
+  /** The KST week it was issued in, by its Monday `YYYY-MM-DD`: its board, whenever its result arrives. */
   season: string
   /** Hash of the anonymous visitor cookie; client addresses are never stored. */
   visitorHash: string
@@ -67,7 +73,7 @@ export interface BoardKey {
 
 /** A name waits for the admin before anyone else reads it. */
 export type NameStatus = 'pending' | 'approved' | 'rejected'
-/** `pending` does not hide a record; only `disqualified` takes it off the board. */
+/** `pending` hides a record only among the statues (`publishedPlaces`); `disqualified` takes it off the board. */
 export type ReviewStatus = 'pending' | 'approved' | 'disqualified'
 /** `pending` until the admin sees the code on the profile; `reported` once someone said the profile is theirs. */
 export type LinkedInStatus = 'pending' | 'approved' | 'reported'
@@ -130,7 +136,7 @@ export type EntryChanges = Pick<
 >
 
 /**
- * What the visitor asks of this month's record: whether it is listed, the character and name it shows, and its link
+ * What the visitor asks of this week's record: whether it is listed, the character and name it shows, and its link
  * (`undefined` leaves it, `null` turns it off).
  */
 export interface OwnEntryUpdate {
@@ -188,6 +194,12 @@ export interface EntrySettlement {
  */
 export type SettleEntry = (current: LeaderboardEntry | null, latest: LeaderboardEntry | null) => EntrySettlement
 
+/** A record and its place in the public order, or the place it would take. */
+export interface RankedRecord {
+  entry: LeaderboardEntry
+  rank: number
+}
+
 /** The visitor's view of how a run went. */
 export type RunStanding =
   | { kind: 'reviewing' }
@@ -222,9 +234,62 @@ export function textOrder(left: string, right: string): number {
   return left < right ? -1 : 1
 }
 
-/** On the public board: listed and not disqualified. */
+/**
+ * In the public order: listed and not disqualified. Such a record holds its place, though a place among the statues
+ * is shown only once it is approved (`publishedPlaces`).
+ */
 export function isPublicEntry(entry: LeaderboardEntry): boolean {
   return entry.listed && entry.reviewStatus !== 'disqualified'
+}
+
+/** The place `place` would take among the records in the public order, the visitor's own record aside. */
+export function wouldBePlace(
+  publicEntries: readonly LeaderboardEntry[],
+  place: BoardPlace,
+  visitorHash: string,
+): number {
+  return publicEntries.filter((entry) => entry.visitorHash !== visitorHash && boardOrder(entry, place) < 0).length + 1
+}
+
+/**
+ * Whether a record at `rank` waits for the admin before anyone else sees it there: a place among the statues takes
+ * approval, however the record came to it. Whether the record is listed is left out on purpose, so the visitor of an
+ * unlisted one is told before listing it.
+ */
+export function awaitsApproval(entry: LeaderboardEntry, rank: number): boolean {
+  return rank <= statueCount && entry.reviewStatus === 'pending'
+}
+
+/**
+ * What everyone may see of a board, and the one place that decides it: the board, the statues, the hall of fame, and
+ * a run's standing all read this. `publicEntries` is the top of the public order (`isPublicEntry`, best first). A
+ * record keeps its place, but one among the statues that the admin has not approved is left out, and its place stays
+ * empty rather than pass to the next record: that record would lose the statue again on approval, and a finished
+ * season would have shown a champion it never had. So no path to the first three goes around the admin, neither a
+ * record listed later nor one that moved up when a record above it was deleted, disqualified, unlisted, or changed.
+ */
+export function publishedPlaces(publicEntries: readonly LeaderboardEntry[]): RankedRecord[] {
+  return publicEntries
+    .map((entry, index) => ({ entry, rank: index + 1 }))
+    .filter(({ entry, rank }) => !awaitsApproval(entry, rank))
+}
+
+/**
+ * Whether a run nothing else holds must still wait for the admin (`podiumPlaceFlag`): it would become its visitor's
+ * record and place among the statues. `top` is the top of the public order, at least one more than the statues, so
+ * the visitor's own record can be set aside. Whether the record is or would be listed plays no part, so a result
+ * cannot be scored unlisted and listed afterwards. An approved record the run would improve keeps standing until the
+ * run is accepted. A disqualified visitor's run changes nothing anyone sees, so it is not held.
+ */
+export function wouldTakePodium(
+  place: BoardPlace,
+  current: LeaderboardEntry | null,
+  top: readonly LeaderboardEntry[],
+  visitorHash: string,
+): boolean {
+  if (current?.reviewStatus === 'disqualified') return false
+  if (current && boardOrder(current, place) < 0) return false
+  return wouldBePlace(top, place, visitorHash) <= statueCount
 }
 
 /** A record's version after a change at `now`: always later than `previous`, even within the same millisecond. */
@@ -250,7 +315,7 @@ export function entryChanges(entry: LeaderboardEntry, changes: Partial<EntryChan
 
 /** The season a request names, this one by default: malformed is `400`, and a season still to come has no board. */
 export function boardSeason(requested: unknown, currentSeason: string): string {
-  const season = requested === null ? currentSeason : rankingMonthInput(requested, 'season')
+  const season = requested === null ? currentSeason : rankingWeekInput(requested, 'season')
   if (season > currentSeason) throw new DomainError('NOT_FOUND', 'That season has not started')
   return season
 }
@@ -389,9 +454,10 @@ export function parsePastEntryUpdate(input: Record<string, unknown>): PastEntryU
 }
 
 /**
- * The visitor's change to this month's record: a listed record shows the profile's name, an unlisted one keeps none
+ * The visitor's change to this week's record: a listed record shows the profile's name, an unlisted one keeps none
  * and no link. A new name gets its checked status while the record's own name keeps its status, a new appearance
- * returns the record to review, since a statue shows it at once, and a taken-down record stays nameless.
+ * returns the record to review, so a statue leaves its place empty until the admin has seen the new look, and a
+ * taken-down record stays nameless.
  */
 export function ownEntryChanges(
   entry: LeaderboardEntry,
@@ -452,7 +518,10 @@ export function pastEntryChanges(entry: LeaderboardEntry, update: PastEntryUpdat
   return entryChanges(entry, { ...anonymized, linkedIn: null }, now)
 }
 
-/** A run held for review leaves the record as it was; a disqualified record is off this board whatever the run did. */
+/**
+ * A run held for review leaves the record as it was; a disqualified record is off this board whatever the run did. A
+ * listed record waiting for approval among the statues is answered like a held run, since nobody else sees it yet.
+ */
 export function runStanding(
   run: GameRun,
   entry: LeaderboardEntry | null,
@@ -461,6 +530,7 @@ export function runStanding(
 ): RunStanding {
   if (run.status !== 'scored' || !entry) return { kind: 'reviewing' }
   if (entry.reviewStatus === 'disqualified') return { kind: 'excluded' }
+  if (entry.listed && awaitsApproval(entry, rank)) return { kind: 'reviewing' }
   const personalBest = entry.bestRunId === run.id
   if (entry.listed) return { kind: 'ranked', rank, personalBest }
   return { kind: consentNeeded ? 'consentNeeded' : 'unlisted', wouldBeRank: rank, personalBest }
@@ -491,15 +561,16 @@ export function rankedEntry(entry: LeaderboardEntry, rank: number) {
   }
 }
 
-/** A statue, this month's or a past season's: a public record with its LinkedIn link once the admin approved it. */
+/** A statue, this week's or a past season's: a public record with its LinkedIn link once the admin approved it. */
 export function podiumEntry(entry: LeaderboardEntry, rank: number) {
   const linkedIn = entry.linkedIn?.status === 'approved' ? { linkedInProfileUrl: entry.linkedIn.profileUrl } : {}
   return { ...rankedEntry(entry, rank), ...linkedIn }
 }
 
 /**
- * The visitor's own record: the real name and its status, its place or the place it would have if listed, and its link
- * by a hint only, since the next person on a shared device sees this too.
+ * The visitor's own record: the real name and its status, its place or the place it would have if listed, whether
+ * that place waits for the admin's approval before anyone else sees it (`awaitsApproval`), and its link by a hint
+ * only, since the next person on a shared device sees this too.
  */
 export function ownEntry(entry: LeaderboardEntry, rank: number) {
   const disqualified = entry.reviewStatus === 'disqualified'
@@ -523,6 +594,7 @@ export function ownEntry(entry: LeaderboardEntry, rank: number) {
     totalDistanceDm: entry.tiebreak,
     achievedAt: entry.achievedAt,
     rank: disqualified ? null : rank,
+    awaitingApproval: awaitsApproval(entry, rank),
   }
 }
 
@@ -530,8 +602,8 @@ export function ownEntry(entry: LeaderboardEntry, rank: number) {
 export function seasonView(season: string, currentSeason: string) {
   return {
     id: season,
-    startsAt: new Date(rankingMonthStart(season)).toISOString(),
-    endsAt: new Date(rankingMonthStart(nextRankingMonth(season))).toISOString(),
+    startsAt: new Date(rankingWeekStart(season)).toISOString(),
+    endsAt: new Date(rankingWeekStart(nextRankingWeek(season))).toISOString(),
     final: season < currentSeason,
   }
 }

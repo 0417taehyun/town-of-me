@@ -48,8 +48,8 @@ async function checkTownStore(store: Store, assert: Assert): Promise<void> {
       visible: true,
       theme: 'garden',
       colors: { roof: '#e8735a' },
-      // A month that has passed: a save could no longer schedule it, but a stored schedule always reads.
-      scheduledRules: { fromMonth: '2025-11', rules: { pitchCount: 7, difficulty: 'hard' } },
+      // A week that has passed: a save could no longer schedule it, but a stored schedule always reads.
+      scheduledRules: { fromWeek: '2025-11-17', rules: { pitchCount: 7, difficulty: 'hard' } },
     },
   }
   const layout = parseTownLayout({
@@ -72,7 +72,7 @@ async function checkTownStore(store: Store, assert: Assert): Promise<void> {
     isDeepStrictEqual(firstLoaded?.venues, layout.venues) &&
       firstLoaded?.venues.ballpark.visible === true &&
       firstLoaded.venues.ballpark.scheduledRules,
-    'the first save stores the venues: the ballpark shown, with a color override and a schedule whose month has passed',
+    'the first save stores the venues: the ballpark shown, with a color override and a schedule whose week has passed',
   )
   assert(
     firstLoaded?.owner.introduction === null &&
@@ -433,7 +433,7 @@ const runAppearance = parseCharacterAppearance(
   'appearance',
 )
 
-function issuedRun(visitorHash: string, season = '2026-10'): GameRun {
+function issuedRun(visitorHash: string, season = '2026-10-19'): GameRun {
   return {
     id: crypto.randomUUID(),
     game: runGame,
@@ -564,7 +564,7 @@ async function checkRunStore(store: Store, assert: Assert): Promise<void> {
 
 /** A record is settled with the run that changes it, from the visitor's record on that board or their latest one. */
 async function checkEntryStore(store: Store, assert: Assert): Promise<void> {
-  const october = await recordEntry(store, 'entry-visitor', '2026-09', {
+  const lastSeason = await recordEntry(store, 'entry-visitor', '2026-09-14', {
     listed: true,
     authorName: 'Sprout',
     nameStatus: 'approved',
@@ -578,7 +578,7 @@ async function checkEntryStore(store: Store, assert: Assert): Promise<void> {
     return { entry: first, changed: true, consentNeeded: false }
   })
   assert(
-    seen.length === 1 && seen[0]?.[0] === null && isDeepStrictEqual(seen[0][1], october),
+    seen.length === 1 && seen[0]?.[0] === null && isDeepStrictEqual(seen[0][1], lastSeason),
     "a first record on a board is settled from the visitor's latest record of the game",
   )
   assert(
@@ -599,7 +599,7 @@ async function checkEntryStore(store: Store, assert: Assert): Promise<void> {
     'a later run is settled from the record on its board, and an unchanged settlement writes nothing',
   )
 
-  const season = '2026-08'
+  const season = '2026-08-10'
   const tied = new Date(runIssuedAt).toISOString()
   const later = new Date(runIssuedAt + 1).toISOString()
   const listed = { listed: true, authorName: 'Batter', nameStatus: 'pending' as const }
@@ -646,13 +646,13 @@ async function checkEntryStore(store: Store, assert: Assert): Promise<void> {
     board.map(({ id }) => id).join() === [leader, sameMoment, earlier].map(({ id }) => id).join(),
     'the board lists listed, not disqualified records in public order, up to the limit',
   )
-  const ended = await store.listEndedSeasons(runGame, '2026-10')
+  const ended = await store.listEndedSeasons(runGame, '2026-10-19')
   assert(
-    ended.indexOf('2026-09') !== -1 &&
-      ended.indexOf('2026-09') < ended.indexOf(season) &&
+    ended.indexOf('2026-09-14') !== -1 &&
+      ended.indexOf('2026-09-14') < ended.indexOf(season) &&
       new Set(ended).size === ended.length &&
-      !(await store.listEndedSeasons(runGame, '2026-09')).includes('2026-09') &&
-      (await store.listEndedSeasons('another-game', '2026-10')).length === 0,
+      !(await store.listEndedSeasons(runGame, '2026-09-14')).includes('2026-09-14') &&
+      (await store.listEndedSeasons('another-game', '2026-10-19')).length === 0,
     "the ended seasons are a game's seasons before the given one, each once, newest first",
   )
 
@@ -682,7 +682,7 @@ async function checkEntryStore(store: Store, assert: Assert): Promise<void> {
 
 /** A held run is reviewed once, reports and blocks are kept, and a visitor's deletion takes every season with it. */
 async function checkModerationStore(store: Store, assert: Assert): Promise<void> {
-  const season = '2026-07'
+  const season = '2026-07-13'
   const board = { game: runGame, season }
   const reviewedAt = new Date(runIssuedAt + 3 * 60_000).toISOString()
   const heldProfile = { name: 'Sprout', appearance: runAppearance }
@@ -756,11 +756,13 @@ async function checkModerationStore(store: Store, assert: Assert): Promise<void>
     ) && counts.length === 2,
     "a board counts each visitor's runs, abandoned runs, and held runs",
   )
-  await store.issueRun(issuedRun('moderation-unplayed', season))
+  const tooFast = issuedRun('moderation-refused', season)
+  await store.issueRun(tooFast)
+  await store.finishRun(tooFast.id, 'moderation-refused', { ...flagged, status: 'rejected' }, null)
   assert(
-    (await store.hasSubmittedRun(runGame, 'moderation-dismissed')) &&
-      !(await store.hasSubmittedRun(runGame, 'moderation-unplayed')),
-    'only a visitor who sent a result has played',
+    (await store.hasJudgedRun(runGame, 'moderation-dismissed')) &&
+      !(await store.hasJudgedRun(runGame, 'moderation-refused')),
+    'a held run counts as judged, and a run refused as too fast does not',
   )
 
   const unlisted = await recordEntry(store, 'moderation-unlisted', season, { score: 9 })
@@ -787,14 +789,8 @@ async function checkModerationStore(store: Store, assert: Assert): Promise<void>
     isDeepStrictEqual(await store.listReports(board), [
       { ...nameReport, resolvedAt: reviewedAt, resolution: 'kept' },
       linkReport,
-    ]) && (await store.listReports({ game: runGame, season: '2026-06' })).length === 0,
+    ]) && (await store.listReports({ game: runGame, season: '2026-06-15' })).length === 0,
     "resolving closes the record's open reports on one target only, and reports are listed by board",
-  )
-  await store.forgetKeptReports(entry.id, ['link'])
-  await store.forgetKeptReports(entry.id, ['name'])
-  assert(
-    isDeepStrictEqual(await store.listReports(board), [linkReport]),
-    "forgetting a target's kept reports deletes those only, never an open report",
   )
 
   await store.blockLink('blocked-profile-hash', reviewedAt)
@@ -804,7 +800,7 @@ async function checkModerationStore(store: Store, assert: Assert): Promise<void>
     'a blocked link stays blocked, however often it is blocked',
   )
 
-  const earlier = await recordEntry(store, 'moderation-held', '2026-06', {})
+  const earlier = await recordEntry(store, 'moderation-held', '2026-06-15', {})
   await store.eraseVisitorGameData(runGame, 'moderation-held')
   assert(
     (await store.getEntry(entry.id)) === null &&
@@ -823,9 +819,9 @@ async function checkTakenDownProfiles(
   reviewedAt: string,
   assert: Assert,
 ): Promise<void> {
-  const season = '2026-03'
-  const held = async (visitorHash: string, month = season) => {
-    const run = issuedRun(visitorHash, month)
+  const season = '2026-03-16'
+  const held = async (visitorHash: string, week = season) => {
+    const run = issuedRun(visitorHash, week)
     await store.issueRun(run)
     await store.finishRun(run.id, visitorHash, flagged, null)
     return run
@@ -835,7 +831,7 @@ async function checkTakenDownProfiles(
   const dismissed = await held('takedown-visitor')
   await store.rejectRun(dismissed.id, reviewedAt)
   const otherVisitor = await held('takedown-other')
-  const otherSeason = await held('takedown-visitor', '2026-02')
+  const otherSeason = await held('takedown-visitor', '2026-02-16')
   const profileOf = async (run: GameRun) => (await store.getRun(run.id))?.profile ?? null
 
   const takenDown = { ...entry, takedown: true, appearancePublic: false, updatedAt: reviewedAt }
@@ -866,7 +862,7 @@ async function checkListedDismissal(
   reviewedAt: string,
   assert: Assert,
 ): Promise<void> {
-  const season = '2026-04'
+  const season = '2026-04-13'
   const finished = async (visitorHash: string, outcome: FinishedRun, game = runGame) => {
     const run = { ...issuedRun(visitorHash, season), game }
     await store.issueRun(run)
@@ -901,7 +897,7 @@ function settleOnto(entry: LeaderboardEntry): SettleEntry {
 
 /** A held run accepted, the visitor's next run finished, and all their data erased, at the same moment. */
 async function raceVisitor(store: Store, visitorHash: string) {
-  const season = '2026-05'
+  const season = '2026-05-11'
   const flagged = { ...scoredRun, status: 'flagged' as const, flags: ['claimed-mismatch'] }
   const held = issuedRun(visitorHash, season)
   await store.issueRun(held)
@@ -932,7 +928,7 @@ async function checkVisitorRace(store: Store, assert: Assert): Promise<void> {
 
 /**
  * A daily total only ever grows by one in one step, so increments at the same moment lose nothing; PostgreSQL shows it.
- * The notes' KST days and the game's months are read from what is already stored, by both stores the same way.
+ * The notes' KST days and the game's weeks are read from what is already stored, by both stores the same way.
  */
 async function checkSiteStatsStore(store: Store, assert: Assert): Promise<void> {
   const day = '2031-03-01'
@@ -987,17 +983,17 @@ async function checkSiteStatsStore(store: Store, assert: Assert): Promise<void> 
     'notes count on the KST day they were written, by status, and a note on either side of the range counts for neither',
   )
 
-  await store.issueRun(issuedRun('stats-visitor', '2031-03'))
-  await recordEntry(store, 'stats-visitor', '2031-03', {})
-  await recordEntry(store, 'stats-other', '2031-04', {})
-  await store.issueRun({ ...issuedRun('stats-visitor', '2031-04'), game: 'other-game' })
-  const months = await store.countGameMonths(runGame)
+  await store.issueRun(issuedRun('stats-visitor', '2031-03-03'))
+  await recordEntry(store, 'stats-visitor', '2031-03-03', {})
+  await recordEntry(store, 'stats-other', '2031-04-07', {})
+  await store.issueRun({ ...issuedRun('stats-visitor', '2031-04-07'), game: 'other-game' })
+  const weeks = await store.countGameWeeks(runGame)
   assert(
-    isDeepStrictEqual(months.slice(0, 2), [
-      { month: '2031-04', runs: 1, records: 1 },
-      { month: '2031-03', runs: 2, records: 1 },
-    ]) && (await store.countGameMonths('other-game')).length === 1,
-    "a game's months come newest first, each with its runs and records, and another game's stay apart",
+    isDeepStrictEqual(weeks.slice(0, 2), [
+      { week: '2031-04-07', runs: 1, records: 1 },
+      { week: '2031-03-03', runs: 2, records: 1 },
+    ]) && (await store.countGameWeeks('other-game')).length === 1,
+    "a game's weeks come newest first, each with its runs and records, and another game's stay apart",
   )
 }
 

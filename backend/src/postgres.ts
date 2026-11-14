@@ -22,7 +22,7 @@ import type {
   SettleEntry,
 } from './leaderboard.js'
 import type { EntryReport, ReportResolution, ReportTarget, VisitorRunCounts } from './leaderboardReview.js'
-import type { GameMonthCount, GuestbookDayCount, SiteEventCount } from './siteStats.js'
+import type { GameWeekCount, GuestbookDayCount, SiteEventCount } from './siteStats.js'
 import type { GuestbookEntryChanges, Store } from './store.js'
 import {
   type BallparkRules,
@@ -601,9 +601,10 @@ export class PostgresStore implements Store {
     }))
   }
 
-  async hasSubmittedRun(game: string, visitorHash: string): Promise<boolean> {
+  async hasJudgedRun(game: string, visitorHash: string): Promise<boolean> {
     const { rows } = await this.pool.query(
-      'SELECT 1 FROM minigame_runs WHERE game = $1 AND visitor_hash = $2 AND submitted_at IS NOT NULL LIMIT 1',
+      `SELECT 1 FROM minigame_runs
+       WHERE game = $1 AND visitor_hash = $2 AND status IN ('scored', 'flagged') LIMIT 1`,
       [game, visitorHash],
     )
     return rows.length > 0
@@ -677,13 +678,6 @@ export class PostgresStore implements Store {
     )
   }
 
-  async forgetKeptReports(entryId: string, targets: readonly ReportTarget[]): Promise<void> {
-    await this.pool.query(
-      `DELETE FROM minigame_reports WHERE entry_id = $1 AND target = ANY($2::text[]) AND resolution = 'kept'`,
-      [entryId, targets],
-    )
-  }
-
   async isLinkBlocked(profileHash: string): Promise<boolean> {
     const { rows } = await this.pool.query('SELECT 1 FROM minigame_link_blocks WHERE profile_hash = $1', [profileHash])
     return rows.length > 0
@@ -734,9 +728,9 @@ export class PostgresStore implements Store {
     return rows
   }
 
-  async countGameMonths(game: string): Promise<GameMonthCount[]> {
-    const { rows } = await this.pool.query<GameMonthCount>(
-      `SELECT season AS month, COALESCE(runs.total, 0)::int AS runs, COALESCE(records.total, 0)::int AS records
+  async countGameWeeks(game: string): Promise<GameWeekCount[]> {
+    const { rows } = await this.pool.query<GameWeekCount>(
+      `SELECT season AS week, COALESCE(runs.total, 0)::int AS runs, COALESCE(records.total, 0)::int AS records
        FROM (SELECT season, count(*) AS total FROM minigame_runs WHERE game = $1 GROUP BY season) runs
        FULL JOIN (SELECT season, count(*) AS total FROM minigame_entries WHERE game = $1 GROUP BY season) records
          USING (season)

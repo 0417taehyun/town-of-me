@@ -1,5 +1,5 @@
 import type { GuestbookStatus } from './guestbook.js'
-import { rankingDay, type TownLayout } from './town.js'
+import { rankingDay, rankingWeek, type TownLayout } from './town.js'
 import { boundedInteger, invalidInput } from './validation.js'
 
 // The admin's usage statistics: anonymous daily totals only. Nothing here may identify a visitor or link two counts to
@@ -48,9 +48,9 @@ export interface GuestbookDayCount {
   count: number
 }
 
-/** A ranked game's runs started and records held in a KST month, its season. */
-export interface GameMonthCount {
-  month: string
+/** A ranked game's runs started and records held in a KST week, its season, named by its Monday. */
+export interface GameWeekCount {
+  week: string
   runs: number
   records: number
 }
@@ -81,6 +81,12 @@ export function statsRange(days: number, now: number): StatsRange {
   const to = rankingDay(new Date(now).toISOString())
   const from = new Date(Date.parse(`${to}T00:00:00.000Z`) - (days - 1) * dayMilliseconds).toISOString().slice(0, 10)
   return { from, to, days }
+}
+
+/** The seasons with a day in the range, newest first as they came: a year of weeks is too many to list each time. */
+export function weeksInRange(weeks: readonly GameWeekCount[], range: StatsRange): GameWeekCount[] {
+  const firstWeek = rankingWeek(Date.parse(`${range.from}T00:00:00+09:00`))
+  return weeks.filter(({ week }) => week >= firstWeek)
 }
 
 /** `totals` with `count` added under `key`. */

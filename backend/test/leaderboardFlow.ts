@@ -11,18 +11,23 @@ import {
   hashToken,
   judgeDerbyRun,
   MemoryStore,
-  nextRankingMonth,
+  nextRankingWeek,
   parseDerbySubmission,
+  parseRunProfile,
   parseTownLayout,
-  rankingMonth,
-  rankingMonthStart,
+  podiumPlaceFlag,
+  rankingWeek,
+  rankingWeekStart,
+  type Actor,
   type BallparkRules,
+  type RunOutcome,
 } from '../src/index.js'
 import { sampleTownLayout } from './townFlow.js'
 
 export type Assert = (condition: unknown, message: string) => asserts condition
 
 const origin = 'https://town.example'
+export const adminActor: Actor = { kind: 'linked', userId: 'review-admin', role: 'admin' }
 export const game = 'home-run-derby'
 export const minute = 60_000
 export const fiveNormal: BallparkRules = { pitchCount: 5, difficulty: 'normal' }
@@ -35,6 +40,8 @@ const practice = [
   { errorMs: 101.9, speed: 8.8 },
 ]
 const practiceOffsetMs = 108.7
+/** The seed of the runs the harness plays. */
+const boardSeed = 404
 /** The frontend sends its whole `PlayerProfile`; a fictional one. */
 export const profile = {
   name: 'Sprout',
@@ -91,7 +98,7 @@ type Board = {
   season: { id: string; startsAt: string; endsAt: string; final: boolean }
   podium: PublicEntry[]
   ranks: PublicEntry[]
-  own: { id: string; listed: boolean; rank: number | null; disqualified: boolean } | null
+  own: { id: string; listed: boolean; rank: number | null; disqualified: boolean; awaitingApproval: boolean } | null
 }
 
 export async function rejection(action: () => Promise<unknown>): Promise<unknown> {
@@ -101,7 +108,10 @@ export async function rejection(action: () => Promise<unknown>): Promise<unknown
   )
 }
 
-/** A store, its service and API, and the admin's ballpark settings stored as given (a save would settle the rules). */
+/**
+ * A store, its service and API, and the admin's ballpark settings stored as given (a save would settle the rules).
+ * Requests look like the game page's own `fetch` unless `fetchSite` says otherwise (`null` sends neither header).
+ */
 export function leaderboardHarness() {
   const store = new MemoryStore()
   const service = new BackendService(store)
@@ -110,10 +120,12 @@ export function leaderboardHarness() {
   function send(
     method: string,
     path: string,
-    options: { body?: unknown; cookie?: string; origin?: string | null } = {},
+    options: { body?: unknown; cookie?: string; origin?: string | null; fetchSite?: string | null } = {},
   ): Promise<Response> {
-    const headers = new Headers({ 'Content-Type': 'application/json' })
+    const headers = new Headers({ 'Content-Type': 'application/json', 'Sec-Fetch-Mode': 'cors' })
     if (options.origin !== null) headers.set('Origin', options.origin ?? origin)
+    if (options.fetchSite !== null) headers.set('Sec-Fetch-Site', options.fetchSite ?? 'same-origin')
+    if (options.fetchSite === null) headers.delete('Sec-Fetch-Mode')
     if (options.cookie) headers.set('Cookie', options.cookie)
     const body = options.body === undefined ? null : JSON.stringify(options.body)
     return api(new Request(`${origin}${path}`, { method, headers, body }))
@@ -128,7 +140,68 @@ export function leaderboardHarness() {
     await store.saveTown(layout, (await store.getTown())?.revision ?? 0)
   }
 
-  return { store, service, send, setBallpark }
+  /** Plays one run of `fiveNormal` and sends its result as the game page would, with whatever review that brings. */
+  async function playUnreviewed(
+    token: string,
+    errorsMs: Array<number | null>,
+    extra: object = {},
+    now = Date.now(),
+  ): Promise<RunOutcome> {
+    const visitorHash = await hashToken(token)
+    const run = await service.issueRun(game, visitorHash, now - 2 * minute, boardSeed)
+    const body = { ...resultBody(fiveNormal, boardSeed, errorsMs), ...extra }
+    return service.submitRunResult(game, visitorHash, run.id, body, true, now)
+  }
+
+  /**
+   * `playUnreviewed`, and a run held for nothing but its place among the statues is accepted at once, as an admin who
+   * found nothing wrong would: the outcome then carries the accepted run and the approved record.
+   */
+  async function play(
+    token: string,
+    errorsMs: Array<number | null>,
+    extra: object = {},
+    now = Date.now(),
+  ): Promise<RunOutcome> {
+    const outcome = await playUnreviewed(token, errorsMs, extra, now)
+    if (outcome.run.flags.join() !== podiumPlaceFlag) return outcome
+    const seen = { updatedAt: outcome.entry?.updatedAt ?? null }
+    return { ...outcome, ...(await service.acceptHeldRun(adminActor, game, outcome.run.id, seen, now)) }
+  }
+
+  return { store, service, send, setBallpark, play, playUnreviewed }
+}
+
+/**
+ * Three approved records at the top of a board, better than any run of `fiveNormal` the checks play, so those runs
+ * place below the statues and score at once.
+ */
+export function standApprovedStatues(store: MemoryStore, season: string): void {
+  const achievedAt = new Date(rankingWeekStart(season)).toISOString()
+  for (const place of [1, 2, 3]) {
+    const id = crypto.randomUUID()
+    store.leaderboardEntries.set(id, {
+      id,
+      game,
+      season,
+      visitorHash: `house-statue-${place}`,
+      bestRunId: null,
+      score: 5,
+      tiebreak: 9000 - place,
+      result: { homeRuns: 5, totalDistanceDm: 9000 - place, pitches: [] },
+      achievedAt,
+      authorName: null,
+      nameStatus: null,
+      appearance: parseRunProfile(profile).appearance,
+      appearancePublic: true,
+      listed: true,
+      reviewStatus: 'approved',
+      linkedIn: null,
+      takedown: false,
+      createdAt: achievedAt,
+      updatedAt: achievedAt,
+    })
+  }
 }
 
 /** Ranked runs: issued by the server, played on the client, and recorded once from the server's own judging. */
@@ -136,6 +209,8 @@ export async function checkLeaderboardFlow(assert: Assert): Promise<void> {
   const { store, service, send, setBallpark } = leaderboardHarness()
   const submit = (runId: string, body: unknown, cookie?: string) =>
     send('POST', `/v1/games/${game}/runs/${runId}/result`, cookie ? { body, cookie } : { body })
+  // The runs here are about recording, not the statues, so they place fourth and score at once.
+  standApprovedStatues(store, rankingWeek(Date.now()))
 
   assert((await send('POST', `/v1/games/${game}/runs`)).status === 503, 'a town never saved has no open ballpark')
   await setBallpark({ visible: false, rules: fiveNormal })
@@ -156,12 +231,12 @@ export async function checkLeaderboardFlow(assert: Assert): Promise<void> {
   const cookie = issued.headers.get('Set-Cookie')?.split(';')[0] ?? ''
   const { run } = (await issued.json()) as { run: { id: string; season: string; rules: unknown; seed: number } }
   assert(
-    issued.status === 201 && cookie.startsWith('__Host-tom_visitor=') && run.season === rankingMonth(Date.now()),
-    'the first run gives the browser a visitor cookie and counts in this KST month',
+    issued.status === 201 && cookie.startsWith('__Host-tom_visitor=') && run.season === rankingWeek(Date.now()),
+    'the first run gives the browser a visitor cookie and counts in this KST week',
   )
   assert(
     isDeepStrictEqual(run.rules, fiveNormal) && Number.isInteger(run.seed) && run.seed >= 0 && run.seed < 2 ** 32,
-    "a run carries the town's rules for the month and a 32-bit unsigned seed",
+    "a run carries the town's rules for the week and a 32-bit unsigned seed",
   )
   const repeatedIssues = await Promise.all(
     Array.from({ length: 25 }, () => send('POST', `/v1/games/${game}/runs`, { cookie })),
@@ -181,6 +256,7 @@ export async function checkLeaderboardFlow(assert: Assert): Promise<void> {
       visitorHash,
       lastRun.id,
       resultBody(fiveNormal, lastRun.seed, [10]),
+      true,
       Date.now() + minute,
     ),
   )
@@ -246,7 +322,7 @@ export async function checkLeaderboardFlow(assert: Assert): Promise<void> {
   )
   assert(
     outcome.standing.kind === 'unlisted' &&
-      outcome.standing.wouldBeRank === 1 &&
+      outcome.standing.wouldBeRank === 4 &&
       outcome.standing.personalBest === true &&
       outcome.entry?.listed === false &&
       outcome.entry.name === null,
@@ -296,9 +372,11 @@ export async function checkLeaderboardFlow(assert: Assert): Promise<void> {
   assert(oversized.status === 413, 'a result body over 8 KB is refused before it is read, nginx or not')
 
   await checkGoldenRun(assert, service, setBallpark, visitorHash)
-  await checkMonthBoundary(assert, service, setBallpark)
+  await checkWeekBoundary(assert)
   checkReviewFlags(assert)
+  await checkRequestEvidence(assert)
   await checkBoard(assert)
+  await checkStatueApproval(assert)
 }
 
 /**
@@ -306,20 +384,8 @@ export async function checkLeaderboardFlow(assert: Assert): Promise<void> {
  * nothing that identifies a visitor. A held run never stands, and a disqualified statue makes way for the next record.
  */
 async function checkBoard(assert: Assert): Promise<void> {
-  const { store, service, send, setBallpark } = leaderboardHarness()
+  const { store, send, setBallpark, play } = leaderboardHarness()
   await setBallpark({ visible: true, rules: fiveNormal })
-  const seed = 404
-  async function play(token: string, errorsMs: Array<number | null>, extra: object = {}, now = Date.now()) {
-    const visitorHash = await hashToken(token)
-    const run = await service.issueRun(game, visitorHash, now - 2 * minute, seed)
-    return service.submitRunResult(
-      game,
-      visitorHash,
-      run.id,
-      { ...resultBody(fiveNormal, seed, errorsMs), ...extra },
-      now,
-    )
-  }
   const cookieOf = (token: string) => `__Host-tom_visitor=${token}`
   async function read(path: string, cookie?: string) {
     const response = await send('GET', `/v1/games/${game}/${path}`, cookie ? { cookie } : {})
@@ -443,39 +509,46 @@ async function checkBoard(assert: Assert): Promise<void> {
     'a disqualified record stays off the board, even after a better run',
   )
 
-  const thisMonth = board.body.season.id
-  const nextMonth = nextRankingMonth(thisMonth)
-  assert((await read('leaderboard?season=2026-13')).response.status === 400, 'a season must be a YYYY-MM month')
-  assert((await read(`leaderboard?season=${nextMonth}`)).response.status === 404, 'a season still to come has no board')
-  const lastMonth = await read('leaderboard?season=2026-01')
+  const thisWeek = board.body.season.id
+  const nextWeek = nextRankingWeek(thisWeek)
+  for (const season of ['2026-01', '2026-01-06', '2026-02-30']) {
+    assert(
+      (await read(`leaderboard?season=${season}`)).response.status === 400,
+      `the season ${season} is refused: a season is the YYYY-MM-DD of a Monday`,
+    )
+  }
+  assert((await read(`leaderboard?season=${nextWeek}`)).response.status === 404, 'a season still to come has no board')
+  const pastWeek = await read('leaderboard?season=2025-12-29')
   assert(
-    lastMonth.response.status === 200 &&
-      lastMonth.body.season.final &&
-      lastMonth.body.podium.length === 0 &&
-      lastMonth.body.season.startsAt === '2025-12-31T15:00:00.000Z' &&
-      lastMonth.body.season.endsAt === '2026-01-31T15:00:00.000Z',
-    'a past season is still served, final, and bounded by midnight KST',
+    pastWeek.response.status === 200 &&
+      pastWeek.body.season.final &&
+      pastWeek.body.podium.length === 0 &&
+      pastWeek.body.season.startsAt === '2025-12-28T15:00:00.000Z' &&
+      pastWeek.body.season.endsAt === '2026-01-04T15:00:00.000Z',
+    'a past season is still served, final, and bounded by Monday midnight KST, across a new year too',
   )
 
-  const nextMonthAt = rankingMonthStart(nextMonth) + 5 * minute
+  const nextWeekAt = rankingWeekStart(nextWeek) + 5 * minute
+  // Below three statues the runs score at once, so what is checked is the listing a new week's record starts with.
+  standApprovedStatues(store, nextWeek)
   const returning = await play(
     'board-three',
     [12, null, null, null, null],
     { profile: { ...profile, name: 'Pebble' } },
-    nextMonthAt,
+    nextWeekAt,
   )
   assert(
     returning.standing.kind === 'ranked' &&
       returning.entry?.listed &&
-      returning.entry.season === nextMonth &&
+      returning.entry.season === nextWeek &&
       returning.entry.authorName === 'Pebble',
-    "a visitor's first record of a new month stays listed like their last one, under the same name",
+    "a visitor's first record of a new week stays listed like their last one, under the same name",
   )
   const someoneElse = await play(
     'board-one',
     [12, null, null, null, null],
     { profile: { ...profile, name: 'Clover', hat: 'cap' } },
-    nextMonthAt,
+    nextWeekAt,
   )
   assert(
     someoneElse.standing.kind === 'consentNeeded' &&
@@ -487,7 +560,7 @@ async function checkBoard(assert: Assert): Promise<void> {
     'board-three',
     [12, null, null, null, null],
     { profile: { ...profile, name: 'Pebble Two' } },
-    nextMonthAt + minute,
+    nextWeekAt + minute,
   )
   assert(
     renamed.standing.kind === 'consentNeeded' && renamed.entry?.listed === false && renamed.entry.authorName === null,
@@ -566,12 +639,13 @@ async function checkGoldenRun(
   assert(vector, 'the golden vectors include a left-handed run')
   await setBallpark({ visible: true, rules: vector.rules })
   const run = await service.issueRun(game, visitorHash, Date.now() - 2 * minute, vector.seed)
-  const outcome = await service.submitRunResult(game, visitorHash, run.id, {
+  const body = {
     ...vector.log,
     clientElapsedMs: 60_000,
     claimed: { homeRuns: vector.rules.pitchCount, totalDistanceDm: 0 },
     profile,
-  })
+  }
+  const outcome = await service.submitRunResult(game, visitorHash, run.id, body, true)
   const scored = outcome.run.result?.pitches.map(({ pitchType, outcome: result, distanceDecimetres }) => ({
     pitchType,
     outcome: result,
@@ -595,50 +669,207 @@ async function checkGoldenRun(
 }
 
 /**
- * A run belongs to the KST month it was issued in: issued just before midnight it keeps that month's rules and board
- * when its result arrives after; issued after midnight it gets the rules scheduled for the new month.
+ * A run belongs to the KST week it was issued in: issued just before Monday midnight it keeps that week's rules and
+ * board when its result arrives after; issued at midnight it gets the rules scheduled for the new week. A place among
+ * the statues waits for the admin on a board that has ended like on any other.
  */
-async function checkMonthBoundary(
-  assert: Assert,
-  service: BackendService,
-  setBallpark: (ballpark: Record<string, unknown>) => Promise<void>,
-): Promise<void> {
+async function checkWeekBoundary(assert: Assert): Promise<void> {
+  const { service, setBallpark, play } = leaderboardHarness()
   const sevenHard: BallparkRules = { pitchCount: 7, difficulty: 'hard' }
-  await setBallpark({ visible: true, rules: fiveNormal, scheduledRules: { fromMonth: '2026-11', rules: sevenHard } })
-  const visitorHash = await hashToken('month-boundary-visitor')
-  const midnight = Date.parse('2026-10-31T15:00:00.000Z')
-  const late = await service.issueRun(game, visitorHash, midnight - 30_000, 77)
+  const endingWeek = '2026-10-26'
+  const newWeek = '2026-11-02'
+  await setBallpark({ visible: true, rules: fiveNormal, scheduledRules: { fromWeek: newWeek, rules: sevenHard } })
+  const visitorHash = await hashToken('week-boundary-visitor')
+  // Monday 2026-11-02 00:00 in Seoul.
+  const midnight = Date.parse('2026-11-01T15:00:00.000Z')
+  const earlierHash = await hashToken('week-boundary-earlier')
+  await play('week-boundary-earlier', [12, null, -15, 30, null], {}, midnight - minute)
+  const late = await service.issueRun(game, visitorHash, midnight - 1, 77)
   assert(
-    late.season === '2026-10' && isDeepStrictEqual(late.rules, fiveNormal),
-    "a run issued before midnight KST takes the month's rules, not the next month's",
+    late.season === endingWeek && isDeepStrictEqual(late.rules, fiveNormal),
+    "a run issued in the last millisecond of Sunday KST takes that week's rules, not the next week's",
   )
   const lateOutcome = await service.submitRunResult(
     game,
     visitorHash,
     late.id,
     { ...resultBody(fiveNormal, 77, [12, null, -15, 30, null]), clientElapsedMs: 29_000 },
-    midnight + 30_000,
+    true,
+    midnight + minute,
   )
   assert(
-    lateOutcome.run.status === 'scored' && lateOutcome.entry?.season === '2026-10',
-    'a result arriving after midnight still counts in the month the run was issued in',
+    lateOutcome.run.season === endingWeek &&
+      lateOutcome.run.flags.join() === podiumPlaceFlag &&
+      lateOutcome.standing.kind === 'reviewing' &&
+      lateOutcome.entry === null,
+    "a result arriving after midnight counts in the week the run was issued in, and waits for its statue's approval there",
   )
+  const accepted = await service.acceptHeldRun(adminActor, game, late.id, { updatedAt: null }, midnight + 2 * minute)
   const listing = { listed: true, profile }
-  const listedLate = await service.updateOwnEntry(game, visitorHash, listing, '2026-10', midnight + minute)
-  const earlierHash = await hashToken('month-boundary-earlier')
-  const before = await service.issueRun(game, earlierHash, midnight - 3 * minute, 77)
-  const beforeBody = resultBody(fiveNormal, 77, [12, null, -15, 30, null])
-  await service.submitRunResult(game, earlierHash, before.id, beforeBody, midnight - minute)
+  const listedLate = await service.updateOwnEntry(game, visitorHash, listing, endingWeek, midnight + 3 * minute)
   const finalRecord = await rejection(() =>
-    service.updateOwnEntry(game, earlierHash, listing, '2026-10', midnight + minute),
+    service.updateOwnEntry(game, earlierHash, listing, endingWeek, midnight + 3 * minute),
   )
   assert(
-    listedLate.entry.listed && finalRecord instanceof DomainError && finalRecord.code === 'INVALID_INPUT',
-    "a record whose run arrived after midnight may still be listed on its month's board, unlike one there before",
+    accepted.entry.season === endingWeek &&
+      listedLate.entry.listed &&
+      finalRecord instanceof DomainError &&
+      finalRecord.code === 'INVALID_INPUT',
+    "a record whose run was accepted after midnight may still be listed on its week's board, unlike one there before",
   )
   const early = await service.issueRun(game, visitorHash, midnight, 77)
   assert(
-    early.season === '2026-11' && isDeepStrictEqual(early.rules, sevenHard),
-    'a run issued at midnight KST takes the rules scheduled for the new month',
+    early.season === newWeek && isDeepStrictEqual(early.rules, sevenHard),
+    'a run issued at Monday midnight KST takes the rules scheduled for the new week',
   )
+}
+
+/**
+ * A result whose request does not look like the game page's own fetch is held with a flag, and nothing else of the
+ * request is kept.
+ */
+async function checkRequestEvidence(assert: Assert): Promise<void> {
+  const { store, service, send, setBallpark } = leaderboardHarness()
+  await setBallpark({ visible: true, rules: fiveNormal })
+  standApprovedStatues(store, rankingWeek(Date.now()))
+  const cookie = '__Host-tom_visitor=evidence-visitor'
+  const visitorHash = await hashToken('evidence-visitor')
+  async function flagsSentAs(fetchSite: string | null): Promise<string[]> {
+    const run = await service.issueRun(game, visitorHash, Date.now() - 2 * minute, 404)
+    const body = resultBody(fiveNormal, 404, [12, null, null, null, null])
+    const response = await send('POST', `/v1/games/${game}/runs/${run.id}/result`, { body, cookie, fetchSite })
+    assert(response.status === 200, 'the result is recorded however it was sent')
+    return store.gameRuns.get(run.id)?.flags ?? []
+  }
+  assert(
+    (await flagsSentAs('same-origin')).length === 0,
+    "a result sent by the game page's own fetch is not held for where it came from",
+  )
+  assert(
+    (await flagsSentAs(null)).join() === 'not-from-browser' &&
+      (await flagsSentAs('cross-site')).join() === 'not-from-browser' &&
+      (await flagsSentAs('none')).join() === 'not-from-browser',
+    'a result without the headers of a same-origin fetch, as a script sends it, is held with a flag',
+  )
+  assert(
+    !/sec-fetch|cross-site/iu.test(JSON.stringify([...store.gameRuns.values()])),
+    'only the flag is stored, never what the request said of itself',
+  )
+}
+
+/**
+ * A place among the statues is published only once the admin approved its record, whichever way the record got there:
+ * at once, listed later, or moved up when a record above it went. Fourth place and below show at once.
+ */
+async function checkStatueApproval(assert: Assert): Promise<void> {
+  const { store, service, send, setBallpark, play, playUnreviewed } = leaderboardHarness()
+  await setBallpark({ visible: true, rules: fiveNormal })
+  const season = rankingWeek(Date.now())
+  const cookieOf = (token: string) => `__Host-tom_visitor=${token}`
+  const listing = (name: string) => ({ listed: true, profile: { ...profile, name } })
+  const list = (token: string) =>
+    send('PUT', `/v1/games/${game}/entries/own`, { body: listing(token), cookie: cookieOf(token) })
+  const entryOf = async (token: string) => store.getBoardEntryByVisitor({ game, season }, await hashToken(token))
+  async function shown(token = 'approval-nobody') {
+    const response = await send('GET', `/v1/games/${game}/leaderboard`, { cookie: cookieOf(token) })
+    const board = (await response.json()) as Board
+    const podium = ((await (await send('GET', `/v1/games/${game}/podium`)).json()) as Board).podium
+    const places = (entries: PublicEntry[]) => entries.map(({ rank, homeRuns }) => `${rank}:${homeRuns}`).join()
+    return { own: board.own, board: places([...board.podium, ...board.ranks]), podium: places(podium) }
+  }
+  const approve = async (token: string) => {
+    const entry = await entryOf(token)
+    return service.reviewEntry(adminActor, game, entry?.id ?? '', 'approval', { updatedAt: entry?.updatedAt })
+  }
+  const queueKinds = async () =>
+    (await service.getReviewQueue(adminActor, game, null)).map(({ kind, entry }) => `${kind}:${entry?.homeRuns ?? '-'}`)
+
+  const first = await playUnreviewed('approval-first', [12, -21, null, 33, null])
+  assert(
+    first.run.status === 'flagged' &&
+      first.run.flags.join() === podiumPlaceFlag &&
+      first.standing.kind === 'reviewing' &&
+      first.entry === null &&
+      (await list('approval-first')).status === 404,
+    'a clean run that would stand among the statues is held, makes no record, and so cannot be listed around the admin',
+  )
+  assert(
+    (await shown()).board === '' && (await queueKinds()).join() === 'statue-run:-',
+    'nothing of it is public, and it leads the review queue',
+  )
+  await service.acceptHeldRun(adminActor, game, first.run.id, { updatedAt: null })
+  assert((await shown()).podium === '', 'an accepted record its visitor has not listed is still not public')
+  await list('approval-first')
+  assert((await shown()).podium === '1:3', 'once accepted, listing it publishes the statue at once')
+  const repeated = await playUnreviewed('approval-first', [12, -21, null, 33, null], listing('approval-first'))
+  assert(
+    repeated.run.status === 'scored' && repeated.standing.kind === 'ranked' && repeated.standing.rank === 1,
+    'a run no better than the approved statue changes nothing, so it is not held',
+  )
+
+  for (const token of ['approval-second', 'approval-third']) {
+    await play(token, [12, null, null, 33, null])
+    await list(token)
+  }
+  // Equal runs rank by when they arrived, so each of these arrives a second after the one before.
+  const startedAt = Date.now()
+  const fourth = await playUnreviewed('approval-fourth', [12, null, null, null, null], {}, startedAt + 1000)
+  await list('approval-fourth')
+  await playUnreviewed('approval-fifth', [12, null, null, null, null], {}, startedAt + 2000)
+  await list('approval-fifth')
+  assert(
+    fourth.run.status === 'scored' && fourth.standing.kind === 'unlisted' && fourth.standing.wouldBeRank === 4,
+    'a run that would place fourth scores at once, with no review',
+  )
+  assert((await shown()).board === '1:3,2:2,3:2,4:1,5:1', 'fourth place and below are public without approval')
+
+  const improved = await playUnreviewed('approval-first', [12, -21, null, 33, -27], listing('approval-first'))
+  assert(
+    improved.standing.kind === 'reviewing' && improved.entry?.score === 3 && (await shown()).podium === '1:3,2:2,3:2',
+    'a statue that improves waits for approval again, and its approved record stands meanwhile',
+  )
+  await service.acceptHeldRun(adminActor, game, improved.run.id, { updatedAt: improved.entry?.updatedAt ?? null })
+  assert((await shown()).podium === '1:4,2:2,3:2', 'accepting the better run publishes it at once')
+
+  const second = await entryOf('approval-second')
+  await service.reviewEntry(adminActor, game, second?.id ?? '', 'disqualification', { updatedAt: second?.updatedAt })
+  const promoted = await shown('approval-fourth')
+  assert(
+    promoted.board === '1:4,2:2,4:1' && promoted.podium === '1:4,2:2',
+    'a record that moves up to third when a statue goes is not shown there unapproved, and the fifth takes no statue',
+  )
+  assert(
+    promoted.own?.rank === 3 &&
+      promoted.own.awaitingApproval &&
+      (await shown('approval-fifth')).own?.awaitingApproval === false,
+    'its visitor is told the place and that it waits for approval',
+  )
+  const later = await playUnreviewed(
+    'approval-fourth',
+    [12, null, null, null, null],
+    listing('approval-fourth'),
+    startedAt + 3000,
+  )
+  assert(
+    later.run.status === 'scored' && later.standing.kind === 'reviewing' && (await queueKinds()).includes('statue:1'),
+    'a later run of theirs is answered as under review, and the waiting statue leads the queue',
+  )
+  await approve('approval-fourth')
+  assert((await shown()).podium === '1:4,2:2,3:1', 'approving the record publishes its statue at once')
+
+  await play('approval-unlisted', [12, null, null, null, null], {}, startedAt + 4000)
+  await service.deleteOwnRecords(game, await hashToken('approval-third'))
+  await service.deleteOwnRecords(game, await hashToken('approval-fifth'))
+  const unlisted = await shown('approval-unlisted')
+  assert(
+    unlisted.own?.listed === false && unlisted.own.rank === 3 && unlisted.own.awaitingApproval,
+    'an unlisted record that would now stand third is told so before it is listed',
+  )
+  await list('approval-unlisted')
+  assert(
+    (await shown()).board === '1:4,2:1',
+    'listing a record that has moved up among the statues does not publish it before the admin approves it',
+  )
+  await approve('approval-unlisted')
+  assert((await shown()).board === '1:4,2:1,3:1', 'and approval then does')
 }

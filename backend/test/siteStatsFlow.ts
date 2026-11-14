@@ -1,5 +1,13 @@
 import { isDeepStrictEqual } from 'node:util'
-import { BackendService, createApi, hashToken, MemoryStore, parseTownLayout, siteEvents } from '../src/index.js'
+import {
+  BackendService,
+  createApi,
+  hashToken,
+  MemoryStore,
+  parseTownLayout,
+  siteEvents,
+  weeksInRange,
+} from '../src/index.js'
 import { sampleTownLayout } from './townFlow.js'
 
 type Assert = (condition: unknown, message: string) => asserts condition
@@ -226,5 +234,13 @@ export async function checkSiteStatsFlow(assert: Assert): Promise<void> {
       empty.residents.every(({ conversations }) => conversations === 0) &&
       empty.residents.some(({ id }) => id === resident),
     'a day with nothing counted still lists the residents, at zero',
+  )
+  // 2031-03-01 is a Saturday, in the week of Monday 2031-02-24.
+  const weeks = ['2031-03-03', '2031-02-24', '2031-02-17'].map((week) => ({ week, runs: 1, records: 0 }))
+  assert(
+    weeksInRange(weeks, { from: '2031-03-01', to: '2031-03-07', days: 7 })
+      .map(({ week }) => week)
+      .join() === '2031-03-03,2031-02-24',
+    "the game's seasons of a range are the weeks with a day in it: the week its first day falls in, not the one before",
   )
 }

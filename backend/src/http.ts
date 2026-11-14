@@ -18,10 +18,10 @@ import {
   seasonView,
   statueCount,
   type GameRun,
-  type LeaderboardEntry,
+  type RankedRecord,
 } from './leaderboard.js'
 import { reviewedEntry, reviewedRun, type EntryReviewAction } from './leaderboardReview.js'
-import { BackendService, type Leaderboard, type RunOutcome } from './service.js'
+import { BackendService, type Leaderboard, type RunOutcome, type SeasonStatues } from './service.js'
 import { decodeComponent, inputRecord, invalidInput } from './validation.js'
 
 const sessionCookie = '__Host-tom_session'
@@ -39,6 +39,8 @@ export const gameBodyLimitBytes = 8 * 1024
 /** An event is a name and an id. */
 export const siteEventBodyLimitBytes = 1024
 const readOnlyMethods = new Set(['GET', 'HEAD', 'OPTIONS'])
+/** What a browser's `fetch` to its own origin says of itself; the page never navigates to the API or embeds it. */
+const pageFetchModes = new Set(['cors', 'same-origin'])
 const domainErrorStatus: Readonly<Record<DomainError['code'], number>> = {
   AUTH_REQUIRED: 401,
   FORBIDDEN: 403,
@@ -121,7 +123,9 @@ const routes: readonly Route[] = [
   route('POST', `/v1/games/(${gameId})/runs/(${uuid})/result`, async ({ request, pathIds, dependencies }) => {
     const [game = '', runId = ''] = pathIds
     const body = await objectBody(request, gameBodyLimitBytes)
-    const outcome = await dependencies.service.submitRunResult(game, await readVisitorHash(request), runId, body)
+    const visitorHash = await readVisitorHash(request)
+    const fromGamePage = looksLikePageFetch(request)
+    const outcome = await dependencies.service.submitRunResult(game, visitorHash, runId, body, fromGamePage)
     return json(runOutcomeView(outcome))
   }),
   route('GET', `/v1/games/(${gameId})/leaderboard`, async ({ request, url, pathId, dependencies }) => {
@@ -332,6 +336,18 @@ export async function serveRunIssue({ request, pathId, dependencies }: RouteCont
   return json({ run: issuedRunView(run) }, 201, newVisitorCookie(existingToken, visitorToken))
 }
 
+/**
+ * Whether the request carries what every current browser adds to a page's `fetch` to its own origin, and a script does
+ * not unless it is told to: `Sec-Fetch-Site: same-origin` and a fetch mode. The API is only ever served from the page's
+ * origin (frontend/src/data/apiClient.ts). Only the yes or no leaves this function; the headers are not kept.
+ */
+export function looksLikePageFetch(request: Request): boolean {
+  return (
+    request.headers.get('Sec-Fetch-Site') === 'same-origin' &&
+    pageFetchModes.has(request.headers.get('Sec-Fetch-Mode') ?? '')
+  )
+}
+
 /** Sets the visitor cookie the first time a browser writes something it may later change. */
 export function newVisitorCookie(existingToken: string | null, visitorToken: string): Record<string, string> {
   return existingToken ? {} : { 'Set-Cookie': cookie(visitorCookie, visitorToken, visitorCookieLifetimeMs) }
@@ -342,26 +358,35 @@ export function issuedRunView(run: GameRun) {
 }
 
 /**
- * The town's statues. No cookie is read or set and nothing in it belongs to one visitor, so shared caches may keep it
- * for a minute; a disqualification shows within that.
+ * The town's statues, each with the place it holds; a place whose record waits for approval is missing. No cookie is
+ * read or set and nothing in it belongs to one visitor, so shared caches may keep it for a minute; an approval or a
+ * disqualification shows within that.
  */
 export async function servePodium({ pathId, dependencies }: RouteContext): Promise<Response> {
   const { season, entries } = await dependencies.service.getPodium(pathId)
-  const podium = entries.map((entry, index) => podiumEntry(entry, index + 1))
-  return json({ season: { id: season }, podium }, 200, { 'Cache-Control': 'public, max-age=60' })
+  return json({ season: { id: season }, podium: entries.map(statueView) }, 200, {
+    'Cache-Control': 'public, max-age=60',
+  })
+}
+
+export function statueView({ entry, rank }: RankedRecord) {
+  return podiumEntry(entry, rank)
 }
 
 /** A finished season's statues, each with its approved link while its owner keeps it on. */
-export function hallOfFameSeason({ season, entries }: { season: string; entries: readonly LeaderboardEntry[] }) {
-  return { id: season, champions: entries.map((entry, index) => podiumEntry(entry, index + 1)) }
+export function hallOfFameSeason({ season, entries }: SeasonStatues) {
+  return { id: season, champions: entries.map(statueView) }
 }
 
-/** The first three places are the statues, which alone carry an approved link, and the rest the list below them. */
+/**
+ * The first three places are the statues, which alone carry an approved link, and the rest the list below them. Each
+ * record says its own place, since a statue's place waiting for approval is left out and stays empty.
+ */
 export function leaderboardView({ season, currentSeason, entries, own }: Leaderboard) {
   return {
     season: seasonView(season, currentSeason),
-    podium: entries.slice(0, statueCount).map((entry, index) => podiumEntry(entry, index + 1)),
-    ranks: entries.slice(statueCount).map((entry, index) => rankedEntry(entry, statueCount + index + 1)),
+    podium: entries.filter(({ rank }) => rank <= statueCount).map(statueView),
+    ranks: entries.filter(({ rank }) => rank > statueCount).map(({ entry, rank }) => rankedEntry(entry, rank)),
     own: own && ownEntry(own.entry, own.rank),
   }
 }

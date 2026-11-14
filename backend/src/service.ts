@@ -7,6 +7,7 @@ import {
   derbyRunFlags,
   judgeDerbyRun,
   minimumRunMs,
+  notFromBrowserFlag,
   parseDerbySubmission,
   homeRunDerby,
   publicDerbyResult,
@@ -19,18 +20,23 @@ import {
   parsePastEntryUpdate,
   parseRunProfile,
   pastEntryChanges,
+  podiumPlaceFlag,
+  publishedPlaces,
   randomRunSeed,
   runLifetimeMs,
   runStanding,
   settleBoardEntry,
   statueCount,
+  wouldTakePodium,
   type BoardCandidate,
   type BoardKey,
+  type BoardPlace,
   type EntryChanges,
   type FinishedRun,
   type GameRun,
   type LeaderboardEntry,
   type NameStatus,
+  type RankedRecord,
   type RunStanding,
   type SettleEntry,
 } from './leaderboard.js'
@@ -56,14 +62,12 @@ import {
   parseRecordIds,
   parseReportResolution,
   parseRunIds,
-  previousRankingMonth,
   recentReports,
   reportedChanges,
   reportsPerHour,
   reportSweepIntervalMs,
   reviewedBoard,
   reviewQueue,
-  supersededKeeps,
   versionInput,
   type EntryReviewAction,
   type ReviewBoard,
@@ -78,14 +82,16 @@ import {
   residentTalkEvent,
   residentTotals,
   statsRange,
+  weeksInRange,
 } from './siteStats.js'
 import type { Store } from './store.js'
 import {
   effectiveBallparkRules,
   parseResidentDialogueSource,
   parseTownLayout,
+  previousRankingWeek,
   rankingDay,
-  rankingMonth,
+  rankingWeek,
   settleBallparkSettings,
   type ResidentDialogue,
   type ResidentDialogueSource,
@@ -102,18 +108,18 @@ export interface RunOutcome {
   standing: RunStanding
 }
 
-/** A board's top places in public order, and the visitor's own record with its place. */
+/** A board's top places as anyone may see them (`publishedPlaces`), and the visitor's own record with its place. */
 export interface Leaderboard {
   season: string
   currentSeason: string
-  entries: LeaderboardEntry[]
+  entries: RankedRecord[]
   own: RankedRecord | null
 }
 
-/** A record and its place in the public order, or the place it would take. */
-export interface RankedRecord {
-  entry: LeaderboardEntry
-  rank: number
+/** The statues of one season as anyone may see them: a place still waiting for approval is missing. */
+export interface SeasonStatues {
+  season: string
+  entries: RankedRecord[]
 }
 
 export class BackendService {
@@ -139,8 +145,8 @@ export class BackendService {
 
   /**
    * Replaces the whole town; the editor sends the revision it loaded so a stale tab cannot overwrite newer work. The
-   * ballpark rules in effect are settled against the stored town for the KST month of `now`. `now` is taken when the
-   * request arrives, so a save that commits in the first moment of a month may still settle against the month before;
+   * ballpark rules in effect are settled against the stored town for the KST week of `now`. `now` is taken when the
+   * request arrives, so a save that commits in the first moment of a week may still settle against the week before;
    * that window is accepted.
    */
   async saveTown(actor: Actor, input: Record<string, unknown>, now = Date.now()): Promise<TownLayout> {
@@ -156,7 +162,7 @@ export class BackendService {
     if ((stored?.revision ?? 0) !== baseRevision) {
       throw new DomainError('CONFLICT', 'The town changed since it was loaded')
     }
-    const ballpark = settleBallparkSettings(layout.venues.ballpark, stored?.venues.ballpark ?? null, rankingMonth(now))
+    const ballpark = settleBallparkSettings(layout.venues.ballpark, stored?.venues.ballpark ?? null, rankingWeek(now))
     return this.store.saveTown({ ...layout, venues: { ...layout.venues, ballpark } }, baseRevision)
   }
 
@@ -249,14 +255,14 @@ export class BackendService {
     await this.store.addSiteEvent(rankingDay(new Date(now).toISOString()), counted.event, counted.subject)
   }
 
-  /** The totals of the last `days` KST days; the game's months are all of them, since a month is one row. */
+  /** The totals of the last `days` KST days, and the game's seasons with a day among them. */
   async getSiteStats(actor: Actor, days: string | null, now = Date.now()) {
     assertAdmin(actor)
     const range = statsRange(parseStatsDays(days), now)
     const [events, notes, derby, town] = await Promise.all([
       this.store.listSiteEventCounts(range.from, range.to),
       this.store.countGuestbookEntriesByDay(range.from, range.to),
-      this.store.countGameMonths(homeRunDerby.id),
+      this.store.countGameWeeks(homeRunDerby.id),
       this.store.getTown(),
     ])
     return {
@@ -264,7 +270,7 @@ export class BackendService {
       daily: dailyEventTotals(events),
       residents: residentTotals(events, town?.residents ?? []),
       guestbook: guestbookTotals(notes),
-      derby,
+      derby: weeksInRange(derby, range),
     }
   }
 
@@ -297,7 +303,7 @@ export class BackendService {
 
   /**
    * Starts a ranked run for the visitor, abandoning their open one; anyone may start as many as they like. The run
-   * takes the rules in effect for the KST month of `now`, the season it counts in wherever its result arrives.
+   * takes the rules in effect for the KST week of `now`, the season it counts in wherever its result arrives.
    */
   async issueRun(game: string, visitorHash: string, now = Date.now(), seed = randomRunSeed()): Promise<GameRun> {
     const town = await this.openBallparkTown(game)
@@ -305,7 +311,7 @@ export class BackendService {
     if (!town.owner.contactEmail) {
       throw new DomainError('NOT_CONFIGURED', "Ranked runs need the town owner's contact email")
     }
-    const season = rankingMonth(now)
+    const season = rankingWeek(now)
     const run: GameRun = {
       id: crypto.randomUUID(),
       game,
@@ -331,7 +337,9 @@ export class BackendService {
 
   /**
    * Records a run's result once, scored by the server from the run's own rules and seed and the raw log. A result sent
-   * again gets the same answer; a run held for review leaves the visitor's record as it was. A malformed result
+   * again gets the same answer; a run held for review leaves the visitor's record as it was. A run is held for what
+   * the judge finds unusual, for a request that did not look like the game page's (`fromGamePage`, which is all that is
+   * kept of the request), and for a place among the statues, which only an approved record takes. A malformed result
    * leaves the run open for a fixed client to send again, but one that ends too soon uses the run up.
    */
   async submitRunResult(
@@ -339,6 +347,7 @@ export class BackendService {
     visitorHash: string | null,
     runId: string,
     input: Record<string, unknown>,
+    fromGamePage: boolean,
     now = Date.now(),
   ): Promise<RunOutcome> {
     await this.openBallparkTown(game)
@@ -349,14 +358,13 @@ export class BackendService {
     }
     const serverElapsedMs = now - Date.parse(run.issuedAt)
     const submittedAt = new Date(now).toISOString()
-    if (serverElapsedMs < minimumRunMs(run.rules)) return this.rejectTooFastRun(run, input, submittedAt, now)
+    if (serverElapsedMs < minimumRunMs(run.rules)) {
+      return this.rejectTooFastRun(run, input, submittedAt, fromGamePage, now)
+    }
     const submission = parseDerbySubmission(input, run.rules)
     const profile = parseRunProfile(input.profile)
     const record = judgeDerbyRun(run.rules, run.seed, submission, serverElapsedMs)
-    const flags = derbyRunFlags({ rules: run.rules, log: submission.log, record })
-    const held = flags.length > 0
-    // A held run keeps who it was sent as for its acceptance, unless a takedown already took that off this board.
-    const keepsProfile = held && !(await this.store.getBoardEntryByVisitor(run, run.visitorHash))?.takedown
+    const current = await this.store.getBoardEntryByVisitor(run, run.visitorHash)
     const candidate = {
       entryId: crypto.randomUUID(),
       runId: run.id,
@@ -367,6 +375,20 @@ export class BackendService {
       profile,
       reviewStatus: 'pending' as const,
     }
+    const place = {
+      id: candidate.entryId,
+      score: candidate.score,
+      tiebreak: candidate.tiebreak,
+      achievedAt: submittedAt,
+    }
+    const flags = [
+      ...derbyRunFlags({ rules: run.rules, log: submission.log, record }),
+      ...(fromGamePage ? [] : [notFromBrowserFlag]),
+      ...(await this.podiumFlags(run, place, current)),
+    ]
+    const held = flags.length > 0
+    // A held run keeps who it was sent as for its acceptance, unless a takedown already took that off this board.
+    const keepsProfile = held && !current?.takedown
     const finished: FinishedRun = {
       status: held ? 'flagged' : 'scored',
       submittedAt,
@@ -380,8 +402,18 @@ export class BackendService {
     const settle = held ? null : await this.settlementFor(run, candidate)
     const saved = await this.store.finishRun(run.id, run.visitorHash, finished, settle)
     // Another result for this run, or a new run, got there first: answer as the run now stands.
-    if (!saved) return this.submitRunResult(game, visitorHash, runId, input, now)
+    if (!saved) return this.submitRunResult(game, visitorHash, runId, input, fromGamePage, now)
     return this.runOutcome(saved.run, saved.settlement?.entry ?? null, saved.settlement?.consentNeeded ?? false)
+  }
+
+  /**
+   * `podiumPlaceFlag` for a run that would be its visitor's best among the statues (`wouldTakePodium`), read from the
+   * board as it stands. A record that reaches the statues some other way, or between this read and the write, is
+   * still not shown there unapproved: `publishedPlaces` decides that on every read.
+   */
+  async podiumFlags(run: GameRun, place: BoardPlace, current: LeaderboardEntry | null): Promise<string[]> {
+    const top = await this.store.listBoard(run, statueCount + 1)
+    return wouldTakePodium(place, current, top, run.visitorHash) ? [podiumPlaceFlag] : []
   }
 
   /** The town whose ballpark plays `game`, while the admin shows it: a hidden ballpark neither issues nor records runs. */
@@ -406,6 +438,7 @@ export class BackendService {
     run: GameRun,
     input: Record<string, unknown>,
     submittedAt: string,
+    fromGamePage: boolean,
     now: number,
   ): Promise<RunOutcome> {
     const tooFast: FinishedRun = {
@@ -419,12 +452,12 @@ export class BackendService {
       profile: null,
     }
     const saved = await this.store.finishRun(run.id, run.visitorHash, tooFast, null)
-    if (!saved) return this.submitRunResult(run.game, run.visitorHash, run.id, input, now)
+    if (!saved) return this.submitRunResult(run.game, run.visitorHash, run.id, input, fromGamePage, now)
     throw new DomainError('CONFLICT', 'The run ended sooner than its pitches can be played')
   }
 
   /**
-   * A season's board, this KST month's by default, kept with no end date. A season still to come has none. Reads stay
+   * A season's board, this KST week's by default, kept with no end date. A season still to come has none. Reads stay
    * open while the ballpark is hidden: the frontend decides what a hidden venue shows.
    */
   async getLeaderboard(
@@ -434,45 +467,49 @@ export class BackendService {
     now = Date.now(),
   ): Promise<Leaderboard> {
     assertRankedGame(game)
-    const currentSeason = rankingMonth(now)
+    const currentSeason = rankingWeek(now)
     const season = boardSeason(requestedSeason, currentSeason)
     const board = { game, season }
     const own = visitorHash ? await this.store.getBoardEntryByVisitor(board, visitorHash) : null
     return {
       season,
       currentSeason,
-      entries: await this.store.listBoard(board, leaderboardLength),
+      entries: await this.publishedBoard(board, leaderboardLength),
       own: own && { entry: own, rank: await this.store.rankOf(own) },
     }
   }
 
-  /** This KST month's statues: the first three of its public order, read by the town without a visitor cookie. */
-  async getPodium(game: string, now = Date.now()): Promise<{ season: string; entries: LeaderboardEntry[] }> {
+  /** The top of a board as anyone may see it: every public read of a board comes through here (`publishedPlaces`). */
+  async publishedBoard(board: BoardKey, limit: number): Promise<RankedRecord[]> {
+    return publishedPlaces(await this.store.listBoard(board, limit))
+  }
+
+  /** This KST week's statues: the approved of its public order's first three, read by the town without a cookie. */
+  async getPodium(game: string, now = Date.now()): Promise<SeasonStatues> {
     assertRankedGame(game)
-    const season = rankingMonth(now)
-    return { season, entries: await this.store.listBoard({ game, season }, statueCount) }
+    const season = rankingWeek(now)
+    return { season, entries: await this.publishedBoard({ game, season }, statueCount) }
   }
 
   /**
-   * Every finished season with a record, newest first, and the first three of its public order as they stand now: a
-   * late acceptance, a disqualification, or an owner's change still moves them. A year adds twelve reads at most.
+   * Every finished season with a record, newest first, and the approved of its public order's first three as they
+   * stand now: a late acceptance, an approval, a disqualification, or an owner's change still moves them. One read per
+   * season, so a year adds fifty-two.
    */
-  async getHallOfFame(game: string, now = Date.now()): Promise<Array<{ season: string; entries: LeaderboardEntry[] }>> {
+  async getHallOfFame(game: string, now = Date.now()): Promise<SeasonStatues[]> {
     assertRankedGame(game)
-    const seasons = await this.store.listEndedSeasons(game, rankingMonth(now))
+    const seasons = await this.store.listEndedSeasons(game, rankingWeek(now))
     return Promise.all(
-      seasons.map(async (season) => ({
-        season,
-        entries: await this.store.listBoard({ game, season }, statueCount),
-      })),
+      seasons.map(async (season) => ({ season, entries: await this.publishedBoard({ game, season }, statueCount) })),
     )
   }
 
   /**
-   * The visitor lists or unlists this month's record, changes the character and name it shows, or turns its link on or
+   * The visitor lists or unlists this week's record, changes the character and name it shows, or turns its link on or
    * off. A past season's record (`season`) may only be anonymised or have its link turned off, unless its best run
-   * came in after the season ended (`listableAfterSeason`): then it takes the same changes as this month's, and can
-   * still be anonymised, which only a past record offers.
+   * came in after the season ended (`listableAfterSeason`): then it takes the same changes as this week's, and can
+   * still be anonymised, which only a past record offers. Listing never publishes a place among the statues by
+   * itself: that waits for the admin's approval (`publishedPlaces`).
    */
   async updateOwnEntry(
     game: string,
@@ -482,7 +519,7 @@ export class BackendService {
     now = Date.now(),
   ): Promise<RankedRecord> {
     assertRankedGame(game)
-    const currentSeason = rankingMonth(now)
+    const currentSeason = rankingWeek(now)
     const board = { game, season: boardSeason(requestedSeason, currentSeason) }
     const at = new Date(now).toISOString()
     const entry = await this.ownEntryOn(board, visitorHash)
@@ -504,7 +541,7 @@ export class BackendService {
   /** A browser without a visitor cookie, or without a record on the board, has nothing to change. */
   async ownEntryOn(board: BoardKey, visitorHash: string | null): Promise<LeaderboardEntry> {
     const entry = visitorHash ? await this.store.getBoardEntryByVisitor(board, visitorHash) : null
-    if (!entry) throw new DomainError('NOT_FOUND', 'No record that month')
+    if (!entry) throw new DomainError('NOT_FOUND', 'No record that season')
     return entry
   }
 
@@ -517,8 +554,6 @@ export class BackendService {
   async saveOwnChanges(entry: LeaderboardEntry, changes: EntryChanges): Promise<RankedRecord> {
     const updated = await this.store.updateEntry(entry.id, entry.updatedAt, changes)
     if (!updated) throw new DomainError('CONFLICT', 'The record changed while it was being updated')
-    const superseded = supersededKeeps(entry, updated)
-    if (superseded.length > 0) await this.store.forgetKeptReports(entry.id, superseded)
     return { entry: updated, rank: await this.store.rankOf(updated) }
   }
 
@@ -565,8 +600,10 @@ export class BackendService {
 
   /**
    * Takes a report on a record's name, character, or link, from any season. It answers the same whatever happens, so
-   * nothing can be learned from it, and it counts only from a visitor who has played, about someone else's record, at
-   * most five an hour: a record's owner cannot report their own link to fix it as restored.
+   * nothing can be learned from it, and it counts only from a visitor with a run the server judged, about someone
+   * else's record, at most five an hour: a record's owner cannot report their own link to fix it as restored. A report
+   * only waits for the admin, so no visitor can blank the board; the one thing it hides at once is a link whose
+   * profile's owner says it is theirs.
    */
   async reportEntry(
     game: string,
@@ -582,13 +619,9 @@ export class BackendService {
     if (!visitorHash || recent.length >= reportsPerHour) return
     const entry = await this.store.getEntry(entryId)
     if (!entry || entry.game !== game || entry.visitorHash === visitorHash) return
-    if (!(await this.store.hasSubmittedRun(game, visitorHash))) return
+    if (!(await this.store.hasJudgedRun(game, visitorHash))) return
     this.reportTimes.set(visitorHash, [...recent, now])
     const at = new Date(now).toISOString()
-    const earlier = await this.store.listReports(entry)
-    const kept = earlier.some(
-      (other) => other.entryId === entry.id && other.target === report.target && other.resolution === 'kept',
-    )
     await this.store.addReport({
       id: crypto.randomUUID(),
       entryId: entry.id,
@@ -597,7 +630,7 @@ export class BackendService {
       resolvedAt: null,
       resolution: null,
     })
-    const hidden = reportedChanges(entry, report, kept, ownershipCode(), at)
+    const hidden = reportedChanges(entry, report, ownershipCode(), at)
     // A record that changed meanwhile keeps its new version; the report still waits in the queue.
     if (hidden) await this.store.updateEntry(entry.id, entry.updatedAt, hidden)
   }
@@ -609,18 +642,36 @@ export class BackendService {
     this.reportTimesSweptAt = now
   }
 
-  /** The review queue of one season, or of this season and the last by default (`leaderboardReview.ts`). */
+  /**
+   * The review queue of one season, or by default of this season, the last, and any older one with a statue's place
+   * waiting for approval (`leaderboardReview.ts`).
+   */
   async getReviewQueue(actor: Actor, game: string, requestedSeason: string | null, now = Date.now()) {
     assertAdmin(actor)
     assertRankedGame(game)
-    const currentSeason = rankingMonth(now)
+    const currentSeason = rankingWeek(now)
     const seasons =
       requestedSeason === null
-        ? [currentSeason, previousRankingMonth(currentSeason)]
+        ? await this.seasonsToReview(game, currentSeason)
         : [boardSeason(requestedSeason, currentSeason)]
     const town = await this.store.getTown()
     const boards = await Promise.all(seasons.map((season) => this.reviewBoard({ game, season })))
     return reviewQueue(boards, { town, currentSeason, now })
+  }
+
+  /**
+   * This season and the last, whose held runs may still be accepted, then every older season where a record among the
+   * statues waits for approval: a record that moved up there leaves its place empty in the hall of fame until the
+   * admin sees it, so it must not wait where nobody looks.
+   */
+  async seasonsToReview(game: string, currentSeason: string): Promise<string[]> {
+    const lastSeason = previousRankingWeek(currentSeason)
+    const older = await this.store.listEndedSeasons(game, lastSeason)
+    const statues = await Promise.all(
+      older.map(async (season) => ({ season, top: await this.store.listBoard({ game, season }, statueCount) })),
+    )
+    const waiting = statues.filter(({ top }) => publishedPlaces(top).length < top.length)
+    return [currentSeason, lastSeason, ...waiting.map(({ season }) => season)]
   }
 
   async reviewBoard(board: BoardKey): Promise<ReviewBoard> {
@@ -640,7 +691,7 @@ export class BackendService {
   async getBoardRecords(actor: Actor, game: string, requestedSeason: string | null, now = Date.now()) {
     assertAdmin(actor)
     assertRankedGame(game)
-    const season = boardSeason(requestedSeason, rankingMonth(now))
+    const season = boardSeason(requestedSeason, rankingWeek(now))
     return { season, entries: reviewedBoard(await this.store.listEntries({ game, season })) }
   }
 
@@ -652,7 +703,7 @@ export class BackendService {
   async getRecordWarnings(actor: Actor, game: string, requestedSeason: string | null, ids: string, now = Date.now()) {
     assertAdmin(actor)
     assertRankedGame(game)
-    const season = boardSeason(requestedSeason, rankingMonth(now))
+    const season = boardSeason(requestedSeason, rankingWeek(now))
     const wanted = new Set(parseRecordIds(ids))
     const [town, entries] = await Promise.all([this.store.getTown(), this.store.listEntries({ game, season })])
     const found = entries.filter((entry) => wanted.has(entry.id))
@@ -668,7 +719,8 @@ export class BackendService {
 
   /**
    * An admin's action on a record (`entryReviewChanges`), only from the version they read: a record changed since is
-   * `409` and stays as it is. Disqualifying, hiding, or anonymising a statue lets the next record stand at once.
+   * `409` and stays as it is. Approving a record publishes it at once, among the statues too; disqualifying a statue
+   * moves the next record up, where it is published only if it is approved.
    */
   async reviewEntry(
     actor: Actor,
@@ -712,7 +764,8 @@ export class BackendService {
 
   /**
    * Accepts a held run as if it had scored, from the visitor's record as the admin read it (`updatedAt`, or `null` when
-   * there was none). A past season's run only until a week after it ended; then that board stays as it is.
+   * there was none), which it leaves approved, so it is published at once wherever it places. A past season's run only
+   * until a week after it ended; then that board stays as it is.
    */
   async acceptHeldRun(
     actor: Actor,
