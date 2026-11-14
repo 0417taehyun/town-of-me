@@ -11,12 +11,7 @@ import {
   type ReactNode,
 } from 'react'
 import { createDerbySounds } from '../audio/derbySounds'
-import {
-  effectiveBallparkRules,
-  plannedBallparkRules,
-  rankingMonth,
-  upcomingBallparkRules,
-} from '../data/ballparkRules'
+import { effectiveBallparkRules, plannedBallparkRules, rankingWeek, upcomingBallparkRules } from '../data/ballparkRules'
 import type { IssuedRun } from '../data/leaderboardApi'
 import type { BallparkSettings, TownSnapshot } from '../data/models'
 import { normalizePlayerProfile, type PlayerProfile } from '../data/playerProfile'
@@ -24,7 +19,7 @@ import { useVisitorSession } from '../hooks/useVisitorSession'
 import { useLocalEnvironment } from '../hooks/useLocalEnvironment'
 import { usePageLanguage } from '../hooks/usePageLanguage'
 import { useReducedMotion } from '../hooks/useReducedMotion'
-import { type AppLanguage, languageCopy, monthName } from '../i18n/language'
+import { type AppLanguage, languageCopy, weekName } from '../i18n/language'
 import { resolveBallparkPalette } from '../scene/venues/ballpark/ballparkThemes'
 import { LanguageSelect } from '../ui/LanguageSelect'
 import { PrivacyLink } from '../ui/PrivacyLink'
@@ -246,13 +241,13 @@ const DerbyDiagnostics = import.meta.env.DEV ? DiagnosticsPanel : null
  * visitor is out of the camera's view. A camera that fails names its cause and offers another try, and the derby cannot
  * be played without it. The camera locks what the visitor holds by itself (or lets them swing with their hands), and
  * its object detector rests from each windup until the pitch's ball is down (derbyCues.ts pitchInPlay). A computer that
- * tracks too slowly is blocked for the visit. Every run reads the KST month when it starts, never when
- * the page loaded. A run asks the monthly board for its rules and seed as it starts and plays those, ranked
+ * tracks too slowly is blocked for the visit. Every run reads the KST week when it starts, never when
+ * the page loaded. A run asks the weekly board for its rules and seed as it starts and plays those, ranked
  * (useRankedRuns.ts); without an answer in time it plays unranked, and its result says so. The result card says where
  * the run left the visitor on the board, and its listing card (ui/ListingView.tsx), opened from there, puts the record
  * on the board or changes it; while that card is open the stance waits, and Escape closes it. A `preview` is the
- * admin's try: of next month's rules, which plays those scheduled (or this month's when none are), or of the hidden
- * ballpark, which plays this month's; it says so on every screen and never asks the board. V (or the camera view button)
+ * admin's try: of next week's rules, which plays those scheduled (or this week's when none are), or of the hidden
+ * ballpark, which plays this week's; it says so on every screen and never asks the board. V (or the camera view button)
  * resizes or hides the camera panel beside the play, the result screen can turn the camera off, and Escape leaves from
  * any of these screens: for the town, or from a preview back to the editor.
  */
@@ -476,9 +471,9 @@ export function DerbyScreen({
       </>
     )
 
-  const month = rankingMonth(new Date())
-  const rules = effectiveBallparkRules(ballpark, month)
-  const upcoming = upcomingBallparkRules(ballpark, month)
+  const week = rankingWeek(new Date())
+  const rules = effectiveBallparkRules(ballpark, week)
+  const upcoming = upcomingBallparkRules(ballpark, week)
   // The HUD's title, caption and banner centre in the band the camera panel leaves free, as the play does, and size to
   // it; its scoreboard sizes to the room over the panel's side, and its corners and the links follow the panel's side.
   const layoutStyle = {
@@ -583,11 +578,11 @@ export function DerbyScreen({
           </div>
           <h2>{copy.baseball.rulesTitle}</h2>
           <ul className="baseball-rules">
-            <li>{venueCopy.rulesThisMonth(rules.pitchCount, venueCopy.difficulties[rules.difficulty])}</li>
+            <li>{venueCopy.rulesThisWeek(rules.pitchCount, venueCopy.difficulties[rules.difficulty])}</li>
             {upcoming && (
               <li>
                 {venueCopy.rulesFrom(
-                  monthName(upcoming.fromMonth, month, language),
+                  weekName(upcoming.fromWeek, week, language),
                   upcoming.rules.pitchCount,
                   venueCopy.difficulties[upcoming.rules.difficulty],
                 )}
@@ -606,11 +601,11 @@ export function DerbyScreen({
           {preview === 'next' && (
             <p className="baseball-note derby-preview-note">
               {upcoming
-                ? venueCopy.previewPlays(monthName(upcoming.fromMonth, month, language))
+                ? venueCopy.previewPlays(weekName(upcoming.fromWeek, week, language))
                 : venueCopy.previewCurrent}
             </p>
           )}
-          {preview === 'current' && <p className="baseball-note derby-preview-note">{venueCopy.previewThisMonth}</p>}
+          {preview === 'current' && <p className="baseball-note derby-preview-note">{venueCopy.previewThisWeek}</p>}
           {status.kind === 'off' && status.stoppedBy && (
             <p className="baseball-note derby-camera-stopped" role="status">
               {cameraCopy.stopped[status.stoppedBy]}

@@ -1,3 +1,5 @@
+import { dayMilliseconds } from '../data/ballparkRules'
+
 export type AppLanguage = 'en' | 'ko'
 
 /** Each language's advice for when 3D graphics are off: the town's fallback, and under its own title the ballpark's. */
@@ -702,9 +704,9 @@ export const languageCopy = {
         title: 'Home Run Derby and its board',
         lines: [
           'The camera picture is processed on this device only. Camera video, body joint positions, and motion recordings are never sent or stored.',
-          'When a game ends, your batting side, your practice numbers, four numbers for each pitch (contact time, swing start time, speed, and height difference), and your character’s name and look are sent. The server works out the score again from these numbers and keeps them with the record. Ranked games have no sign-in.',
+          'When a game ends, your batting side, your practice numbers, four numbers for each pitch (contact time, swing start time, speed, and height difference), and your character’s name and look are sent. The server works out the score again from these numbers and keeps them with the record. It also notes, as a yes or no only, whether the result looked like it came from the game page. Ranked games have no sign-in.',
           'Others see only records you choose to post. A name shows after the admin checks it; left empty, the record shows as an anonymous batter without your character. A record you do not post stays hidden from others but remains on the server. Your age is not asked.',
-          'A top 3 record stands as a statue right away, with no check first, and also stands in the town for that month. Each finished season’s top 3 stay in the hall of fame. Once you post, your next records from this browser are posted too.',
+          'A season is one week, Monday to Sunday in Korean time. A top 3 record stands as a statue only after the admin has checked it, and then also stands in the town for that week; places from 4th on show at once. Each finished season’s top 3 stay in the hall of fame. Once you post, your next records from this browser are posted too.',
           'A LinkedIn address is optional. It shows only on your statue, after you put a code on your profile and the admin checks it, and never in the board’s list.',
           'Records have no end date. “Delete my records” removes this browser’s records and game numbers of every season at once, and turning LinkedIn off removes that address at once.',
           'If you ask for removal by writing to the address above, the admin removes the name and LinkedIn link and leaves the record anonymous, with its score and place. The character’s look stays stored with the record, because a record needs one, and is hidden from everyone. A LinkedIn address the admin blocks is kept as a hash so it cannot come back.',
@@ -712,7 +714,7 @@ export const languageCopy = {
           'Requests to the game’s API write no access log, and the counters that stop request floods exist only in the server’s memory. Visit statistics do not run on the game and board pages.',
           'Walking through the ballpark’s gate in the town adds 1 to a daily total of entries, counted like the totals under Visit statistics. Nothing is counted inside the game or on the board.',
           'The stadium’s crowd and players take the looks of characters from guestbook notes the admin approved, without their names.',
-          'This browser also remembers the camera panel’s size and which month’s statues it has already revealed.',
+          'This browser also remembers the camera panel’s size and which week’s statues it has already revealed.',
           'The board’s pages ask search engines not to index them, but that cannot stop a copy someone makes of the screen.',
         ],
       },
@@ -807,17 +809,21 @@ export const languageCopy = {
         outcomes: { homeRun: 'Home run', hit: 'Hit', foul: 'Foul', strike: 'Strike', miss: 'Miss' },
         playAgain: 'Play again',
       },
-      /** The monthly board on the result card (flow/rankedRun.ts boardLine) and its listing card (ui/ListingView.tsx). */
+      /** The weekly board on the result card (flow/rankedRun.ts boardLine) and its listing card (ui/ListingView.tsx). */
       board: {
         saving: 'Saving your record…',
         statue: (rank: number) => `You’re on the podium: ${['1st', '2nd', '3rd'][rank - 1]} place statue!`,
         newBest: (rank: number) => `New best! You’re #${rank}`,
         bestStands: (rank: number, record: string) => `Your best still stands at #${rank} (${record})`,
         offBoard: (rank: number) =>
-          rank <= 3 ? 'Put it on the board and your statue goes up' : `You’d be #${rank} on the board`,
+          rank <= 3
+            ? 'Post it and your statue goes up once the admin has checked it'
+            : `You’d be #${rank} on the board`,
         consentNeeded: (rank: number) => `This record isn’t on the board yet. Post it at #${rank}?`,
-        reviewing: 'We’re checking this record. It goes on the board once checked.',
-        excluded: 'Your records this month aren’t on the board',
+        reviewing:
+          'We’re checking this record. Top 3 records always get a check first; it goes on the board once checked.',
+        awaitingApproval: (rank: number) => `#${rank} once the admin has checked it`,
+        excluded: 'Your records this week aren’t on the board',
         deleted: 'Your records are deleted.',
         unranked: {
           offline: 'Couldn’t reach the board, so this game was practice.',
@@ -835,15 +841,16 @@ export const languageCopy = {
         retry: 'Try again',
         dataNotice:
           'Saving a score sends timing, swing speed, and height numbers for each pitch, plus your character’s name and look. Camera video never leaves your device.',
-        consentTitle: 'Put this on the monthly board?',
+        consentTitle: 'Put this on this week’s board?',
         ownTitle: 'My record',
         wouldBe: (record: string, rank: number) => `${record} → you’d be #${rank}`,
         onBoard: (record: string, rank: number) => `${record} · #${rank}`,
+        onBoardAwaiting: (record: string, rank: number) => `${record} · #${rank} once the admin has checked it`,
         consentListed: 'Show my character and name on the board',
         consentTerms: [
           'Others see your name after the admin checks it.',
           'Your character looks the same as in the guestbook.',
-          'Make the top 3 and your statue goes up right away. It also stands on the way to the ballpark in town for that month.',
+          'Make the top 3 and your statue goes up once the admin has checked it; other places show at once. It also stands on the way to the ballpark in town for that week.',
           'Records are kept with no end date. You can delete yours or ask for removal at any time.',
           'Your next bests go on the board by themselves.',
           'Saying no changes nothing: you play just the same.',
@@ -883,7 +890,7 @@ export const languageCopy = {
         copied: 'Copied',
         howUsedTitle: 'How your information is used',
         howUsed: [
-          'Why: to show your record on the monthly board and its statues.',
+          'Why: to show your record on the weekly board and its statues.',
           'What: the name and character look you post, your score, four numbers for each swing (timing, start, speed, height), your practice numbers, and a LinkedIn link if you add one.',
           'Never: camera video, body joint positions, or motion recordings.',
           'How long: with no end date, until you delete them.',
@@ -895,14 +902,14 @@ export const languageCopy = {
         deleteConfirm: 'Delete',
         keep: 'Keep them',
       },
-      /** The monthly board's page (board/BoardPage.tsx): its statues, the list after them, and the visitor's record. */
+      /** The weekly board's page (board/BoardPage.tsx): its statues, the list after them, and the visitor's record. */
       leaderboard: {
         documentTitle: 'Home run champions · Town of Me',
         back: 'Back to the ballpark',
         eyebrow: (venue: string) => `${venue} · Home Run Derby`,
-        title: 'This month’s home run champions',
-        finalTitle: (month: string) => `${month}’s home run champions`,
-        season: (month: string) => `${month} season`,
+        title: 'This week’s home run champions',
+        finalTitle: (week: string) => `Home run champions · ${week}`,
+        season: (week: string) => `${week} season`,
         daysLeft: (days: number) => (days <= 1 ? 'last day' : `${days} days left`),
         seasonOver: 'final',
         reset: (date: string, local: string) => `New season starts ${date}, 00:00 KST (UTC+9) · your time: ${local}`,
@@ -910,17 +917,17 @@ export const languageCopy = {
         nextSeason: 'Next season',
         statues: 'Top 3 statues',
         plaqueLive: (rank: number) => (rank === 1 ? 'Leading now' : `Now ${['1st', '2nd', '3rd'][rank - 1]}`),
-        plaqueFinal: (month: string, rank: number) =>
-          rank === 1 ? `${month}’s home run champion` : `${month} · ${['1st', '2nd', '3rd'][rank - 1]}`,
+        plaqueFinal: (week: string, rank: number) =>
+          rank === 1 ? `${week} home run champion` : `${week} · ${['1st', '2nd', '3rd'][rank - 1]}`,
         emptyPedestal: 'Still empty',
         challenge: 'Take a swing',
         nameReviewing: 'Batter under review',
         nameAnonymous: 'Anonymous batter',
-        emptyMonth: 'Be this month’s first statue',
-        emptyMonthHint: 'Hit the first home run and you stand on the middle pedestal.',
-        lastSeason: (month: string) => `${month}’s champions`,
-        listTitle: 'This month’s board',
-        finalListTitle: (month: string) => `${month}’s board`,
+        emptyWeek: 'Be this week’s first statue',
+        emptyWeekHint: 'Top 3 records stand here once the admin has checked them.',
+        lastSeason: (week: string) => `Champions of ${week}`,
+        listTitle: 'This week’s board',
+        finalListTitle: (week: string) => `Board · ${week}`,
         listFrom: (count: number) => `From 4th place · ${count} ${count === 1 ? 'batter' : 'batters'}`,
         listEmpty: 'No 4th place yet',
         listEmptyFinal: 'No records from 4th place on',
@@ -928,10 +935,11 @@ export const languageCopy = {
         columns: { rank: 'Place', batter: 'Batter', homeRuns: 'Home runs', distance: 'Total distance' },
         homeRuns: (count: number) => `${count} HR`,
         tieRule: 'Ties go to total distance, then to whoever set it first.',
+        statueRule: 'Places 1–3 show once the admin has checked them; from 4th on, at once.',
         mine: 'Me',
-        ownNone: 'No record this month yet',
+        ownNone: 'No record this week yet',
         ownRank: (rank: number) => `You’re #${rank}`,
-        ownFinalRank: (month: string, rank: number) => `#${rank} in ${month}`,
+        ownFinalRank: (week: string, rank: number) => `#${rank} · ${week}`,
         ownBrowserOnly: 'Saved in this browser only',
         unlist: 'Hide me from the board',
         change: 'Change',
@@ -957,13 +965,13 @@ export const languageCopy = {
         hallOfFameTitle: 'Hall of fame',
         hallOfFameIntro: 'The top three of every finished season.',
         hallOfFameEmpty: 'No season has finished yet',
-        hallOfFameEmptyHint: 'When this month ends, its statues come here.',
-        backToBoard: 'Back to this month’s board',
+        hallOfFameEmptyHint: 'When this week ends, its statues come here.',
+        backToBoard: 'Back to this week’s board',
         pedestalLeftEmpty: 'Empty pedestal',
         ownPastTitle: 'My past seasons',
         ownPastEmpty: 'None of your records stood as a statue in a past season.',
         anonymize: 'Take down from the hall of fame',
-        anonymizeConfirm: 'This season’s statue becomes an “Anonymous batter”. This month’s record stays as it is.',
+        anonymizeConfirm: 'This season’s statue becomes an “Anonymous batter”. This week’s record stays as it is.',
         anonymizeConfirmAction: 'Take it down',
         anonymizeKeep: 'Keep it',
         nextPlayer: 'It’s someone else’s turn',
@@ -1094,9 +1102,9 @@ export const languageCopy = {
         enter: 'Enter the ballpark',
         mapGate: 'Ballpark gate',
         difficulties: { easy: 'Easy', normal: 'Normal', hard: 'Hard' },
-        rulesThisMonth: (pitchCount: number, difficulty: string) => `This month: ${pitchCount} pitches · ${difficulty}`,
-        rulesFrom: (month: string, pitchCount: number, difficulty: string) =>
-          `From ${month}: ${pitchCount} pitches · ${difficulty}`,
+        rulesThisWeek: (pitchCount: number, difficulty: string) => `This week: ${pitchCount} pitches · ${difficulty}`,
+        rulesFrom: (week: string, pitchCount: number, difficulty: string) =>
+          `From the week of ${week}: ${pitchCount} pitches · ${difficulty}`,
         settingsTitle: 'Ballpark',
         visible: 'Show the ballpark',
         visibleNote:
@@ -1106,28 +1114,28 @@ export const languageCopy = {
         colorRoles: { walls: 'Walls', roof: 'Roof', trim: 'Trim', accent: 'Accent' },
         themeColor: 'Use theme color',
         colorsNote: 'Colors apply as soon as you save.',
-        nextRulesTitle: 'Next month’s rules',
+        nextRulesTitle: 'Next week’s rules',
         nextRulesNote:
-          'Pitch count and difficulty change at midnight KST on the first of next month, with next month’s board. This month’s games and board stay as they are.',
+          'Pitch count and difficulty change at midnight KST next Monday, with next week’s board. This week’s games and board stay as they are.',
         pitchCount: 'Pitches',
         difficulty: 'Difficulty',
         difficultyNote: 'Harder pitches come faster, with less room to time the swing.',
         cancelSchedule: 'Cancel the change',
-        tryNextRules: 'Try next month’s rules',
-        saveToTry: 'Save to try next month’s rules.',
+        tryNextRules: 'Try next week’s rules',
+        saveToTry: 'Save to try next week’s rules.',
         previewBadge: 'Preview · not ranked',
-        previewPlays: (month: string) => `This preview plays the rules from ${month}.`,
-        previewCurrent: 'Nothing is scheduled, so this preview plays this month’s rules.',
-        previewThisMonth: 'This preview plays this month’s rules.',
+        previewPlays: (week: string) => `This preview plays the rules from the week of ${week}.`,
+        previewCurrent: 'Nothing is scheduled, so this preview plays this week’s rules.',
+        previewThisWeek: 'This preview plays this week’s rules.',
         /** The podium garden beside the north road: its sign, an empty pedestal's plaque, and a statue's card. */
         statues: {
           sign: 'Home run champions',
           waiting: 'Waiting for a challenger',
-          month: (month: string) => `${month} Home Run Derby`,
+          week: (week: string) => `Home Run Derby · ${week}`,
           place: (rank: number) => `${['1st', '2nd', '3rd'][rank - 1]} place`,
-          waitingHint: 'Hit a home run and you stand right here.',
-          firstStatue: 'This month’s first home run makes its first statue.',
-          firstStatueOf: (month: string) => `Who will be ${month}’s first statue?`,
+          waitingHint: 'Hit a home run and you stand right here, once the admin has checked it.',
+          firstStatue: 'This week’s statues go up once the admin has checked the records.',
+          firstStatueOf: (week: string) => `Who will be the first statue of ${week}?`,
           ranking: 'See the ranking',
         },
       },
@@ -1802,9 +1810,9 @@ export const languageCopy = {
         title: '홈런 더비와 순위표',
         lines: [
           '카메라 화면은 이 기기 안에서만 처리돼요. 카메라 영상, 관절 좌표, 동작 기록은 서버로 보내지도, 저장하지도 않아요.',
-          '경기가 끝나면 타석 방향, 연습 숫자, 공마다 스윙 숫자 네 개(맞힌 시각, 스윙을 시작한 시각, 속도, 높이 차이)와 캐릭터의 이름, 모습을 보내요. 서버는 이 숫자로 점수를 다시 계산해 기록과 함께 저장해요. 순위 경기에는 로그인이 없어요.',
+          '경기가 끝나면 타석 방향, 연습 숫자, 공마다 스윙 숫자 네 개(맞힌 시각, 스윙을 시작한 시각, 속도, 높이 차이)와 캐릭터의 이름, 모습을 보내요. 서버는 이 숫자로 점수를 다시 계산해 기록과 함께 저장해요. 결과가 경기 화면에서 온 것처럼 보였는지도 예/아니요로만 남겨요. 순위 경기에는 로그인이 없어요.',
           '직접 올린 기록만 다른 사람에게 보여요. 이름은 관리자가 확인한 뒤에 보이고, 이름을 비우면 캐릭터 없이 ‘익명 타자’로 올라요. 올리지 않은 기록은 다른 사람에게 보이지 않지만 서버에는 남아요. 나이는 묻지 않아요.',
-          '1–3위 기록은 확인 없이 바로 동상으로 서고, 그달 동안 마을에도 서요. 끝난 시즌의 위 셋은 명예의 전당에 남아요. 한 번 올리면 이 브라우저의 다음 기록도 이어서 올라가요.',
+          '한 시즌은 한국 시간으로 월요일부터 일요일까지 한 주예요. 1–3위 기록은 관리자가 확인한 뒤에 동상으로 서고, 그 주 동안 마을에도 서요. 4위부터는 바로 보여요. 끝난 시즌의 위 셋은 명예의 전당에 남아요. 한 번 올리면 이 브라우저의 다음 기록도 이어서 올라가요.',
           'LinkedIn 주소는 선택이에요. 프로필에 코드를 넣고 관리자가 확인한 뒤에 내 동상에만 보이고, 순위 목록에는 보이지 않아요.',
           '기록은 기간을 정해 지우지 않아요. ‘내 기록 지우기’를 누르면 이 브라우저의 모든 시즌 기록과 경기 숫자가 바로 지워지고, LinkedIn을 끄면 그 주소가 바로 지워져요.',
           '위 주소로 게시 중단을 요청하면 관리자가 이름과 LinkedIn 주소를 지우고 기록을 익명으로 바꿔요. 점수와 순위는 그대로 남아요. 캐릭터 모습은 기록에 꼭 필요해서 함께 저장되지만 누구에게도 보이지 않아요. 관리자가 막은 LinkedIn 주소는 다시 쓰이지 않도록 해시로 계속 보관해요.',
@@ -1812,7 +1820,7 @@ export const languageCopy = {
           '경기 API 요청은 접속 기록에 남기지 않고, 과도한 요청을 막는 계수는 서버 메모리에만 있어요. 경기 화면과 순위 페이지에서는 방문 통계가 실행되지 않아요.',
           '마을에서 야구장 문으로 들어가면 하루 입장 합계에 1을 더해요. 방문 통계의 합계와 같은 방식이에요. 경기 안과 순위표에서는 아무것도 세지 않아요.',
           '경기장의 관중과 선수는 관리자가 확인한 방명록 글의 캐릭터 모습을 빌려 써요. 이름은 쓰지 않아요.',
-          '카메라 패널 크기와 어느 달의 동상 등장을 이미 봤는지는 이 브라우저에 남아요.',
+          '카메라 패널 크기와 어느 주의 동상 등장을 이미 봤는지는 이 브라우저에 남아요.',
           '순위 페이지는 검색엔진에 색인하지 말라고 요청하지만, 화면을 찍어 옮긴 사본까지 막을 수는 없어요.',
         ],
       },
@@ -1907,10 +1915,12 @@ export const languageCopy = {
         statue: (rank: number) => `${rank}등 동상이 섰어요!`,
         newBest: (rank: number) => `새 기록! 지금 ${rank}위예요`,
         bestStands: (rank: number, record: string) => `최고 기록은 그대로예요 · ${rank}위 (${record})`,
-        offBoard: (rank: number) => (rank <= 3 ? '순위에 올리면 동상이 서요' : `순위에 올리면 ${rank}위예요`),
+        offBoard: (rank: number) =>
+          rank <= 3 ? '순위에 올리면 관리자 확인 뒤 동상이 서요' : `순위에 올리면 ${rank}위예요`,
         consentNeeded: (rank: number) => `이번 기록은 아직 순위에 올리지 않았어요. ${rank}위로 올릴까요?`,
-        reviewing: '기록을 확인하고 있어요. 확인이 끝나면 순위에 반영돼요.',
-        excluded: '이번 달 기록은 순위에 오르지 않아요',
+        reviewing: '기록을 확인하고 있어요. 1–3위 기록은 항상 먼저 확인해요. 확인이 끝나면 순위에 반영돼요.',
+        awaitingApproval: (rank: number) => `관리자 확인 뒤 ${rank}위로 올라요`,
+        excluded: '이번 주 기록은 순위에 오르지 않아요',
         deleted: '기록을 모두 지웠어요.',
         unranked: {
           offline: '지금은 순위에 연결할 수 없어 연습으로 진행했어요.',
@@ -1928,15 +1938,16 @@ export const languageCopy = {
         retry: '다시 시도',
         dataNotice:
           '점수를 저장할 때 공마다 타이밍·스윙 속도·높이 숫자와 캐릭터 이름·모습을 보내요. 카메라 영상은 보내지 않아요.',
-        consentTitle: '이번 달 순위에 올릴까요?',
+        consentTitle: '이번 주 순위에 올릴까요?',
         ownTitle: '내 기록',
         wouldBe: (record: string, rank: number) => `${record} → 올리면 ${rank}위예요`,
         onBoard: (record: string, rank: number) => `${record} · 지금 ${rank}위`,
+        onBoardAwaiting: (record: string, rank: number) => `${record} · 관리자 확인 뒤 ${rank}위`,
         consentListed: '순위에 내 캐릭터와 이름 올리기',
         consentTerms: [
           '이름은 관리자가 확인한 뒤 다른 사람에게 보여요.',
           '순위의 캐릭터 모습은 방명록과 같아요.',
-          '1–3위가 되면 바로 동상이 서요. 그달 동안 마을의 구장 가는 길에도 서요.',
+          '1–3위가 되면 관리자가 확인한 뒤 동상이 서요. 4위부터는 바로 보여요. 그 주 동안 마을의 구장 가는 길에도 서요.',
           '기록은 기간을 정해 지우지 않아요. 언제든 직접 지우거나 게시 중단을 요청할 수 있어요.',
           '앞으로 기록을 깨면 자동으로 순위에 반영돼요.',
           '올리지 않아도 경기는 똑같이 할 수 있어요.',
@@ -1975,7 +1986,7 @@ export const languageCopy = {
         copied: '복사했어요',
         howUsedTitle: '내 정보는 이렇게 쓰여요',
         howUsed: [
-          '쓰는 곳: 이달의 순위와 동상에 기록을 보여 줄 때',
+          '쓰는 곳: 이번 주 순위와 동상에 기록을 보여 줄 때',
           '보내는 것: 올린 이름과 캐릭터 모습, 점수, 공마다 스윙 숫자 네 개(타이밍, 시작 시각, 속도, 높이)와 연습 숫자, 넣었다면 LinkedIn 주소',
           '보내지 않는 것: 카메라 영상, 몸의 관절 좌표, 동작 기록',
           '보관: 기간을 정해 지우지 않아요. 직접 지울 때까지 남아요.',
@@ -1987,14 +1998,14 @@ export const languageCopy = {
         deleteConfirm: '지우기',
         keep: '그대로 두기',
       },
-      /** The monthly board's page (board/BoardPage.tsx): its statues, the list after them, and the visitor's record. */
+      /** The weekly board's page (board/BoardPage.tsx): its statues, the list after them, and the visitor's record. */
       leaderboard: {
-        documentTitle: '이달의 홈런왕 · Town of Me',
+        documentTitle: '이번 주 홈런왕 · Town of Me',
         back: '구장으로',
         eyebrow: (venue: string) => `${venue} · 홈런 더비`,
-        title: '이달의 홈런왕',
-        finalTitle: (month: string) => `${month}의 홈런왕`,
-        season: (month: string) => `${month} 시즌`,
+        title: '이번 주 홈런왕',
+        finalTitle: (week: string) => `${week} 홈런왕`,
+        season: (week: string) => `${week} 시즌`,
         daysLeft: (days: number) => (days <= 1 ? '오늘까지' : `${days}일 남음`),
         seasonOver: '끝난 시즌',
         reset: (date: string) => `${date} 0시에 새 시즌이 시작돼요`,
@@ -2002,16 +2013,16 @@ export const languageCopy = {
         nextSeason: '다음 시즌',
         statues: '1–3위 동상',
         plaqueLive: (rank: number) => (rank === 1 ? '지금 홈런왕' : `지금 ${rank}등`),
-        plaqueFinal: (month: string, rank: number) => (rank === 1 ? `${month}의 홈런왕` : `${month} ${rank}등`),
+        plaqueFinal: (week: string, rank: number) => (rank === 1 ? `${week} 홈런왕` : `${week} ${rank}등`),
         emptyPedestal: '아직 비어 있어요',
         challenge: '도전하기',
         nameReviewing: '검토 중인 타자',
         nameAnonymous: '익명 타자',
-        emptyMonth: '이번 달 첫 동상의 주인공이 되어 보세요',
-        emptyMonthHint: '가장 먼저 홈런을 치면 가운데 받침에 설 수 있어요',
-        lastSeason: (month: string) => `${month}의 홈런왕`,
-        listTitle: '이달의 순위',
-        finalListTitle: (month: string) => `${month} 순위`,
+        emptyWeek: '이번 주 첫 동상의 주인공이 되어 보세요',
+        emptyWeekHint: '1–3위 기록은 관리자가 확인한 뒤 여기에 서요',
+        lastSeason: (week: string) => `${week} 홈런왕`,
+        listTitle: '이번 주 순위',
+        finalListTitle: (week: string) => `${week} 순위`,
         listFrom: (count: number) => `4위부터 · ${count}명`,
         listEmpty: '아직 4위 기록이 없어요',
         listEmptyFinal: '4위부터는 기록이 없어요',
@@ -2019,10 +2030,11 @@ export const languageCopy = {
         columns: { rank: '순위', batter: '타자', homeRuns: '홈런', distance: '총 비거리' },
         homeRuns: (count: number) => `${count}개`,
         tieRule: '홈런이 같으면 총 비거리, 그것도 같으면 먼저 세운 기록이 위예요.',
+        statueRule: '1–3위는 관리자가 확인한 뒤에 보이고, 4위부터는 바로 보여요.',
         mine: '나',
-        ownNone: '이번 달 기록이 없어요',
+        ownNone: '이번 주 기록이 없어요',
         ownRank: (rank: number) => `지금 ${rank}위예요`,
-        ownFinalRank: (month: string, rank: number) => `${month} ${rank}위`,
+        ownFinalRank: (week: string, rank: number) => `${week} ${rank}위`,
         ownBrowserOnly: '이 브라우저의 기록이에요',
         unlist: '순위에서 숨기기',
         change: '바꾸기',
@@ -2047,13 +2059,13 @@ export const languageCopy = {
         hallOfFameTitle: '명예의 전당',
         hallOfFameIntro: '끝난 시즌마다 1–3위에 오른 타자들이에요.',
         hallOfFameEmpty: '아직 끝난 시즌이 없어요',
-        hallOfFameEmptyHint: '이번 달이 끝나면 이달의 동상이 여기로 옮겨 와요.',
-        backToBoard: '이달의 순위로',
+        hallOfFameEmptyHint: '이번 주가 끝나면 이번 주 동상이 여기로 옮겨 와요.',
+        backToBoard: '이번 주 순위로',
         pedestalLeftEmpty: '빈 받침',
         ownPastTitle: '지난 시즌 기록',
         ownPastEmpty: '지난 시즌에 동상으로 선 기록이 없어요',
         anonymize: '명예의 전당에서 내리기',
-        anonymizeConfirm: '이 시즌 동상이 ‘익명 타자’로 바뀌어요. 이번 달 기록은 그대로예요.',
+        anonymizeConfirm: '이 시즌 동상이 ‘익명 타자’로 바뀌어요. 이번 주 기록은 그대로예요.',
         anonymizeConfirmAction: '내리기',
         anonymizeKeep: '그대로 두기',
         nextPlayer: '다른 사람이 할 차례예요',
@@ -2175,9 +2187,9 @@ export const languageCopy = {
         enter: '야구장 들어가기',
         mapGate: '야구장 정문',
         difficulties: { easy: '쉬움', normal: '보통', hard: '어려움' },
-        rulesThisMonth: (pitchCount: number, difficulty: string) => `이번 달: ${pitchCount}구 · ${difficulty}`,
-        rulesFrom: (month: string, pitchCount: number, difficulty: string) =>
-          `${month}부터: ${pitchCount}구 · ${difficulty}`,
+        rulesThisWeek: (pitchCount: number, difficulty: string) => `이번 주: ${pitchCount}구 · ${difficulty}`,
+        rulesFrom: (week: string, pitchCount: number, difficulty: string) =>
+          `${week} 주부터: ${pitchCount}구 · ${difficulty}`,
         settingsTitle: '야구장',
         visible: '야구장 공개',
         visibleNote:
@@ -2187,27 +2199,27 @@ export const languageCopy = {
         colorRoles: { walls: '벽', roof: '지붕', trim: '테두리', accent: '강조색' },
         themeColor: '테마 색으로',
         colorsNote: '색은 저장하면 바로 적용돼요.',
-        nextRulesTitle: '다음 달 규칙',
+        nextRulesTitle: '다음 주 규칙',
         nextRulesNote:
-          '투구 수와 난이도는 다음 달 1일 0시(KST)부터 다음 달 순위표와 함께 적용돼요. 이번 달 경기와 순위표는 바뀌지 않아요.',
+          '투구 수와 난이도는 다음 주 월요일 0시(KST)부터 다음 주 순위표와 함께 적용돼요. 이번 주 경기와 순위표는 바뀌지 않아요.',
         pitchCount: '투구 수',
         difficulty: '난이도',
         difficultyNote: '어려울수록 공이 빠르고 타이밍을 맞출 여유가 줄어요.',
         cancelSchedule: '예약 취소',
-        tryNextRules: '다음 달 규칙으로 해보기',
-        saveToTry: '저장하면 다음 달 규칙으로 해볼 수 있어요.',
+        tryNextRules: '다음 주 규칙으로 해보기',
+        saveToTry: '저장하면 다음 주 규칙으로 해볼 수 있어요.',
         previewBadge: '미리보기 · 순위 제외',
-        previewPlays: (month: string) => `${month}부터 적용될 규칙으로 해봐요.`,
-        previewCurrent: '예약된 규칙이 없어서 이번 달 규칙으로 해봐요.',
-        previewThisMonth: '이번 달 규칙으로 해봐요.',
+        previewPlays: (week: string) => `${week} 주부터 적용될 규칙으로 해봐요.`,
+        previewCurrent: '예약된 규칙이 없어서 이번 주 규칙으로 해봐요.',
+        previewThisWeek: '이번 주 규칙으로 해봐요.',
         statues: {
-          sign: '이달의 홈런왕',
+          sign: '이번 주 홈런왕',
           waiting: '도전자를 기다려요',
-          month: (month: string) => `${month} 홈런 더비`,
+          week: (week: string) => `${week} 홈런 더비`,
           place: (rank: number) => `${rank}등 자리`,
-          waitingHint: '홈런을 치면 바로 이 받침에 서요.',
-          firstStatue: '이번 달 첫 홈런이 첫 동상이 돼요.',
-          firstStatueOf: (month: string) => `${month} 첫 동상의 주인공은?`,
+          waitingHint: '홈런을 치고 관리자 확인을 거치면 이 받침에 서요.',
+          firstStatue: '이번 주 동상은 관리자가 기록을 확인한 뒤에 서요.',
+          firstStatueOf: (week: string) => `${week} 첫 동상의 주인공은?`,
           ranking: '랭킹 보기',
         },
       },
@@ -2225,12 +2237,22 @@ export function withKoreanParticle(word: string, afterConsonant: string, afterVo
   return `${word}${syllable % 28 ? afterConsonant : afterVowel}`
 }
 
-/** A `YYYY-MM` month's name, with its year only when that is not `currentMonth`'s: "December", "2027년 1월". */
-export function monthName(month: string, currentMonth: string, language: AppLanguage) {
-  const year = month.slice(0, 4) === currentMonth.slice(0, 4) ? undefined : 'numeric'
-  // Read as UTC, so the device's time zone never shifts the first of the month into the month before.
-  const firstDay = new Date(`${month}-01T00:00:00Z`)
-  return new Intl.DateTimeFormat(language, { year, month: 'long', timeZone: 'UTC' }).format(firstDay)
+/**
+ * A ranking week, named by its Monday `YYYY-MM-DD`, as the KST days it runs: "Nov 9 – 15", "11월 30일~12월 6일". The
+ * year shows only when a day of it is outside `currentWeek`'s year: "Dec 28, 2026 – Jan 3, 2027".
+ */
+export function weekName(week: string, currentWeek: string, language: AppLanguage) {
+  // Read as UTC, so the device's time zone never shifts a KST calendar day into the day before.
+  const monday = new Date(`${week}T00:00:00Z`)
+  const sunday = new Date(monday.getTime() + 6 * dayMilliseconds)
+  const currentYear = Number(currentWeek.slice(0, 4))
+  const sameYear = monday.getUTCFullYear() === currentYear && sunday.getUTCFullYear() === currentYear
+  return new Intl.DateTimeFormat(language, {
+    year: sameYear ? undefined : 'numeric',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  }).formatRange(monday, sunday)
 }
 
 export function getPreferredLanguage(languages: readonly string[] = navigator.languages): AppLanguage {

@@ -356,18 +356,18 @@ describe('the derby flow', () => {
 })
 
 describe('a derby run', () => {
-  it('plays the rules of the KST month it starts in, so a run past midnight in Korea gets the new month', () => {
+  it('plays the rules of the KST week it starts in, so a run past midnight in Korea gets the new week', () => {
     const scheduled: BallparkSettings = {
       ...ballpark,
-      scheduledRules: { fromMonth: '2026-11', rules: { pitchCount: 8, difficulty: 'hard' } },
+      scheduledRules: { fromWeek: '2026-11-09', rules: { pitchCount: 8, difficulty: 'hard' } },
     }
     const log = { side: 'right' as const, practice: [] }
-    const lastOctoberRun = createDerbyRun(scheduled, new Date('2026-10-31T14:59:00Z'), 7, log)
-    const firstNovemberRun = createDerbyRun(scheduled, new Date('2026-10-31T15:01:00Z'), 7, log)
-    expect(lastOctoberRun.plan.rules).toEqual(scheduled.rules)
-    expect(firstNovemberRun.plan.rules).toEqual(scheduled.scheduledRules!.rules)
-    expect(firstNovemberRun.plan.schedule).toHaveLength(8)
-    const practice = createPracticeRun(scheduled, new Date('2026-10-31T15:01:00Z'), 'right')
+    const lastRunOfTheWeek = createDerbyRun(scheduled, new Date('2026-11-08T14:59:00Z'), 7, log)
+    const firstRunOfTheNext = createDerbyRun(scheduled, new Date('2026-11-08T15:01:00Z'), 7, log)
+    expect(lastRunOfTheWeek.plan.rules).toEqual(scheduled.rules)
+    expect(firstRunOfTheNext.plan.rules).toEqual(scheduled.scheduledRules!.rules)
+    expect(firstRunOfTheNext.plan.schedule).toHaveLength(8)
+    const practice = createPracticeRun(scheduled, new Date('2026-11-08T15:01:00Z'), 'right')
     expect(practice.plan.rules.difficulty).toBe('hard')
   })
 })

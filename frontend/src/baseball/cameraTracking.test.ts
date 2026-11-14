@@ -108,7 +108,7 @@ function bottleTracker(kind: 'detected' | 'manual' = 'detected'): SwingTracker {
 }
 
 /** Tracks the camera with `parts` and returns the statuses it reported. */
-async function statusesOf(parts: Omit<CameraTrackingParts, 'createObjectDetector'>) {
+async function statusesOf(parts: Omit<CameraTrackingParts, 'createObjectDetector'> & Partial<CameraTrackingParts>) {
   const statuses: CameraStatus[] = []
   await trackCamera(
     video,
@@ -132,14 +132,17 @@ describe('camera tracking', () => {
     await vi.waitFor(() => expect(tracker.close).toHaveBeenCalled())
   })
 
-  it('blames tracking, not the camera, when the pose task cannot start on a camera that works', async () => {
+  it('blames tracking, not the camera, when the pose task cannot start, and loads no object detector before it', async () => {
+    const createObjectDetector = vi.fn<CameraTrackingParts['createObjectDetector']>()
     const statuses = await statusesOf({
       start: async () => ({ noteMovement: () => undefined }),
       createTracker: async () => {
         throw new Error('Failed to fetch the model')
       },
+      createObjectDetector,
     })
     expect(statuses).toEqual([{ kind: 'loading' }, { kind: 'problem', problem: 'tracking' }])
+    expect(createObjectDetector).not.toHaveBeenCalled()
   })
 
   it('rests the object detector during a pitch, while no hands show, and for a tapped lock', () => {

@@ -57,7 +57,7 @@ import { mergeParts, partMatrix, type PlacedPart, placeInFrame, type Triple } fr
 import { arcPoint, type PodiumGarden, STATUE_SCALE } from './ballparkStatueLayout'
 
 // The podium garden's shapes in its own frame (ballparkStatueLayout.ts), merged into one geometry per material; its
-// flower beds, which bloom in the season's colors and close into buds under the snow; and its statues, this month's
+// flower beds, which bloom in the season's colors and close into buds under the snow; and its statues, this week's
 // top three as the board paints them, standing still, their names on the plaques, twinkling in their places' colors.
 
 /** The bunting's pennants, in the board's colors. */
@@ -271,7 +271,7 @@ export function pedestalSnow(rank: StatueRank, waiting: boolean) {
 /** What stands in a place: a record's character and its name as the board shows it, or a waiting baseball. */
 export type PodiumPlace = { rank: StatueRank; look: StatueLook; text: string }
 
-/** First, second, and third place as the garden stands them from this month's rows; a place no row holds waits. */
+/** First, second, and third place as the garden stands them from this week's rows; a place no row holds waits. */
 export function podiumPlaces(rows: readonly BoardRow[], language: AppLanguage): PodiumPlace[] {
   const waiting = languageCopy[language].venues.ballpark.statues.waiting
   return STATUE_RANKS.map((rank) => {

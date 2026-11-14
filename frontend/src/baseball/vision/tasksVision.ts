@@ -4,10 +4,13 @@ import simdBinaryUrl from '@mediapipe/tasks-vision/vision_wasm_internal.wasm?url
 import plainLoaderUrl from '@mediapipe/tasks-vision/vision_wasm_nosimd_internal.js?url'
 import plainBinaryUrl from '@mediapipe/tasks-vision/vision_wasm_nosimd_internal.wasm?url'
 import { HELD_OBJECT_LABELS, HELD_OBJECT_RULES } from './heldObject'
+import objectModelUrl from './models/efficientdet_lite0.tflite?url'
+import poseModelUrl from './models/pose_landmarker_lite.task?url'
 
-// MediaPipe Tasks Vision, loaded only once the visitor turns the camera on, with everything served from this origin:
-// the wasm through Vite, the models from public/assets/models. Imports from frontend/ resolve to frontend's own copy of
-// the package, wherever npm puts the 0.10.17 that @react-three/drei depends on.
+// MediaPipe Tasks Vision, loaded only once the visitor turns the camera on, with everything served from this origin
+// through Vite, which puts a content hash in each file's name so a browser may keep it for a year: the wasm from the
+// package, the models from ./models. Imports from frontend/ resolve to frontend's own copy of the package, wherever npm
+// puts the 0.10.17 that @react-three/drei depends on.
 //
 // The package is pinned to exactly 0.10.35 (frontend/package.json; .github/dependabot.yml ignores >=1.0.0). From
 // 1.0.0 on it sends usage logs to Google (POST odml.pa.googleapis.com/v1/log) with no way to turn them off, and the
@@ -15,9 +18,6 @@ import { HELD_OBJECT_LABELS, HELD_OBJECT_RULES } from './heldObject'
 // block such a request anyway; the pin keeps any upgrade a deliberate change that is checked for outgoing requests
 // first. 0.10.x leaves three things to its caller, handled here: a GPU delegate that fails to start, a lost WebGL
 // context, and frame timestamps that must strictly increase (one that does not breaks the task for good).
-
-export const POSE_MODEL_PATH = '/assets/models/pose_landmarker_lite.task'
-export const OBJECT_MODEL_PATH = '/assets/models/efficientdet_lite0.tflite'
 
 export type VisionDelegate = 'GPU' | 'CPU'
 
@@ -141,7 +141,7 @@ export async function buildPoseLandmarker(
 ): Promise<VideoTask<PoseLandmarkerResult>> {
   const { vision, fileset } = await loadTasksVision()
   return vision.PoseLandmarker.createFromOptions(fileset, {
-    baseOptions: { modelAssetPath: POSE_MODEL_PATH, delegate },
+    baseOptions: { modelAssetPath: poseModelUrl, delegate },
     canvas,
     runningMode: 'VIDEO',
     numPoses: 1,
@@ -170,7 +170,7 @@ export async function buildObjectDetector(
 ): Promise<VideoTask<ObjectDetectorResult>> {
   const { vision, fileset } = await loadTasksVision()
   return vision.ObjectDetector.createFromOptions(fileset, {
-    baseOptions: { modelAssetPath: OBJECT_MODEL_PATH, delegate },
+    baseOptions: { modelAssetPath: objectModelUrl, delegate },
     canvas,
     runningMode: 'VIDEO',
     scoreThreshold: import.meta.env.DEV ? DEV_DETECTOR_SCORE : HELD_OBJECT_RULES.candidateScore,

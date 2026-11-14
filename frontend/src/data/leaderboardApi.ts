@@ -1,11 +1,12 @@
 import type { DerbyInputLog, DerbyResult } from '../baseball/game/derbyScore'
 import { requestJson, requireList, requireRecord, requireText, responseRecord } from './apiClient'
+import { isRankingWeek } from './ballparkRules'
 import { normalizeLinkedInProfileUrl } from './linkedInProfile'
 import { BASEBALL_DIFFICULTIES, type BallparkRules } from './models'
 import { normalizePlayerProfile, profileAppearance, type PlayerProfile } from './playerProfile'
 import { isPitchCount } from './townApi'
 
-// The wire format of the home run derby's monthly board (backend/README.md "Ranked runs"). The client sends no score
+// The wire format of the home run derby's weekly board (backend/README.md "Ranked runs"). The client sends no score
 // the server keeps: a run's result is its input log, the totals the client worked out (which only decide whether the
 // server holds the run for review), and who played it, the character's look and the board name when there is one.
 // The run's id in the path and the visitor cookie are the session; the cookie is HttpOnly, so this page never sees it.
@@ -15,7 +16,6 @@ const boardPath = '/v1/games/home-run-derby'
 const longestClientRunMs = 600_000
 /** Mirrors the server's one-line board name of 1–24 characters, measured after NFKC. */
 const boardNameLength = 24
-const seasonIdPattern = /^\d{4}-(0[1-9]|1[0-2])$/u
 
 export class LeaderboardRequestError extends Error {
   constructor(readonly status: number) {
@@ -27,7 +27,10 @@ export class LeaderboardRequestError extends Error {
 /** A ranked run the server started: its pitches are planned from these rules and seed, and it is open until `expiresAt`. */
 export type IssuedRun = { id: string; expiresAt: number; rules: BallparkRules; seed: number }
 
-/** Where a run left the visitor's record on this month's board, as the server worked it out. */
+/**
+ * Where a run left the visitor's record on this week's board, as the server worked it out. `reviewing` is a held run,
+ * which every run that would place among the statues is, or a listed record waiting there for the admin's approval.
+ */
 export type RunStanding =
   | { kind: 'reviewing' }
   | { kind: 'excluded' }
@@ -40,7 +43,7 @@ export type NameStatus = (typeof nameStatuses)[number]
 export type LinkedInStatus = (typeof linkedInStatuses)[number]
 
 /**
- * The visitor's own record on this month's board. Its LinkedIn link shows only as a hint, since the next person on a
+ * The visitor's own record on this week's board. Its LinkedIn link shows only as a hint, since the next person on a
  * shared computer sees this too; `code` is what the visitor puts on the profile for the admin to see.
  */
 export type OwnBoardEntry = {
@@ -53,6 +56,8 @@ export type OwnBoardEntry = {
   totalDistanceDm: number
   /** The place it holds, or would hold if listed; `null` while disqualified. */
   rank: number | null
+  /** Its place is among the statues and the admin has not approved it yet, so nobody else sees it there. */
+  awaitingApproval: boolean
 }
 
 /** The visitor's own record as a season's board shows it, with the character it was posted with. */
@@ -79,7 +84,7 @@ export type BoardRow = {
   linkedInProfileUrl: string | null
 }
 
-/** A KST month's board: its bounds, and whether it is over, so its order is final. */
+/** A KST week's board: its bounds, and whether it is over, so its order is final. */
 export type BoardSeason = { id: string; startsAt: number; endsAt: number; final: boolean }
 
 /** A season's statues (places 1–3), its list (4–50), and the visitor's own record on it. */
@@ -89,7 +94,7 @@ export type Board = { season: BoardSeason; podium: BoardRow[]; ranks: BoardRow[]
 export type RunOutcome = { standing: RunStanding; entry: OwnBoardEntry | null }
 
 /**
- * What the visitor asks of this month's record: off the board, or on it with this character, this name (`null` for an
+ * What the visitor asks of this week's record: off the board, or on it with this character, this name (`null` for an
  * anonymous batter), and their LinkedIn link turned on (an address), off (`null`), or left as it is (`undefined`).
  */
 export type ListingChoice =
@@ -158,6 +163,7 @@ export function parseOwnEntry(value: unknown): OwnBoardEntry {
     homeRuns: wholeNumber(input.homeRuns, 'entry.homeRuns'),
     totalDistanceDm: wholeNumber(input.totalDistanceDm, 'entry.totalDistanceDm'),
     rank: input.rank === null ? null : wholeNumber(input.rank, 'entry.rank'),
+    awaitingApproval: input.awaitingApproval === true,
   }
 }
 
@@ -213,7 +219,7 @@ export function parseBoardSeason(value: unknown): BoardSeason {
   const id = requireText(input.id, 'season.id')
   const startsAt = Date.parse(requireText(input.startsAt, 'season.startsAt'))
   const endsAt = Date.parse(requireText(input.endsAt, 'season.endsAt'))
-  if (!seasonIdPattern.test(id) || !(startsAt < endsAt)) throw new Error('season is malformed')
+  if (!isRankingWeek(id) || !(startsAt < endsAt)) throw new Error('season is malformed')
   return { id, startsAt, endsAt, final: input.final === true }
 }
 
@@ -236,7 +242,10 @@ export function parseBoard(value: unknown): Board {
   }
 }
 
-/** This month's statues as the town stands them: the KST month they belong to, and one row for each place held. */
+/**
+ * This week's statues as the town stands them: the KST week they belong to, and one row for each place held. A place
+ * whose record waits for the admin's approval is not among them, and the row below never moves up into it.
+ */
 export type Podium = { season: string; rows: BoardRow[] }
 
 /** Statues read like a board's rows, and a place the server sent twice keeps its first: one statue to a pedestal. */
@@ -249,7 +258,7 @@ export function statueRows(value: unknown): BoardRow[] {
 export function parsePodium(value: unknown): Podium {
   const input = requireRecord(value, 'podium')
   const season = requireText(requireRecord(input.season, 'podium.season').id, 'podium.season.id')
-  if (!seasonIdPattern.test(season)) throw new Error('podium.season is malformed')
+  if (!isRankingWeek(season)) throw new Error('podium.season is malformed')
   return { season, rows: statueRows(input.podium) }
 }
 
@@ -261,7 +270,7 @@ export function readableHallOfFameSeason(value: unknown): HallOfFameSeason[] {
   try {
     const input = requireRecord(value, 'season')
     const id = requireText(input.id, 'season.id')
-    return seasonIdPattern.test(id) ? [{ id, champions: statueRows(input.champions) }] : []
+    return isRankingWeek(id) ? [{ id, champions: statueRows(input.champions) }] : []
   } catch {
     return []
   }
@@ -276,10 +285,13 @@ export async function fetchHallOfFame(request: typeof fetch = fetch): Promise<Ha
 /** A past season's board whose statues include the visitor's own record. */
 export type OwnStatueBoard = Board & { own: BoardOwnEntry & { rank: number } }
 
-/** Whether the visitor's record stands as a statue here: a place it only would hold if listed does not count. */
+/**
+ * Whether the visitor's record stands as a statue here: a place it only would hold if listed does not count, nor one
+ * still waiting for the admin's approval, which the board leaves empty.
+ */
 export function holdsOwnStatue(board: Board): board is OwnStatueBoard {
   const own = board.own
-  return own !== null && own.listed && own.rank !== null && own.rank <= STATUE_PLACES.last
+  return own !== null && own.listed && !own.awaitingApproval && own.rank !== null && own.rank <= STATUE_PLACES.last
 }
 
 /**
@@ -295,8 +307,8 @@ export async function fetchOwnStatues(request: typeof fetch = fetch): Promise<Ow
 }
 
 /**
- * This month's statues, without the visitor cookie: the answer belongs to no one, so every cache may share it for the
- * minute the server allows. `fresh` skips this browser's copy, as a new month starts.
+ * This week's statues, without the visitor cookie: the answer belongs to no one, so every cache may share it for the
+ * minute the server allows. `fresh` skips this browser's copy, as a new week starts.
  */
 export async function fetchPodium(fresh: boolean, request: typeof fetch = fetch): Promise<Podium> {
   const init: RequestInit = { credentials: 'omit', cache: fresh ? 'reload' : 'default' }
@@ -384,19 +396,19 @@ export async function submitRankedRun(
   return { standing: parseStanding(payload.standing), entry: payload.entry ? parseOwnEntry(payload.entry) : null }
 }
 
-/** Lists or unlists this month's record, or changes the name or link it shows. */
+/** Lists or unlists this week's record, or changes the name or link it shows. */
 export async function updateOwnRecord(choice: ListingChoice, request: typeof fetch = fetch): Promise<OwnBoardEntry> {
   const init = { method: 'PUT', body: JSON.stringify(listingBody(choice)) }
   return parseOwnEntry((await responseRecord(await sendToBoard('/entries/own', init, request))).entry)
 }
 
-/** Turns off the LinkedIn link of the visitor's record on `season` (`YYYY-MM`), whose statue keeps it until then. */
+/** Turns off the LinkedIn link of the visitor's record on `season` (a Monday's `YYYY-MM-DD`), whose statue keeps it until then. */
 export async function turnOffLinkedIn(season: string, request: typeof fetch = fetch): Promise<void> {
   const path = `/entries/own?season=${encodeURIComponent(season)}`
   await sendToBoard(path, { method: 'PUT', body: JSON.stringify({ linkedIn: null }) }, request)
 }
 
-/** Makes the visitor's statue on past `season` (`YYYY-MM`) an anonymous batter; this month's record stays as it is. */
+/** Makes the visitor's statue on past `season` (a Monday's `YYYY-MM-DD`) an anonymous batter; this week's record stays as it is. */
 export async function anonymizeOwnRecord(season: string, request: typeof fetch = fetch): Promise<void> {
   const path = `/entries/own?season=${encodeURIComponent(season)}`
   await sendToBoard(path, { method: 'PUT', body: JSON.stringify({ anonymize: true }) }, request)
@@ -411,7 +423,7 @@ export async function forgetVisitor(request: typeof fetch = fetch): Promise<void
   if (!response.ok) throw new LeaderboardRequestError(response.status)
 }
 
-/** A season's board (`season` as `YYYY-MM`), or this month's; the visitor's own record comes with it. */
+/** A season's board (`season` as its Monday's `YYYY-MM-DD`), or this week's; the visitor's own record comes with it. */
 export async function fetchBoard(season: string | null, request: typeof fetch = fetch): Promise<Board> {
   const query = season ? `?season=${encodeURIComponent(season)}` : ''
   return parseBoard(await responseRecord(await sendToBoard(`/leaderboard${query}`, {}, request)))

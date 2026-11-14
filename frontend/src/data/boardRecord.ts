@@ -2,7 +2,7 @@ import { type AppLanguage, languageCopy } from '../i18n/language'
 import type { BoardRow } from './leaderboardApi'
 import { linkedInAddressText } from './linkedInProfile'
 
-// How a record on the monthly board reads wherever it shows: the derby's screens, the board's page, and the town's
+// How a record on the weekly board reads wherever it shows: the derby's screens, the board's page, and the town's
 // statues by the ballpark gate.
 
 /**

@@ -1,4 +1,5 @@
 import { requestJson, requireList, requireRecord, requireText, responseRecord } from './apiClient'
+import { isRankingWeek } from './ballparkRules'
 import {
   LeaderboardRequestError,
   oneOf,
@@ -14,12 +15,15 @@ import { normalizePlayerProfile, type PlayerProfile } from './playerProfile'
 // and the dialog says how many it skipped, since a queue that hides an item silently would hide what needs a decision.
 
 const reviewPath = '/v1/admin/games/home-run-derby'
-export const seasonPattern = /^\d{4}-(0[1-9]|1[0-2])$/u
 
 /** Mirrors the server's bound on one dismissal; a bigger flood takes another click. */
 export const DISMISSED_RUNS_LIMIT = 1000
 
-/** The queue's kinds, most urgent first, as the server orders them. */
+/**
+ * The queue's kinds, most urgent first, as the server orders them: `statue` is a record among the first three that is
+ * not approved, whose place stays empty until it is, or a statue whose name waits; `statue-run` a held run that would
+ * stand, of this season or of the last while it can still be accepted.
+ */
 export const REVIEW_KINDS = ['statue', 'statue-run', 'report', 'linkedin', 'past-run', 'run', 'name'] as const
 export type ReviewKind = (typeof REVIEW_KINDS)[number]
 const reviewStatuses = ['pending', 'approved', 'disqualified'] as const
@@ -89,6 +93,7 @@ export type ReviewedRunResult = {
 export type ReviewedRun = {
   id: string
   season: string
+  /** Why it is held; among them `podium-place` (it would take a statue) and `not-from-browser`. */
   flags: string[]
   wouldBeRank: number | null
   issuedAt: string
@@ -123,7 +128,7 @@ export type ReviewItem = {
 
 /**
  * What the dialog reads: the queue, and for finding one record, a season's records and, for a season the admin picked,
- * its queue. `season` is the month the records belong to, as the server answered.
+ * its queue. `season` is the week the records belong to, as the server answered.
  */
 export type BoardReviewData = {
   queue: ReviewItem[]
@@ -165,7 +170,7 @@ export function requireTime(value: unknown, label: string) {
 
 export function requireSeason(value: unknown, label: string) {
   const season = requireText(value, label)
-  if (!seasonPattern.test(season)) throw new Error(`${label} must be a season`)
+  if (!isRankingWeek(season)) throw new Error(`${label} must be a season`)
   return season
 }
 
@@ -362,8 +367,9 @@ export async function fetchRecordWarnings(
 
 /**
  * All the dialog reads. A picked `season`'s own queue comes too, since a record found there may have reports or held
- * runs the default queue leaves out: it covers only this season and the last. Until the admin picks one, `season` stays
- * `null` and the server decides what this season is, so a device clock past a month's end cannot fail the whole read.
+ * runs the default queue leaves out: it covers only this season, the last, and older ones where a record among the first
+ * three still waits for approval. Until the admin picks one, `season` stays
+ * `null` and the server decides what this season is, so a device clock past a week's end cannot fail the whole read.
  */
 export async function fetchBoardReview(season: string | null, request: typeof fetch = fetch): Promise<BoardReviewData> {
   const [queue, records, seasonQueue] = await Promise.all([

@@ -1,5 +1,5 @@
 import { CAMERA_DEFAULTS, CAMERA_EYE_TARGET_HEIGHT } from '../camera/cameraConfig'
-import { effectiveBallparkRules, nextRankingMonth, plannedBallparkRules } from '../data/ballparkRules'
+import { effectiveBallparkRules, nextRankingWeek, plannedBallparkRules } from '../data/ballparkRules'
 import { linkedInProfileUrlError } from '../data/linkedInProfile'
 import {
   PET_ROUTE_POINTS,
@@ -400,23 +400,23 @@ export function withBallparkColor(town: TownSnapshot, role: BallparkColorRole, c
 }
 
 /**
- * Schedules `change` over the rules already planned (`plannedBallparkRules`) from the KST month after `month`, the
+ * Schedules `change` over the rules already planned (`plannedBallparkRules`) from the KST week after `week`, the
  * only way the admin changes the ballpark rules: the rules in effect stay the backend's. A schedule already due in
- * `month` becomes the rules in effect first, as the backend does on save, so this month's rules read right before
- * saving and the due schedule is never sent again. Rules equal to this month's leave nothing scheduled.
+ * `week` becomes the rules in effect first, as the backend does on save, so this week's rules read right before
+ * saving and the due schedule is never sent again. Rules equal to this week's leave nothing scheduled.
  */
-export function withBallparkSchedule(town: TownSnapshot, change: Partial<BallparkRules>, month: string): TownSnapshot {
+export function withBallparkSchedule(town: TownSnapshot, change: Partial<BallparkRules>, week: string): TownSnapshot {
   const { visible, theme, colors } = town.venues.ballpark
-  const inEffect = effectiveBallparkRules(town.venues.ballpark, month)
-  const rules = { ...plannedBallparkRules(town.venues.ballpark, month), ...change }
+  const inEffect = effectiveBallparkRules(town.venues.ballpark, week)
+  const rules = { ...plannedBallparkRules(town.venues.ballpark, week), ...change }
   const unchanged = rules.pitchCount === inEffect.pitchCount && rules.difficulty === inEffect.difficulty
-  const scheduled = unchanged ? {} : { scheduledRules: { fromMonth: nextRankingMonth(month), rules } }
+  const scheduled = unchanged ? {} : { scheduledRules: { fromWeek: nextRankingWeek(week), rules } }
   return { ...town, venues: { ...town.venues, ballpark: { visible, theme, colors, rules: inEffect, ...scheduled } } }
 }
 
-/** Cancels the scheduled change, so next month keeps this month's rules. */
-export function withoutBallparkSchedule(town: TownSnapshot, month: string): TownSnapshot {
-  return withBallparkSchedule(town, effectiveBallparkRules(town.venues.ballpark, month), month)
+/** Cancels the scheduled change, so next week keeps this week's rules. */
+export function withoutBallparkSchedule(town: TownSnapshot, week: string): TownSnapshot {
+  return withBallparkSchedule(town, effectiveBallparkRules(town.venues.ballpark, week), week)
 }
 
 export type LayoutProblemKind =

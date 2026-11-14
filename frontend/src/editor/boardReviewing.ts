@@ -4,7 +4,6 @@ import {
   DISMISSED_RUNS_LIMIT,
   fetchRecordWarnings,
   REVIEW_KINDS,
-  seasonPattern,
   type BoardReviewData,
   type NeighbourName,
   type RecordAction,
@@ -13,7 +12,9 @@ import {
   type ReviewItem,
   type ReviewWarning,
 } from '../data/boardReviewApi'
-import { LeaderboardRequestError } from '../data/leaderboardApi'
+import { rankingWeek } from '../data/ballparkRules'
+import { LeaderboardRequestError, STATUE_PLACES } from '../data/leaderboardApi'
+import { RANKING_WEEK_PATTERN } from '../data/models'
 import { normalizeLinkedInProfileUrl } from '../data/linkedInProfile'
 import { useRetryableLoad } from '../hooks/useRetryableLoad'
 import type { AppLanguage } from '../i18n/language'
@@ -244,6 +245,18 @@ export function flagLabel(flag: string, copy: BoardReviewCopy) {
   return (copy.flags as Readonly<Record<string, string>>)[flag] ?? flag
 }
 
+/** A listed record among the first three that is not approved: its place stays empty for everyone until it is. */
+export function holdsEmptyPlace(entry: ReviewedEntry) {
+  const amongStatues = entry.rank !== null && entry.rank <= STATUE_PLACES.last
+  return amongStatues && entry.listed && entry.reviewStatus === 'pending'
+}
+
+/** What the admin needs said about the flags that are not about the swings themselves, one line each. */
+export function flagNotes(flags: readonly string[], copy: BoardReviewCopy): string[] {
+  const notes: Readonly<Record<string, string>> = copy.flagNotes
+  return flags.flatMap((flag) => notes[flag] ?? [])
+}
+
 export function numberText(value: number | null, fractionDigits: number) {
   return value === null ? '—' : value.toFixed(fractionDigits)
 }
@@ -252,9 +265,16 @@ export function reviewTime(time: string, language: AppLanguage) {
   return new Intl.DateTimeFormat(language, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(time))
 }
 
-/** A month the board may have: a month field reads empty until it is whole, and a board to come does not exist yet. */
-export function isPickableSeason(value: string, currentSeason: string) {
-  return seasonPattern.test(value) && value <= currentSeason
+/**
+ * The season a date field names, the KST week of the picked day, or `null`: a date field reads empty until it is
+ * whole, and a board to come does not exist yet.
+ */
+export function pickedSeason(value: string, currentSeason: string): string | null {
+  const day = Date.parse(`${value}T00:00:00+09:00`)
+  // The week's pattern is that of any whole date; half of one may still parse.
+  if (!RANKING_WEEK_PATTERN.test(value) || Number.isNaN(day)) return null
+  const season = rankingWeek(new Date(day))
+  return season <= currentSeason ? season : null
 }
 
 /**

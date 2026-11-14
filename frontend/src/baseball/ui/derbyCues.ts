@@ -179,7 +179,7 @@ export function resultRow(result: PitchResult, language: AppLanguage) {
   return { outcome: pitchOutcome(result), distance: inPlayDistance(result, language, 1) }
 }
 
-/** The result card's line about the monthly board (flow/rankedRun.ts boardLine). */
+/** The result card's line about the weekly board (flow/rankedRun.ts boardLine). */
 export function boardLineText(line: BoardLine, language: AppLanguage) {
   const copy = languageCopy[language].baseball.board
   if (line.kind === 'unranked') return copy.unranked[line.reason]

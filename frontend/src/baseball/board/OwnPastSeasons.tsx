@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { recordText } from '../../data/boardRecord'
 import { anonymizeOwnRecord, fetchOwnStatues, type OwnStatueBoard, turnOffLinkedIn } from '../../data/leaderboardApi'
-import { type AppLanguage, languageCopy, monthName } from '../../i18n/language'
+import { type AppLanguage, languageCopy, weekName } from '../../i18n/language'
 import { ConfirmedAction } from '../ui/ListingView'
 import { useRead } from './useBoard'
 
@@ -81,7 +81,7 @@ export function OwnPastSeasonRow({
   const { season, own } = board
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
-  const month = monthName(season.id, currentSeason, language)
+  const week = weekName(season.id, currentSeason, language)
   const turnLinkOff = async () => {
     setBusy(true)
     setFailed(false)
@@ -92,7 +92,7 @@ export function OwnPastSeasonRow({
     <li className="board-own-past-row">
       <div>
         <p>
-          <b>{boardCopy.plaqueFinal(month, own.rank)}</b> · {own.name ?? boardCopy.nameAnonymous}
+          <b>{boardCopy.plaqueFinal(week, own.rank)}</b> · {own.name ?? boardCopy.nameAnonymous}
         </p>
         <p className="board-own-past-record">{recordText(own.homeRuns, own.totalDistanceDm, language)}</p>
         {own.linkedIn && <p className="board-own-past-record">{own.linkedIn.profileHint}</p>}

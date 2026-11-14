@@ -2,25 +2,25 @@ import { useSyncExternalStore } from 'react'
 import { seasonEndsAt } from '../data/ballparkRules'
 import { fetchPodium, type Podium } from '../data/leaderboardApi'
 
-// This month's statues for the town (town-statues §2), shared by the podium garden and its card, so the two never
+// This week's statues for the town (town-statues §2), shared by the podium garden and its card, so the two never
 // disagree or read twice. Read once something shows them, then again every few minutes while the tab is in view, when
-// it comes back after that, and as the KST month turns. A failed read keeps what the town had while its month lasts;
+// it comes back after that, and as the KST week turns. A failed read keeps what the town had while its week lasts;
 // the town never says a read failed: an empty pedestal simply waits for a challenger.
 
 /** How long the town keeps its statues before reading them again; the server lets caches keep them a minute. */
 export const PODIUM_REFRESH_MS = 5 * 60 * 1000
 
 /**
- * When the town reads its statues next: a while after its last read at `readAt`, or as the month they belong to ends,
+ * When the town reads its statues next: a while after its last read at `readAt`, or as the week they belong to ends,
  * if that comes first and has not already passed (a device clock ahead of the server's never reads in a loop).
  */
 export function nextPodiumReadAt(readAt: number, podium: Podium | null) {
   const due = readAt + PODIUM_REFRESH_MS
-  const monthEnds = podium ? seasonEndsAt(podium.season) : Number.POSITIVE_INFINITY
-  return monthEnds > readAt ? Math.min(due, monthEnds) : due
+  const weekEnds = podium ? seasonEndsAt(podium.season) : Number.POSITIVE_INFINITY
+  return weekEnds > readAt ? Math.min(due, weekEnds) : due
 }
 
-/** What the town keeps after a failed read at `now`: its statues while their month lasts, then empty pedestals. */
+/** What the town keeps after a failed read at `now`: its statues while their week lasts, then empty pedestals. */
 export function podiumAfterFailure(podium: Podium | null, now: number) {
   return podium && now < seasonEndsAt(podium.season) ? podium : null
 }
@@ -41,7 +41,7 @@ const store: PodiumStore = {
   listeners: new Set(),
 }
 
-/** Reads the statues once, past this browser's copy when their month has ended, and tells everyone showing them. */
+/** Reads the statues once, past this browser's copy when their week has ended, and tells everyone showing them. */
 export async function readPodium() {
   if (store.reading) return
   store.reading = true
@@ -81,7 +81,7 @@ export function currentPodium() {
   return store.podium
 }
 
-/** This month's statues, or `null` until the first read and after a month ends without one. */
+/** This week's statues, or `null` until the first read and after a week ends without one. */
 export function usePodium() {
   return useSyncExternalStore(subscribePodium, currentPodium)
 }

@@ -1,4 +1,4 @@
-import { previousRankingMonth } from '../../data/ballparkRules'
+import { previousRankingWeek } from '../../data/ballparkRules'
 import {
   boardName,
   fetchBoard,
@@ -16,7 +16,7 @@ import type { PlayerProfile } from '../../data/playerProfile'
 import type { BaseballPreview } from '../baseballRoute'
 import { findsUsualTiming, type PracticeSample } from '../game/calibration'
 
-// A run and the monthly board. A run asks the server for its rules and seed as it starts (useRankedRuns.ts); without
+// A run and the weekly board. A run asks the server for its rules and seed as it starts (useRankedRuns.ts); without
 // an answer it plays all the same, unranked, and its result says so in a line. Its result goes to the board once the
 // run is over, and nothing about the board ever holds up the next swing.
 
@@ -115,13 +115,13 @@ export function sendRankedResult(
 
 /**
  * The name a run's result goes with: the board name of the visitor's latest listed record (`null` for an anonymous
- * batter), this month's or, before one, last month's, which a listing on either page may have set before this page
+ * batter), this week's or, before one, last week's, which a listing on either page may have set before this page
  * loaded; or else the character's. A result under another name looks like someone else's to the board, which then
- * takes the record off it with its name and link, or does not carry last month's listing over.
+ * takes the record off it with its name and link, or does not carry last week's listing over.
  */
 export async function postedBoardName(characterName: string, request: typeof fetch = fetch) {
   const board = await fetchBoard(null, request)
-  const own = board.own ?? (await fetchBoard(previousRankingMonth(board.season.id), request)).own
+  const own = board.own ?? (await fetchBoard(previousRankingWeek(board.season.id), request)).own
   return own?.listed ? own.name : characterName
 }
 
@@ -138,7 +138,8 @@ export function boardLine(boardRun: BoardRun | null, entry: OwnBoardEntry | null
 /**
  * The run's standing as the visitor's record now shows it (`entry`, which a listing changes after the run's answer): a
  * new best on the board is its place, or its statue; a run that did not beat the record says the record stands; a
- * record off the board says where it would be.
+ * record off the board says where it would be; and a posted record waiting among the statues for the admin's approval
+ * reads like a held run, since nobody else sees it there yet.
  */
 export function standingLine(standing: RunStanding, entry: OwnBoardEntry | null): BoardLine {
   if (standing.kind === 'reviewing' || standing.kind === 'excluded') return { kind: standing.kind }
@@ -146,6 +147,7 @@ export function standingLine(standing: RunStanding, entry: OwnBoardEntry | null)
   const { rank } = entry
   if (!entry.listed)
     return { kind: standing.kind === 'consentNeeded' ? 'consentNeeded' : 'offBoard', wouldBeRank: rank }
+  if (entry.awaitingApproval) return { kind: 'reviewing' }
   if (!standing.personalBest) {
     return { kind: 'bestStands', rank, homeRuns: entry.homeRuns, totalDistanceDm: entry.totalDistanceDm }
   }

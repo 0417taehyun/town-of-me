@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { recordNumber } from '../baseball/board/boardView'
 import { usePortrait } from '../baseball/board/portraitImages'
-import { rankingMonth } from '../data/ballparkRules'
+import { rankingWeek } from '../data/ballparkRules'
 import { distanceText, recordText } from '../data/boardRecord'
 import {
   acceptHeldRun,
@@ -22,7 +22,7 @@ import {
 import type { PlayerProfile } from '../data/playerProfile'
 import { useRetryableLoad } from '../hooks/useRetryableLoad'
 import type { AppLanguage } from '../i18n/language'
-import { languageCopy, monthName } from '../i18n/language'
+import { languageCopy, weekName } from '../i18n/language'
 import { CloseButton } from '../ui/CloseButton'
 import './boardReview.css'
 import { boardReviewCopy, type BoardReviewCopy } from './boardReviewCopy'
@@ -30,8 +30,10 @@ import {
   actionQuestion,
   findRecords,
   flagLabel,
+  flagNotes,
+  holdsEmptyPlace,
   foundItem,
-  isPickableSeason,
+  pickedSeason,
   isStaleBoardReview,
   itemKey,
   linkView,
@@ -177,6 +179,11 @@ export function RunFacts({ run, language, copy }: { run: ReviewedRun; language: 
           </span>
         ))}
       </p>
+      {flagNotes(run.flags, copy).map((note) => (
+        <p className="editor-note" key={note}>
+          {note}
+        </p>
+      ))}
       {result && (
         <dl className="board-review-facts">
           <div>
@@ -401,6 +408,7 @@ export function RecordMarks({
     <span className="board-review-marks">
       {newVisitor && <span className="board-review-mark is-warning">{copy.newVisitor}</span>}
       {entry && <span className="board-review-mark">{copy.reviewStatuses[entry.reviewStatus]}</span>}
+      {entry && holdsEmptyPlace(entry) && <span className="board-review-mark is-warning">{copy.placeEmpty}</span>}
       {entry?.nameStatus && <span className="board-review-mark">{copy.nameStatuses[entry.nameStatus]}</span>}
       {entry && !entry.listed && <span className="board-review-mark">{copy.unlisted}</span>}
       {entry?.takedown && <span className="board-review-mark">{copy.takenDown}</span>}
@@ -431,7 +439,7 @@ export function ReviewCard({
   return (
     <li className="guestbook-review-item board-review-item">
       <div>
-        <strong>{monthName(item.season, currentSeason, language)}</strong>
+        <strong>{weekName(item.season, currentSeason, language)}</strong>
         {entry && entry.rank !== null && (
           <span>
             {entry.listed && entry.reviewStatus !== 'disqualified' ? copy.place(entry.rank) : copy.wouldBe(entry.rank)}
@@ -508,17 +516,17 @@ export function ReviewCard({
 }
 
 /**
- * The admin's review of the derby's monthly boards: the server's queue, and a search for a record the queue does not
+ * The admin's review of the derby's weekly boards: the server's queue, and a search for a record the queue does not
  * list, which is how a takedown request by mail gets handled. Every action names the version it read, so a record that
  * changed since is refused and the list reloads.
  */
 export function BoardReview({ language, onClose }: { language: AppLanguage; onClose: () => void }) {
   const copy = boardReviewCopy[language]
   const shellCopy = languageCopy[language].boardReview
-  const currentSeason = rankingMonth(new Date())
+  const currentSeason = rankingWeek(new Date())
   const [season, setSeason] = useState<string | null>(null)
-  // What the month field says, which may be a month not loaded, or none while it is half typed.
-  const [monthField, setMonthField] = useState(currentSeason)
+  // The week the date field names, which may be a week not loaded, or none while it is half typed.
+  const [pickedWeek, setPickedWeek] = useState<string | null>(currentSeason)
   const [query, setQuery] = useState('')
   const load = useCallback(() => fetchBoardReview(season), [season])
   const { status, latest, retry, update } = useRetryableLoad(load)
@@ -528,8 +536,8 @@ export function BoardReview({ language, onClose }: { language: AppLanguage; onCl
   const queue = latest?.queue ?? []
   const groups = reviewGroups(queue)
   const dismissible = noHistoryRuns(queue)
-  // Results show only for the month the field says, so "no record matches" is never about another board.
-  const seasonData = latest?.season === monthField ? latest : null
+  // Results show only for the week the field says, so "no record matches" is never about another board.
+  const seasonData = latest?.season === pickedWeek ? latest : null
   const found = findRecords(seasonData?.records ?? [], query)
   const unqueued = seasonData ? found.shown.filter((record) => !queuedItem(record, seasonData)) : []
   const warnings = useRecordWarnings(season, unqueued.map(({ id }) => id).join())
@@ -579,17 +587,18 @@ export function BoardReview({ language, onClose }: { language: AppLanguage; onCl
     })
   }
   const dismissNoHistory = ({ season: heldSeason, runIds, keys }: (typeof dismissible)[number]) => {
-    const month = monthName(heldSeason, currentSeason, language)
-    if (!window.confirm(copy.bulkConfirm(month, runIds.length))) return
+    const week = weekName(heldSeason, currentSeason, language)
+    if (!window.confirm(copy.bulkConfirm(week, runIds.length))) return
     void act(keys, async () => {
       const dismissed = await dismissListedRuns(runIds)
       return { change: (data) => data, notice: copy.bulkDone(dismissed) }
     })
   }
   const changeSeason = (value: string) => {
-    setMonthField(value)
-    if (!isPickableSeason(value, currentSeason)) return
-    setSeason(value)
+    const picked = pickedSeason(value, currentSeason)
+    setPickedWeek(picked)
+    if (!picked) return
+    setSeason(picked)
     retry()
   }
   const card = (item: ReviewItem) => (
@@ -645,12 +654,7 @@ export function BoardReview({ language, onClose }: { language: AppLanguage; onCl
           <div className="board-review-find-fields">
             <label>
               {copy.season}
-              <input
-                type="month"
-                defaultValue={currentSeason}
-                max={currentSeason}
-                onChange={(event) => changeSeason(event.target.value)}
-              />
+              <input type="date" defaultValue={currentSeason} onChange={(event) => changeSeason(event.target.value)} />
             </label>
             <label>
               {copy.query}
@@ -682,7 +686,7 @@ export function BoardReview({ language, onClose }: { language: AppLanguage; onCl
                 disabled={held.keys.every((key) => busyKeys.has(key))}
                 onClick={() => dismissNoHistory(held)}
               >
-                {copy.bulkDismiss(monthName(held.season, currentSeason, language), held.runIds.length)}
+                {copy.bulkDismiss(weekName(held.season, currentSeason, language), held.runIds.length)}
               </button>
             ))}
           </div>

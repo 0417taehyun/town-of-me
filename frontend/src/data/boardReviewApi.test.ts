@@ -14,7 +14,7 @@ import {
 const entryId = '7c1f3a90-1111-4222-8333-444455556666'
 const wireEntry = {
   id: entryId,
-  season: '2026-10',
+  season: '2026-11-02',
   rank: 2,
   updatedAt: '2026-10-05T01:02:03.004Z',
   bestRunId: '11111111-1111-4111-8111-111111111111',
@@ -33,7 +33,7 @@ const wireEntry = {
 }
 const wireItem = {
   kind: 'statue',
-  season: '2026-10',
+  season: '2026-11-02',
   newVisitor: false,
   visitor: { runs: 4, abandoned: 1, flagged: 0 },
   entry: wireEntry,
@@ -61,7 +61,7 @@ describe('board review API boundary', () => {
 
   it('leaves this season to the server until one is picked, and then reads its queue too', async () => {
     const request = vi.fn(async (path: string) =>
-      Response.json(path.includes('/entries') ? { season: '2026-09', entries: [] } : { items: [] }),
+      Response.json(path.includes('/entries') ? { season: '2026-10-26', entries: [] } : { items: [] }),
     )
     await fetchBoardReview(null, request as unknown as typeof fetch)
     expect(request.mock.calls.map(([path]) => path)).toEqual([
@@ -69,12 +69,12 @@ describe('board review API boundary', () => {
       '/v1/admin/games/home-run-derby/entries',
     ])
     request.mockClear()
-    const read = await fetchBoardReview('2026-09', request as unknown as typeof fetch)
-    expect(read.season).toBe('2026-09')
+    const read = await fetchBoardReview('2026-10-26', request as unknown as typeof fetch)
+    expect(read.season).toBe('2026-10-26')
     expect(request.mock.calls.map(([path]) => path)).toEqual([
       '/v1/admin/games/home-run-derby/review',
-      '/v1/admin/games/home-run-derby/entries?season=2026-09',
-      '/v1/admin/games/home-run-derby/review?season=2026-09',
+      '/v1/admin/games/home-run-derby/entries?season=2026-10-26',
+      '/v1/admin/games/home-run-derby/review?season=2026-10-26',
     ])
   })
 
@@ -116,10 +116,10 @@ describe('board review API boundary', () => {
     )
     expect(await fetchRecordWarnings(null, '', request as typeof fetch)).toEqual({})
     expect(request).not.toHaveBeenCalled()
-    const warnings = await fetchRecordWarnings('2026-09', entryId, request as typeof fetch)
+    const warnings = await fetchRecordWarnings('2026-10-26', entryId, request as typeof fetch)
     expect(warnings[entryId]).toEqual([{ kind: 'similar-name', name: 'Robin' }])
     expect((request.mock.calls as unknown as Array<[string]>)[0][0]).toBe(
-      `/v1/admin/games/home-run-derby/entries/warnings?ids=${entryId}&season=2026-09`,
+      `/v1/admin/games/home-run-derby/entries/warnings?ids=${entryId}&season=2026-10-26`,
     )
   })
 

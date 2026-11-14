@@ -6,7 +6,7 @@ export type TimingWindows = { perfect: number; good: number; contact: number }
 /** `pitchFlightSeconds` is a fastball's flight from release to the plate; slower types stretch it. */
 export type DifficultyRule = { pitchFlightSeconds: number; timingWindows: TimingWindows }
 
-// Admins pick a difficulty by name only. The numbers live in code so a ranking month's rules judge the same everywhere.
+// Admins pick a difficulty by name only. The numbers live in code so a ranking week's rules judge the same everywhere.
 export const DIFFICULTY_RULES = {
   easy: { pitchFlightSeconds: 1, timingWindows: { perfect: 50, good: 112, contact: 188 } },
   normal: { pitchFlightSeconds: 0.85, timingWindows: { perfect: 40, good: 90, contact: 150 } },

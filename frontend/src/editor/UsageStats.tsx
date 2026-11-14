@@ -238,7 +238,7 @@ export function ResidentRanking({ residents, copy }: { residents: Stats['residen
   )
 }
 
-export function DerbyMonths({ months, copy }: { months: Stats['derby']; copy: UsageStatsCopy }) {
+export function DerbyWeeks({ weeks, copy }: { weeks: Stats['derby']; copy: UsageStatsCopy }) {
   return (
     <section className="usage-stats-section" aria-labelledby="usage-derby-title">
       <h3 id="usage-derby-title">{copy.derbyTitle}</h3>
@@ -246,15 +246,15 @@ export function DerbyMonths({ months, copy }: { months: Stats['derby']; copy: Us
         <table>
           <thead>
             <tr>
-              <th scope="col">{copy.month}</th>
+              <th scope="col">{copy.week}</th>
               <th scope="col">{copy.runs}</th>
               <th scope="col">{copy.records}</th>
             </tr>
           </thead>
           <tbody>
-            {months.map(({ month, runs, records }) => (
-              <tr key={month}>
-                <td>{month}</td>
+            {weeks.map(({ week, runs, records }) => (
+              <tr key={week}>
+                <td>{week}</td>
                 <td>{runs}</td>
                 <td>{records}</td>
               </tr>
@@ -287,7 +287,7 @@ export function UsageStatsBody({
       {!isEmptyStats(stats) && <DailyTrend rows={rows} language={language} copy={copy} />}
       {!isEmptyStats(stats) && <ResidentRanking residents={stats.residents} copy={copy} />}
       {!isEmptyStats(stats) && <CountTiles stats={stats} copy={copy} />}
-      {stats.derby.length > 0 && <DerbyMonths months={stats.derby} copy={copy} />}
+      {stats.derby.length > 0 && <DerbyWeeks weeks={stats.derby} copy={copy} />}
     </>
   )
 }

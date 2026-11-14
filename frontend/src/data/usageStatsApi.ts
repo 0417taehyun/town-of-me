@@ -10,7 +10,7 @@ export type UsageStats = {
   daily: { day: string; event: string; count: number }[]
   residents: { id: string; name: string | null; conversations: number }[]
   guestbook: { byStatus: { pending: number; approved: number }; byDay: { day: string; count: number }[] }
-  derby: { month: string; runs: number; records: number }[]
+  derby: { week: string; runs: number; records: number }[]
 }
 
 export function requireCount(value: unknown, label: string) {
@@ -51,9 +51,9 @@ export function parseUsageStats(input: Record<string, unknown>): UsageStats {
       }),
     },
     derby: requireList(input.derby, 'derby').map((value) => {
-      const row = requireRecord(value, 'derby month')
+      const row = requireRecord(value, 'derby week')
       return {
-        month: requireText(row.month, 'derby month'),
+        week: requireText(row.week, 'derby week'),
         runs: requireCount(row.runs, 'derby runs'),
         records: requireCount(row.records, 'derby records'),
       }

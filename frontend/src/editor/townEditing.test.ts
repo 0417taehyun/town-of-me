@@ -255,39 +255,41 @@ const withBallpark = (changes: Partial<BallparkSettings>): TownSnapshot => ({
 })
 
 describe('ballpark settings', () => {
-  it('schedules new rules from next month only, first making a schedule due this month the rules in effect', () => {
-    // The stored town still carries November's schedule, since nothing has been saved since November began.
+  it('schedules new rules from next week only, first making a schedule due this week the rules in effect', () => {
+    // The stored town still carries this week's schedule, since nothing has been saved since the week began.
     const town = withBallpark({
-      scheduledRules: { fromMonth: '2026-11', rules: { pitchCount: 7, difficulty: 'hard' } },
+      scheduledRules: { fromWeek: '2026-11-09', rules: { pitchCount: 7, difficulty: 'hard' } },
     })
-    const rescheduled = withBallparkSchedule(town, { pitchCount: 8, difficulty: 'easy' }, '2026-11')
+    const rescheduled = withBallparkSchedule(town, { pitchCount: 8, difficulty: 'easy' }, '2026-11-09')
     expect(rescheduled.venues.ballpark).toMatchObject({
       rules: { pitchCount: 7, difficulty: 'hard' },
-      scheduledRules: { fromMonth: '2026-12', rules: { pitchCount: 8, difficulty: 'easy' } },
+      scheduledRules: { fromWeek: '2026-11-16', rules: { pitchCount: 8, difficulty: 'easy' } },
     })
-    const december = withBallparkSchedule(withBallpark({}), { pitchCount: 3, difficulty: 'normal' }, '2026-12')
-    expect(december.venues.ballpark.scheduledRules?.fromMonth).toBe('2027-01')
+    const yearEnd = withBallparkSchedule(withBallpark({}), { pitchCount: 3, difficulty: 'normal' }, '2026-12-28')
+    expect(yearEnd.venues.ballpark.scheduledRules?.fromWeek).toBe('2027-01-04')
   })
 
-  it("changes one of next month's rules over the ones already scheduled, not this month's", () => {
+  it("changes one of next week's rules over the ones already scheduled, not this week's", () => {
     const town = withBallpark({
-      scheduledRules: { fromMonth: '2026-12', rules: { pitchCount: 8, difficulty: 'hard' } },
+      scheduledRules: { fromWeek: '2026-11-16', rules: { pitchCount: 8, difficulty: 'hard' } },
     })
-    expect(withBallparkSchedule(town, { difficulty: 'easy' }, '2026-11').venues.ballpark.scheduledRules).toEqual({
-      fromMonth: '2026-12',
+    expect(withBallparkSchedule(town, { difficulty: 'easy' }, '2026-11-09').venues.ballpark.scheduledRules).toEqual({
+      fromWeek: '2026-11-16',
       rules: { pitchCount: 8, difficulty: 'easy' },
     })
   })
 
-  it("leaves nothing scheduled when next month's rules are this month's, or the schedule is cancelled", () => {
+  it("leaves nothing scheduled when next week's rules are this week's, or the schedule is cancelled", () => {
     const upcoming = withBallpark({
-      scheduledRules: { fromMonth: '2026-12', rules: { pitchCount: 8, difficulty: 'hard' } },
+      scheduledRules: { fromWeek: '2026-11-16', rules: { pitchCount: 8, difficulty: 'hard' } },
     })
-    const due = withBallpark({ scheduledRules: { fromMonth: '2026-11', rules: { pitchCount: 7, difficulty: 'hard' } } })
+    const due = withBallpark({
+      scheduledRules: { fromWeek: '2026-11-09', rules: { pitchCount: 7, difficulty: 'hard' } },
+    })
     const settled = [
-      withBallparkSchedule(upcoming, { pitchCount: 5, difficulty: 'normal' }, '2026-11'),
-      withoutBallparkSchedule(upcoming, '2026-11'),
-      withBallparkSchedule(due, { pitchCount: 7, difficulty: 'hard' }, '2026-11'),
+      withBallparkSchedule(upcoming, { pitchCount: 5, difficulty: 'normal' }, '2026-11-09'),
+      withoutBallparkSchedule(upcoming, '2026-11-09'),
+      withBallparkSchedule(due, { pitchCount: 7, difficulty: 'hard' }, '2026-11-09'),
     ]
     expect(settled.map(({ venues }) => 'scheduledRules' in venues.ballpark)).toEqual([false, false, false])
     expect(settled.map(({ venues }) => venues.ballpark.rules.pitchCount)).toEqual([5, 5, 7])
@@ -295,7 +297,7 @@ describe('ballpark settings', () => {
 
   it('changes the rules without touching the look or anything else in the town, and the look without the rules', () => {
     const town = withBallpark({ visible: true, colors: { roof: '#e8735a' } })
-    const scheduled = withBallparkSchedule(town, { pitchCount: 9, difficulty: 'easy' }, '2026-11')
+    const scheduled = withBallparkSchedule(town, { pitchCount: 9, difficulty: 'easy' }, '2026-11-09')
     expect({ ...scheduled, venues: town.venues }).toEqual(town)
     expect(scheduled.venues.ballpark).toMatchObject({
       visible: true,

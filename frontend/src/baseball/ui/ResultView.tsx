@@ -8,7 +8,7 @@ import { boardLineText, resultRow } from './derbyCues'
 import { StanceGauge } from './StanceGauge'
 
 /**
- * What the result card says and offers of the monthly board: its `line` (null for a preview), whether a statue's
+ * What the result card says and offers of the weekly board: its `line` (null for a preview), whether a statue's
  * record could show the visitor's LinkedIn link, and the listing card to open or the result to send again.
  */
 export type ResultBoard = { line: BoardLine | null; offerLinkedIn: boolean; onOpen: () => void; onRetry: () => void }
@@ -16,7 +16,7 @@ export type ResultBoard = { line: BoardLine | null; offerLinkedIn: boolean; onOp
 /**
  * A finished run as `replayDerby` scored it from its plan and input log, so these are the numbers a server recomputing
  * the run gets: home runs first, then their summed distance, which ranks runs with as many, both sized to read from
- * where the visitor bats, then where the run left the visitor on the monthly board, also read from there, and a row per
+ * where the visitor bats, then where the run left the visitor on the weekly board, also read from there, and a row per
  * pitch with how it ended and how far a ball in play went. Distances show to the decimeter they are scored in, so two
  * totals that rank apart never read the same; the live HUD rounds to meters. No timing, power, or pitch type is shown.
  * Holding the batting stance fills `gauge` and plays again, as the button does, while `stanceNeed` says what the hold

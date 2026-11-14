@@ -25,10 +25,10 @@ import type { PracticeSample } from './game/calibration'
 import type { DerbyInputLog, DerbyResult } from './game/derbyScore'
 
 /**
- * The page's runs and the monthly board (flow/rankedRun.ts). `issue` asks for a ranked run as one starts and resolves
+ * The page's runs and the weekly board (flow/rankedRun.ts). `issue` asks for a ranked run as one starts and resolves
  * to the run to play, or to `null` to play it unranked: always for a `preview`, which never asks, and whenever the
  * board does not answer in time. `finish` sends the ranked run's result, again while the network fails, and `retry`
- * sends it again at once. `entry` is the visitor's record on this month's board, which `saveListing` and
+ * sends it again at once. `entry` is the visitor's record on this week's board, which `saveListing` and
  * `deleteRecords` change. The runs' results go with the board name of the visitor's listed record, read as the page
  * loads (postedBoardName) and changed by `saveListing`, so they still look like the same player to the board. `abandon`
  * forgets a run the camera stopped, so no later finish is taken for it.

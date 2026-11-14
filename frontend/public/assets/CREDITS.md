@@ -14,8 +14,8 @@ buildings, trees, flowers, birds, music, and voices) is original procedural work
 | `kenney/nature/plant_bushDetailed.glb` | Nature Kit 2.1: `plant_bushDetailed`                 | Kenney        | https://kenney.nl/assets/nature-kit                                                                                      | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | None to the file. In the app its materials are made non-metallic and tinted by the object color. |
 | `kenney/nature/rock_smallE.glb`        | Nature Kit 2.1: `rock_smallE`                        | Kenney        | https://kenney.nl/assets/nature-kit                                                                                      | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | None to the file. In the app its materials are made non-metallic and tinted by the object color. |
 | `audio/corgi-bark.mp3`                 | Single Dog Bark                                      | kwahmah_02    | https://freesound.org/people/kwahmah_02/sounds/277058/                                                                   | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | Renamed from the high-quality MP3 preview; the app plays it quietly at slightly varied pitches.  |
-| `models/pose_landmarker_lite.task`     | MediaPipe Pose Landmarker (Lite), float16            | Google        | https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task | [Apache-2.0](models/LICENSE.txt)                              | None. SHA-256 `59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a`.                |
-| `models/efficientdet_lite0.tflite`     | MediaPipe Object Detector: EfficientDet-Lite0, int8  | Google        | https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/int8/1/efficientdet_lite0.tflite      | [Apache-2.0](models/LICENSE.txt)                              | None. SHA-256 `0720bf247bd76e6594ea28fa9c6f7c5242be774818997dbbeffc4da460c723bb`.                |
+| `pose_landmarker_lite-*.task`          | MediaPipe Pose Landmarker (Lite), float16            | Google        | https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task | [Apache-2.0](models/LICENSE.txt)                              | None. SHA-256 `59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a`.                |
+| `efficientdet_lite0-*.tflite`          | MediaPipe Object Detector: EfficientDet-Lite0, int8  | Google        | https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/int8/1/efficientdet_lite0.tflite      | [Apache-2.0](models/LICENSE.txt)                              | None. SHA-256 `0720bf247bd76e6594ea28fa9c6f7c5242be774818997dbbeffc4da460c723bb`.                |
 | `PretendardVariable.subset.*.woff2`    | Pretendard Variable 1.3.9, dynamic subset (92 files) | Kil Hyung-jin | https://github.com/orioncactus/pretendard/releases/tag/v1.3.9                                                            | [OFL-1.1](Pretendard-LICENSE.txt)                             | None. The build copies them from the `pretendard` package and adds a content hash to each name.  |
 
 - **Kenney Nature Kit:** the pack's own license text is kept beside the models in
@@ -25,8 +25,9 @@ buildings, trees, flowers, birds, music, and voices) is original procedural work
   description were verified on October 4, 2026.
 - **MediaPipe models:** the Apache-2.0 text is kept beside them in [`models/LICENSE.txt`](models/LICENSE.txt). The pose
   model's card (BlazePose GHUM 3D) names that license, and TensorFlow publishes EfficientDet-Lite0 under it; both were
-  checked, and the files compared with a fresh download, on October 31, 2026. The app loads them from this origin. A
-  model that changes gets a new file name.
+  checked, and the files compared with a fresh download, on October 31, 2026. The files are kept in
+  `frontend/src/baseball/vision/models/`; the build copies them here and adds a content hash to each name, and the app
+  loads them from this origin.
 - **Pretendard:** Copyright (c) 2021, Kil Hyung-jin (https://github.com/orioncactus/pretendard), with Reserved Font
   Name 'Pretendard'. [`Pretendard-LICENSE.txt`](Pretendard-LICENSE.txt) keeps the license text with that notice and
   those of the fonts Pretendard is built on (Inter, Adobe's Source Han Sans, and M PLUS 1p). It is the package's
@@ -36,4 +37,5 @@ buildings, trees, flowers, birds, music, and voices) is original procedural work
   loads, from this origin, only the files whose `unicode-range` its text needs. The version and license were checked
   against the npm registry and the v1.3.9 GitHub release on October 31, 2026.
 
-Add a row here for every third-party file added to `public/`, and for every font or media file bundled from a package.
+Add a row here for every third-party file added to `public/` or bundled from `src/`, and for every font or media file
+bundled from a package.

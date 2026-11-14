@@ -2,10 +2,10 @@ import { useFrame } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { MutableRefObject } from 'react'
 import { DoubleSide, type InstancedMesh, type Mesh, type MeshStandardMaterial, Object3D } from 'three'
-import { rankingMonth } from '../../../data/ballparkRules'
+import { rankingWeek } from '../../../data/ballparkRules'
 import type { TownObject } from '../../../data/models'
 import { useWebFontGlyphs } from '../../../hooks/useWebFontGlyphs'
-import { type AppLanguage, languageCopy, monthName } from '../../../i18n/language'
+import { type AppLanguage, languageCopy, weekName } from '../../../i18n/language'
 import { getSeasonColors } from '../../environment/season'
 import { getSnowCover, isSeasonChangeSettled, seasonClock, type SeasonChange } from '../../environment/seasonTransition'
 import { useSeasonalColor } from '../../environment/useSeasonChange'
@@ -55,9 +55,9 @@ export type GardenProps = {
 
 /**
  * The podium garden beside the north road (ballparkStatueLayout.ts), drawn in the ballpark's slot frame while the
- * ballpark is shown: this month's top three as painted statues, read 2-1-3 on the stage, before an arc of hedge in
+ * ballpark is shown: this week's top three as painted statues, read 2-1-3 on the stage, before an arc of hedge in
  * the town's season with bunting and flower beds, two of the town's lamps, which light at night, and a sign. A place
- * no one holds yet, or every place while the month's statues cannot be read, keeps a baseball on a cushion and says it
+ * no one holds yet, or every place while the week's statues cannot be read, keeps a baseball on a cushion and says it
  * waits for a challenger, and with no statue at all the sign says so too. Snow settles on the pedestals and the beds in winter as on the town's roofs.
  */
 export function BallparkStatues({ seasonChange, lampsOn, language, still }: GardenProps) {
@@ -80,8 +80,8 @@ export function BallparkStatues({ seasonChange, lampsOn, language, still }: Gard
     })),
   )
   const { stage, sign, turn, at } = garden
-  const emptyMonth = !podium?.rows.length
-  const month = podium?.season ?? rankingMonth(new Date())
+  const emptyWeek = !podium?.rows.length
+  const week = podium?.season ?? rankingWeek(new Date())
 
   return (
     <group position={[at[0], 0, at[1]]} rotation-y={turn}>
@@ -105,8 +105,8 @@ export function BallparkStatues({ seasonChange, lampsOn, language, still }: Gard
       ))}
       <group position={[sign.x, 0, sign.z]} rotation-y={sign.turn}>
         <GuestbookSign
-          title={emptyMonth ? copy.waiting : copy.sign}
-          subtitle={emptyMonth ? copy.firstStatueOf(monthName(month, month, language)) : undefined}
+          title={emptyWeek ? copy.waiting : copy.sign}
+          subtitle={emptyWeek ? copy.firstStatueOf(weekName(week, week, language)) : undefined}
           height={0.34}
           position={[0, sign.height, 0]}
         />
@@ -187,7 +187,7 @@ export function FlowerBeds({
 }
 
 /**
- * This month's top three on their pedestals at the town's scale, merged into one mesh per material across all three,
+ * This week's top three on their pedestals at the town's scale, merged into one mesh per material across all three,
  * with their snow, their twinkles, and at night the lamps' light on them; an empty place keeps its waiting baseball.
  * The twinkles hold still while `still`, and nothing else moves: the town's statues never sway.
  */

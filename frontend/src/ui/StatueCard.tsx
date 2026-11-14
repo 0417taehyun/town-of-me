@@ -1,10 +1,10 @@
 import { type MouseEvent, useRef, useState } from 'react'
 import { BASEBALL_PATH, BOARD_PATH } from '../baseball/baseballRoute'
-import { rankingMonth } from '../data/ballparkRules'
+import { rankingWeek } from '../data/ballparkRules'
 import { linkedInChipText, recordText, rowName } from '../data/boardRecord'
 import { type BoardRow, type ReportReason, reportBoardEntry } from '../data/leaderboardApi'
 import { usePodium } from '../hooks/usePodium'
-import { type AppLanguage, languageCopy, monthName } from '../i18n/language'
+import { type AppLanguage, languageCopy, weekName } from '../i18n/language'
 import type { StatueRank } from '../scene/statues/statueFinishes'
 
 type StatueCardProps = {
@@ -16,15 +16,15 @@ type StatueCardProps = {
 
 /**
  * The card beside a statue in the podium garden, open while the visitor stands near it (town-statues §0-4): who holds
- * the place this month and their record, their LinkedIn link only when they opted in and the admin approved it (never
+ * the place this week and their record, their LinkedIn link only when they opted in and the admin approved it (never
  * on the statue itself) with a menu to report it, and the way to the board; an empty place invites a swing instead.
- * It reads the same monthly statues as the garden, so the card never names someone the pedestal does not show.
+ * It reads the same weekly statues as the garden, so the card never names someone the pedestal does not show.
  */
 export function StatueCard({ rank, language, onLeave }: StatueCardProps) {
   const podium = usePodium()
-  const season = podium?.season ?? rankingMonth(new Date())
+  const season = podium?.season ?? rankingWeek(new Date())
   const row = podium?.rows.find((candidate) => candidate.rank === rank) ?? null
-  const month = languageCopy[language].venues.ballpark.statues.month(monthName(season, season, language))
+  const week = languageCopy[language].venues.ballpark.statues.week(weekName(season, season, language))
   // A click that asks for a new tab or window stays an ordinary link.
   const leave = (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
@@ -37,11 +37,11 @@ export function StatueCard({ rank, language, onLeave }: StatueCardProps) {
         {rank}
       </span>
       {row ? (
-        <StandingCard row={row} month={month} language={language} onLeave={leave} />
+        <StandingCard row={row} week={week} language={language} onLeave={leave} />
       ) : (
         <WaitingCard
           rank={rank}
-          month={month}
+          week={week}
           firstStatue={podium?.rows.length === 0}
           language={language}
           onLeave={leave}
@@ -55,12 +55,12 @@ type CardLinkHandler = (event: MouseEvent<HTMLAnchorElement>) => void
 
 export function StandingCard({
   row,
-  month,
+  week,
   language,
   onLeave,
 }: {
   row: BoardRow
-  month: string
+  week: string
   language: AppLanguage
   onLeave: CardLinkHandler
 }) {
@@ -70,7 +70,7 @@ export function StandingCard({
     <div className="statue-card-body">
       <p className="statue-card-eyebrow">
         <span className="statue-card-place">{copy.baseball.leaderboard.plaqueLive(row.rank)}</span>
-        {month}
+        {week}
       </p>
       <h2 id="statue-card-title" data-placeholder={row.nameState !== 'approved' || undefined}>
         {name}
@@ -158,14 +158,14 @@ export function LinkReportMenu({ entryId, name, language }: { entryId: string; n
 
 export function WaitingCard({
   rank,
-  month,
+  week,
   firstStatue,
   language,
   onLeave,
 }: {
   rank: StatueRank
-  month: string
-  /** No one stands on any pedestal this month yet; unknown while the statues cannot be read. */
+  week: string
+  /** No one stands on any pedestal this week yet; unknown while the statues cannot be read. */
   firstStatue: boolean
   language: AppLanguage
   onLeave: CardLinkHandler
@@ -176,7 +176,7 @@ export function WaitingCard({
     <div className="statue-card-body">
       <p className="statue-card-eyebrow">
         <span className="statue-card-place">{statues.place(rank)}</span>
-        {month}
+        {week}
       </p>
       <h2 id="statue-card-title">{statues.waiting}</h2>
       <p className="statue-card-record">{firstStatue ? statues.firstStatue : statues.waitingHint}</p>

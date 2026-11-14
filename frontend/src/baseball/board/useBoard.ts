@@ -1,20 +1,20 @@
 import { useCallback, useEffect, useState } from 'react'
-import { previousRankingMonth } from '../../data/ballparkRules'
+import { previousRankingWeek } from '../../data/ballparkRules'
 import { type Board, fetchBoard } from '../../data/leaderboardApi'
 
-/** A season's board as the page has it; an empty month also has last month's, for the statues it had. */
+/** A season's board as the page has it; an empty week also has last week's, for the statues it had. */
 export type BoardLoad =
   { status: 'loading' } | { status: 'failed' } | { status: 'ready'; board: Board; lastSeason: Board | null }
 
-/** This month's board with no statues yet brings last month's, whose champions the page shows beneath it. */
+/** This week's board with no statues yet brings last week's, whose champions the page shows beneath it. */
 export async function readBoard(season: string | null): Promise<BoardLoad> {
   const board = await fetchBoard(season)
   const empty = !board.season.final && board.podium.length === 0
-  const lastSeason = empty ? await fetchBoard(previousRankingMonth(board.season.id)).catch(() => null) : null
+  const lastSeason = empty ? await fetchBoard(previousRankingWeek(board.season.id)).catch(() => null) : null
   return { status: 'ready', board, lastSeason }
 }
 
-/** The board of `season` (`null` for this month's), read again by `reload` after a failure or a change. */
+/** The board of `season` (`null` for this week's), read again by `reload` after a failure or a change. */
 export function useBoard(season: string | null) {
   const [attempt, setAttempt] = useState(0)
   const [load, setLoad] = useState<{ key: string; load: BoardLoad } | null>(null)

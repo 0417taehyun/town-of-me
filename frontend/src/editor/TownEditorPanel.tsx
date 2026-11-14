@@ -1,12 +1,7 @@
 import { lazy, Suspense, useEffect, useEffectEvent, useState, type MutableRefObject, type ReactNode } from 'react'
 import { MathUtils, type Vector3 } from 'three'
 import { CURRENT_RULES_PREVIEW_PATH, NEXT_RULES_PREVIEW_PATH } from '../baseball/baseballRoute'
-import {
-  effectiveBallparkRules,
-  plannedBallparkRules,
-  rankingMonth,
-  upcomingBallparkRules,
-} from '../data/ballparkRules'
+import { effectiveBallparkRules, plannedBallparkRules, rankingWeek, upcomingBallparkRules } from '../data/ballparkRules'
 import {
   BALLPARK_COLOR_ROLES,
   BASEBALL_DIFFICULTIES,
@@ -28,7 +23,7 @@ import { TOWN_OBJECT_KINDS } from '../scene/objects/kinds'
 import { appearanceFields, DEFAULT_PLAYER_PROFILE } from '../data/playerProfile'
 import { linkedInProfileUrlError } from '../data/linkedInProfile'
 import type { AppLanguage } from '../i18n/language'
-import { languageCopy, monthName } from '../i18n/language'
+import { languageCopy, weekName } from '../i18n/language'
 import { resolveBallparkPalette } from '../scene/venues/ballpark/ballparkThemes'
 import { getVenueGatePoint } from '../scene/venues/venuePlacements'
 import { AppearanceSection, ColorChoice } from '../ui/CharacterAppearanceControls'
@@ -333,8 +328,8 @@ export function TownMovementFields({
 }
 
 /**
- * Whether visitors see the ballpark and its building colors, both applied once saved, and the rules for next month:
- * the rules in effect never change within a KST month, so the admin only schedules. The preview of a hidden ballpark
+ * Whether visitors see the ballpark and its building colors, both applied once saved, and the rules for next week:
+ * the rules in effect never change within a KST week, so the admin only schedules. The preview of a hidden ballpark
  * or of the schedule opens /baseball in this tab, because a new tab would start without this tab's session storage
  * (the visitor's character and language) behind /baseball's opener isolation; leaving would lose unsaved edits, so
  * those links show only when everything is saved.
@@ -355,13 +350,13 @@ export function BallparkSettingsFields({
 }) {
   const copy = languageCopy[language].venues.ballpark
   const ballpark = town.venues.ballpark
-  // The device's clock picks the month, both shown and scheduled from. Near the KST month boundary a fast clock
+  // The device's clock picks the week, both shown and scheduled from. Near the KST week boundary a fast clock
   // promotes a stored schedule early, and a rules edit then drops or moves it on save; the backend cannot tell that
   // from a real cancel or reschedule.
-  const month = rankingMonth(new Date())
-  const inEffect = effectiveBallparkRules(ballpark, month)
-  const upcoming = upcomingBallparkRules(ballpark, month)
-  const planned = plannedBallparkRules(ballpark, month)
+  const week = rankingWeek(new Date())
+  const inEffect = effectiveBallparkRules(ballpark, week)
+  const upcoming = upcomingBallparkRules(ballpark, week)
+  const planned = plannedBallparkRules(ballpark, week)
   const palette = resolveBallparkPalette(ballpark)
   return (
     <fieldset className="editor-appearance">
@@ -404,11 +399,11 @@ export function BallparkSettingsFields({
       <fieldset className="editor-appearance">
         <legend>{copy.nextRulesTitle}</legend>
         <ul className="editor-rules">
-          <li>{copy.rulesThisMonth(inEffect.pitchCount, copy.difficulties[inEffect.difficulty])}</li>
+          <li>{copy.rulesThisWeek(inEffect.pitchCount, copy.difficulties[inEffect.difficulty])}</li>
           {upcoming && (
             <li>
               {copy.rulesFrom(
-                monthName(upcoming.fromMonth, month, language),
+                weekName(upcoming.fromWeek, week, language),
                 upcoming.rules.pitchCount,
                 copy.difficulties[upcoming.rules.difficulty],
               )}
@@ -422,7 +417,7 @@ export function BallparkSettingsFields({
           max={PITCH_COUNT_RANGE.maximum}
           step={1}
           edit={edit}
-          onChange={(pitchCount) => (current) => withBallparkSchedule(current, { pitchCount }, month)}
+          onChange={(pitchCount) => (current) => withBallparkSchedule(current, { pitchCount }, week)}
         />
         <SelectField
           label={copy.difficulty}
@@ -432,7 +427,7 @@ export function BallparkSettingsFields({
             label: copy.difficulties[difficulty],
           }))}
           onChange={(difficulty) =>
-            edit((current) => withBallparkSchedule(current, { difficulty: difficulty as BaseballDifficulty }, month))
+            edit((current) => withBallparkSchedule(current, { difficulty: difficulty as BaseballDifficulty }, week))
           }
         />
         <p className="editor-note">{copy.difficultyNote}</p>
@@ -442,7 +437,7 @@ export function BallparkSettingsFields({
             <button
               className="text-button"
               type="button"
-              onClick={() => edit((current) => withoutBallparkSchedule(current, month))}
+              onClick={() => edit((current) => withoutBallparkSchedule(current, week))}
             >
               {copy.cancelSchedule}
             </button>

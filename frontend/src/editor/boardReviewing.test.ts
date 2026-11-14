@@ -15,10 +15,12 @@ import {
   findRecords,
   FOUND_RECORDS_SHOWN,
   foundItem,
+  holdsEmptyPlace,
   isStaleBoardReview,
   linkView,
   neighbourLines,
   noHistoryRuns,
+  pickedSeason,
   recordChoices,
   withEntry,
   withoutRun,
@@ -27,7 +29,7 @@ import {
 function entry(id: string, name: string | null, changes: Partial<ReviewedEntry> = {}): ReviewedEntry {
   return {
     id,
-    season: '2026-11',
+    season: '2026-11-09',
     rank: 1,
     updatedAt: '2026-11-01T00:00:00.000Z',
     bestRunId: null,
@@ -50,7 +52,7 @@ function entry(id: string, name: string | null, changes: Partial<ReviewedEntry> 
 function item(changes: Partial<ReviewItem>): ReviewItem {
   return {
     kind: 'run',
-    season: '2026-11',
+    season: '2026-11-09',
     acceptable: true,
     newVisitor: false,
     visitor: { runs: 5, abandoned: 0, flagged: 1 },
@@ -66,7 +68,7 @@ function item(changes: Partial<ReviewItem>): ReviewItem {
 const heldRun = (id: string) =>
   ({
     id,
-    season: '2026-11',
+    season: '2026-11-09',
     flags: [],
     wouldBeRank: 1,
     issuedAt: '2026-11-01T00:00:00.000Z',
@@ -122,7 +124,7 @@ describe('finding a record', () => {
     const quiet = entry('quiet', 'Juniper')
     const data: BoardReviewData = {
       queue: [],
-      season: '2026-11',
+      season: '2026-11-09',
       records: [queued, quiet],
       seasonQueue: [reported],
       unreadable: 0,
@@ -274,14 +276,14 @@ describe('how a link reads', () => {
 describe('the bulk dismissal', () => {
   it('names per season the held runs of visitors with no history, and no one else', () => {
     const items = [
-      item({ season: '2026-11', newVisitor: true, runs: [heldRun('a'), heldRun('b')], entry: entry('rec-a', 'A') }),
-      item({ season: '2026-11', newVisitor: false, runs: [heldRun('c')] }),
-      item({ season: '2026-11', newVisitor: true, runs: [], entry: entry('rec-b', 'B') }),
-      item({ season: '2026-10', newVisitor: true, runs: [heldRun('d')] }),
+      item({ season: '2026-11-09', newVisitor: true, runs: [heldRun('a'), heldRun('b')], entry: entry('rec-a', 'A') }),
+      item({ season: '2026-11-09', newVisitor: false, runs: [heldRun('c')] }),
+      item({ season: '2026-11-09', newVisitor: true, runs: [], entry: entry('rec-b', 'B') }),
+      item({ season: '2026-11-02', newVisitor: true, runs: [heldRun('d')] }),
     ]
     expect(noHistoryRuns(items)).toEqual([
-      { season: '2026-11', runIds: ['a', 'b'], keys: ['rec-a'] },
-      { season: '2026-10', runIds: ['d'], keys: ['d'] },
+      { season: '2026-11-09', runIds: ['a', 'b'], keys: ['rec-a'] },
+      { season: '2026-11-02', runIds: ['d'], keys: ['d'] },
     ])
   })
 
@@ -297,7 +299,7 @@ describe('an answered action', () => {
       item({ entry: entry('rec', 'Maple'), runs: [heldRun('kept'), heldRun('settled')] }),
       item({ entry: null, runs: [heldRun('only')] }),
     ],
-    season: '2026-11',
+    season: '2026-11-09',
     records: [entry('rec', 'Maple')],
     seasonQueue: [],
     unreadable: 0,
@@ -314,5 +316,28 @@ describe('an answered action', () => {
   it('takes a settled run off, and the item with it when nothing is left to act on', () => {
     expect(withoutRun(data, 'settled').queue[0].runs.map(({ id }) => id)).toEqual(['kept'])
     expect(withoutRun(data, 'only').queue).toHaveLength(1)
+  })
+})
+
+describe('a statue’s place', () => {
+  it('is empty only for a listed record among the first three that is not approved', () => {
+    const waiting = entry('rec', 'Maple', { rank: 3, reviewStatus: 'pending' })
+    const others = [{ rank: 4 }, { listed: false }, { reviewStatus: 'approved' as const }, { rank: null }]
+    expect(holdsEmptyPlace(waiting)).toBe(true)
+    expect(others.map((changes) => holdsEmptyPlace({ ...waiting, ...changes }))).toEqual([false, false, false, false])
+  })
+})
+
+describe('the season a date names', () => {
+  it('is the KST week of the picked day, and none for a half-typed date or a board still to come', () => {
+    const picked = ['2026-11-15', '2026-11-16', '2026-11-22', '2026-11-23', '2026-11', '']
+    expect(picked.map((value) => pickedSeason(value, '2026-11-16'))).toEqual([
+      '2026-11-09',
+      '2026-11-16',
+      '2026-11-16',
+      null,
+      null,
+      null,
+    ])
   })
 })

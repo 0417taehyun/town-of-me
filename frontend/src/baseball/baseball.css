@@ -644,7 +644,7 @@ a.derby-secondary {
 
 /*
  * The result, read from where the visitor bats to hold the stance again: the home runs and their summed distance side
- * by side at 12vh, then where the run left the visitor on the monthly board, then a row per pitch in two columns at up
+ * by side at 12vh, then where the run left the visitor on the weekly board, then a row per pitch in two columns at up
  * to 5vh, smaller for a longer run (--pitch-rows) so the card stays within the screen, and the stance gauge under them.
  * The sizes also follow the card's width (--row-fit, wider in English, whose words and spaced units run longer), so a
  * narrow play band beside a large camera panel still holds them.
@@ -733,7 +733,7 @@ html[lang='ko'] .derby-screen .derby-result {
   margin-top: 2vh;
 }
 /*
- * Where the run left the visitor on the monthly board, read from the plate like the figures above it, at 4.4vh or less
+ * Where the run left the visitor on the weekly board, read from the plate like the figures above it, at 4.4vh or less
  * where the card is narrow. A line about the board being out of reach, or the record held back, is muted.
  */
 .derby-board-line {

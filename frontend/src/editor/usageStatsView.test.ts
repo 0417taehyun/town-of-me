@@ -55,7 +55,7 @@ describe('usage statistics view', () => {
     const empty = { ...stats, daily: [], guestbook: { byStatus: { pending: 0, approved: 0 }, byDay: [] } }
     expect(isEmptyStats(empty)).toBe(true)
     expect(isEmptyStats(stats)).toBe(false)
-    expect(isEmptyStats({ ...empty, derby: [{ month: '2026-03', runs: 1, records: 0 }] })).toBe(false)
+    expect(isEmptyStats({ ...empty, derby: [{ week: '2026-03-02', runs: 1, records: 0 }] })).toBe(false)
     expect(isEmptyStats({ ...empty, guestbook: stats.guestbook })).toBe(false)
   })
 

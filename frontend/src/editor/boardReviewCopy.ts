@@ -4,7 +4,8 @@
 
 export const boardReviewCopy = {
   en: {
-    intro: 'Statues stand without waiting for you, so what visitors already see comes first.',
+    intro:
+      'Places 1–3 stay empty until you approve their records, so those come first. Approving a record or accepting a run publishes it at once.',
     loading: 'Loading the boards…',
     loadError: 'The boards could not be loaded.',
     retry: 'Try again',
@@ -14,20 +15,20 @@ export const boardReviewCopy = {
     failed: 'That did not work. Please try again.',
     done: 'Done.',
     kinds: {
-      statue: 'New statues',
-      'statue-run': 'Held runs that would stand',
+      statue: 'Top 3 records waiting for approval (their places are empty)',
+      'statue-run': 'Held runs that would take a statue',
       report: 'Reports',
       linkedin: 'Links waiting for their code',
-      'past-run': 'Held runs of past seasons',
+      'past-run': 'Other held runs of past seasons',
       run: 'Other held runs',
       name: 'Names below the statues',
     },
     findTitle: 'Find a record',
     findNote: 'By a takedown email’s record number or by name. This also finds records with nothing waiting.',
-    season: 'Season',
+    season: 'Season (any day of its week)',
     query: 'Record number or name',
     noMatch: 'No record matches.',
-    pickSeason: 'Pick a month up to this one to search it.',
+    pickSeason: 'Pick a day up to this week to search its season.',
     matchedByNumber: 'Only records whose number starts with this are shown.',
     moreMatches: (shown: number, total: number) => `Showing ${shown} of ${total}. Type more to narrow it down.`,
     place: (rank: number) => `Place ${rank}`,
@@ -36,6 +37,7 @@ export const boardReviewCopy = {
     newVisitor: 'New visitor',
     reviewStatuses: { pending: 'Record waiting', approved: 'Record approved', disqualified: 'Disqualified' },
     nameStatuses: { pending: 'Name waiting', approved: 'Name approved', rejected: 'Name rejected' },
+    placeEmpty: 'Place empty until approved',
     unlisted: 'Not listed',
     takenDown: 'Taken down',
     appearanceHidden: 'Shows the default batter',
@@ -83,6 +85,14 @@ export const boardReviewCopy = {
       'steady-power': 'Power too steady',
       'near-maximum': 'Distance near the maximum',
       'clock-skew': 'Client clock longer than the server’s',
+      'podium-place': 'Would take a statue',
+      'not-from-browser': 'Not sent like the game page',
+    },
+    flagNotes: {
+      'podium-place':
+        'Every result that would place 1–3 waits for you, with nothing else against it. Accepting publishes it at once.',
+      'not-from-browser':
+        'The result lacked the headers a browser’s fetch always sends. A script can add them, so this catches only lazy ones.',
     },
     facts: {
       claimed: 'Claimed',
@@ -120,7 +130,7 @@ export const boardReviewCopy = {
     acceptRun: 'Accept run',
     dismissRun: 'Dismiss run',
     confirmDisqualify: (name: string, number: string) =>
-      `Take ${name} (record ${number}) off the board? The next record takes its place at once.`,
+      `Take ${name} (record ${number}) off the board? The records below move up, and a place among the top 3 shows only once its record is approved.`,
     confirmTakedown: (name: string, number: string, blocking: boolean) =>
       `Anonymise ${name} (record ${number})? Its name and link are deleted for good, its character is hidden from everyone, and the score keeps its place.${
         blocking ? ' The LinkedIn profile is blocked from every record too.' : ''
@@ -130,14 +140,15 @@ export const boardReviewCopy = {
     confirmRejectedName: (name: string, number: string) =>
       `The name ${name} (record ${number}) was rejected, by the name check or by you. Publish it anyway?`,
     confirmDismissRun: 'Dismiss this held run? It stays stored as evidence but can’t be accepted afterwards.',
-    bulkDismiss: (month: string, runs: number) =>
-      `Dismiss the ${runs} held runs listed for visitors with no history: ${month}`,
-    bulkConfirm: (month: string, runs: number) =>
-      `Dismiss the ${runs} held runs listed for visitors with no history in ${month}? This can’t be undone. They stay stored as evidence, and a run that arrives later is not included.`,
+    bulkDismiss: (week: string, runs: number) =>
+      `Dismiss the ${runs} held runs listed for visitors with no history: ${week}`,
+    bulkConfirm: (week: string, runs: number) =>
+      `Dismiss the ${runs} held runs listed for visitors with no history in ${week}? This can’t be undone. They stay stored as evidence, and a run that arrives later is not included.`,
     bulkDone: (runs: number) => `Dismissed ${runs} held runs.`,
   },
   ko: {
-    intro: '동상은 확인 없이 먼저 서요. 그래서 방문자에게 이미 보이는 것부터 위에 있어요.',
+    intro:
+      '1–3위 자리는 기록을 승인할 때까지 비어 있어요. 그래서 그 기록부터 위에 있어요. 기록을 승인하거나 판을 인정하면 바로 공개돼요.',
     loading: '순위를 불러오는 중…',
     loadError: '순위를 불러오지 못했어요.',
     retry: '다시 시도',
@@ -147,20 +158,20 @@ export const boardReviewCopy = {
     failed: '처리하지 못했어요. 다시 시도해 주세요.',
     done: '처리했어요.',
     kinds: {
-      statue: '새 동상',
+      statue: '승인을 기다리는 1–3위 기록 (자리는 비어 있어요)',
       'statue-run': '동상이 될 보류 판',
       report: '신고',
       linkedin: '코드 확인을 기다리는 링크',
-      'past-run': '지난 시즌 보류 판',
+      'past-run': '지난 시즌의 나머지 보류 판',
       run: '나머지 보류 판',
       name: '4위 이하 이름',
     },
     findTitle: '기록 찾기',
     findNote: '게시 중단 메일의 기록 번호나 이름으로 찾아요. 기다리는 일이 없는 기록도 나와요.',
-    season: '시즌',
+    season: '시즌 (그 주의 아무 날)',
     query: '기록 번호나 이름',
     noMatch: '맞는 기록이 없어요.',
-    pickSeason: '이번 달까지의 달을 골라야 찾을 수 있어요.',
+    pickSeason: '이번 주까지의 날짜를 골라야 그 시즌을 찾을 수 있어요.',
     matchedByNumber: '번호가 이렇게 시작하는 기록만 보여요.',
     moreMatches: (shown: number, total: number) => `${total}개 중 ${shown}개만 보여요. 더 입력해 좁혀 주세요.`,
     place: (rank: number) => `${rank}위`,
@@ -169,6 +180,7 @@ export const boardReviewCopy = {
     newVisitor: '새 방문자',
     reviewStatuses: { pending: '기록 검토 대기', approved: '기록 승인됨', disqualified: '실격' },
     nameStatuses: { pending: '이름 검토 대기', approved: '이름 승인됨', rejected: '이름 거절됨' },
+    placeEmpty: '승인할 때까지 자리가 비어 있어요',
     unlisted: '순위에 안 올림',
     takenDown: '게시 중단됨',
     appearanceHidden: '공개 화면엔 기본 타자',
@@ -216,6 +228,13 @@ export const boardReviewCopy = {
       'steady-power': '파워가 너무 고르게 나와요',
       'near-maximum': '비거리가 최대에 가까워요',
       'clock-skew': '클라이언트 시간이 서버보다 길어요',
+      'podium-place': '동상 자리에 들어요',
+      'not-from-browser': '경기 화면의 요청 같지 않아요',
+    },
+    flagNotes: {
+      'podium-place': '1–3위에 들 결과는 다른 문제가 없어도 모두 관리자를 기다려요. 인정하면 바로 공개돼요.',
+      'not-from-browser':
+        '브라우저의 fetch가 항상 보내는 헤더가 없었어요. 스크립트도 넣을 수 있어서 허술한 것만 걸러요.',
     },
     facts: {
       claimed: '주장값',
@@ -253,7 +272,7 @@ export const boardReviewCopy = {
     acceptRun: '이 판 인정',
     dismissRun: '이 판 기각',
     confirmDisqualify: (name: string, number: string) =>
-      `이 기록을 순위에서 뺄까요? ${name} · 기록 번호 ${number}. 다음 기록이 바로 그 자리에 올라와요.`,
+      `이 기록을 순위에서 뺄까요? ${name} · 기록 번호 ${number}. 아래 기록이 한 자리씩 올라오고, 1–3위 자리는 승인된 기록만 보여요.`,
     confirmTakedown: (name: string, number: string, blocking: boolean) =>
       `이 기록을 익명으로 바꿀까요? ${name} · 기록 번호 ${number}. 이름과 링크는 지워져 돌아오지 않고, 캐릭터는 누구에게도 보이지 않아요. 점수와 순위는 그대로예요.${
         blocking ? ' 이 LinkedIn 프로필도 모든 기록에서 막아요.' : ''
@@ -263,9 +282,9 @@ export const boardReviewCopy = {
     confirmRejectedName: (name: string, number: string) =>
       `이름 검사나 관리자가 거절한 이름이에요: ${name} · 기록 번호 ${number}. 그래도 공개할까요?`,
     confirmDismissRun: '이 보류 판을 기각할까요? 증거로 남지만 나중에 인정할 수 없어요.',
-    bulkDismiss: (month: string, runs: number) => `이력 없는 방문자의 보류 판 여기 보이는 ${runs}개 기각: ${month}`,
-    bulkConfirm: (month: string, runs: number) =>
-      `${month}에 이력 없는 방문자의 보류 판 여기 보이는 ${runs}개를 기각할까요? 되돌릴 수 없어요. 판은 증거로 남고, 나중에 들어온 판은 포함되지 않아요.`,
+    bulkDismiss: (week: string, runs: number) => `이력 없는 방문자의 보류 판 여기 보이는 ${runs}개 기각: ${week}`,
+    bulkConfirm: (week: string, runs: number) =>
+      `${week}에 이력 없는 방문자의 보류 판 여기 보이는 ${runs}개를 기각할까요? 되돌릴 수 없어요. 판은 증거로 남고, 나중에 들어온 판은 포함되지 않아요.`,
     bulkDone: (runs: number) => `보류 판 ${runs}개를 기각했어요.`,
   },
 } as const

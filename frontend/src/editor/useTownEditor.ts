@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { rankingMonth, upcomingBallparkRules } from '../data/ballparkRules'
+import { rankingWeek, upcomingBallparkRules } from '../data/ballparkRules'
 import type { BallparkSettings, TownSnapshot } from '../data/models'
 import { fetchTownLayout, saveTownLayout, TownSaveError } from '../data/townApi'
 import type { EditorSelection } from './townEditing'
@@ -37,26 +37,26 @@ export function rebaseOnSave(
   current: TownSnapshot,
   sent: TownSnapshot,
   saved: TownSnapshot,
-  month: string,
+  week: string,
 ): TownSnapshot {
   if (current === sent) return saved
   if (current.venues === sent.venues) return { ...current, venues: saved.venues, revision: saved.revision }
-  const ballpark = rebaseBallpark(current.venues.ballpark, sent.venues.ballpark, saved.venues.ballpark, month)
+  const ballpark = rebaseBallpark(current.venues.ballpark, sent.venues.ballpark, saved.venues.ballpark, week)
   return { ...current, venues: { ...current.venues, ballpark }, revision: saved.revision }
 }
 
 /**
  * The admin's switch and look on the backend's rules in effect, with the backend's schedule unless the admin changed it since
- * `sent`. A schedule due by the KST `month` is never kept: that save promoted it, so sending it again would be refused.
+ * `sent`. A schedule due by the KST `week` is never kept: that save promoted it, so sending it again would be refused.
  */
 export function rebaseBallpark(
   edited: BallparkSettings,
   sent: BallparkSettings,
   saved: BallparkSettings,
-  month: string,
+  week: string,
 ): BallparkSettings {
   const scheduledRules =
-    edited.scheduledRules === sent.scheduledRules ? saved.scheduledRules : upcomingBallparkRules(edited, month)
+    edited.scheduledRules === sent.scheduledRules ? saved.scheduledRules : upcomingBallparkRules(edited, week)
   return {
     visible: edited.visible,
     theme: edited.theme,
@@ -71,14 +71,14 @@ export function rebaseBallpark(
  * before it could resend what the save replaced, such as a schedule it promoted, so those steps go. Edits made while it
  * was saving keep their undo steps, rebased on it like the town itself.
  */
-export function afterSave(state: EditorState, sent: TownSnapshot, saved: TownSnapshot, month: string): EditorState {
+export function afterSave(state: EditorState, sent: TownSnapshot, saved: TownSnapshot, week: string): EditorState {
   const sentStep = state.history.lastIndexOf(sent)
   const steps = state.current === sent || sentStep < 0 ? [] : state.history.slice(sentStep)
   return {
     ...state,
     base: saved,
-    current: rebaseOnSave(state.current, sent, saved, month),
-    history: steps.map((step) => rebaseOnSave(step, sent, saved, month)),
+    current: rebaseOnSave(state.current, sent, saved, week),
+    history: steps.map((step) => rebaseOnSave(step, sent, saved, week)),
   }
 }
 
@@ -150,8 +150,8 @@ export function useTownEditor(enabled: boolean) {
     setNotice(null)
     try {
       const saved = await saveTownLayout(sent)
-      const month = rankingMonth(new Date())
-      setState((current) => current && afterSave(current, sent, saved, month))
+      const week = rankingWeek(new Date())
+      setState((current) => current && afterSave(current, sent, saved, week))
       setNotice('saved')
     } catch (error) {
       setNotice(getSaveFailureNotice(error))

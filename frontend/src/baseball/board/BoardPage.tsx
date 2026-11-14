@@ -1,9 +1,9 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   effectiveBallparkRules,
-  nextRankingMonth,
-  previousRankingMonth,
-  rankingMonth,
+  nextRankingWeek,
+  previousRankingWeek,
+  rankingWeek,
   seasonEndsAt,
   upcomingBallparkRules,
 } from '../../data/ballparkRules'
@@ -26,7 +26,7 @@ import type { PlayerProfile } from '../../data/playerProfile'
 import { clearStoredSession, getBrowserSessionStore, readStoredSession } from '../../data/visitorSession'
 import { usePageLanguage } from '../../hooks/usePageLanguage'
 import { useReducedMotion } from '../../hooks/useReducedMotion'
-import { type AppLanguage, languageCopy, monthName } from '../../i18n/language'
+import { type AppLanguage, languageCopy, weekName } from '../../i18n/language'
 import { copyText } from '../../scene/webglSupport'
 import { STATUE_RANKS, type StatueRank } from '../../scene/statues/statueFinishes'
 import { LanguageSelect } from '../../ui/LanguageSelect'
@@ -54,15 +54,15 @@ import '../baseball.css'
 import './board.css'
 
 /**
- * The monthly board at /baseball/ranking (`?season=YYYY-MM` for a past month's final board): the top three as painted
+ * The weekly board at /baseball/ranking (`?season=YYYY-MM-DD` for a past week's final board): the top three as painted
  * statues over their name plates, places 4 to 50 as a list, and the visitor's own record between them, which they
- * can post, hide, or change here. The statues rise third to first the first time this browser sees a month's board.
+ * can post, hide, or change here. The statues rise third to first the first time this browser sees a week's board.
  * Names show once the admin approved them, and a LinkedIn link only on a statue. Phones may read it too.
  */
 export function BoardPage({ town }: { town: TownSnapshot }) {
   const [language, setLanguage] = usePageLanguage()
   const copy = languageCopy[language].baseball.leaderboard
-  const [currentSeason] = useState(() => rankingMonth(new Date()))
+  const [currentSeason] = useState(() => rankingWeek(new Date()))
   const [season, setSeason] = useState(() => requestedSeason(window.location.search, currentSeason))
   const { load, reload } = useBoard(season)
   const contactEmail = town.owner.contactEmail
@@ -167,7 +167,7 @@ export function BoardLoadFailed({ language, onRetry }: { language: AppLanguage; 
   )
 }
 
-/** The title, the season and the buttons to the others, and for this month when it ends and the rules it plays. */
+/** The title, the season and the buttons to the others, and for this week when it ends and the rules it plays. */
 export function SeasonHeading({
   town,
   season,
@@ -186,7 +186,7 @@ export function SeasonHeading({
   const venueCopy = copy.venues.ballpark
   const { ballpark } = town.venues
   const [now] = useState(Date.now)
-  const month = monthName(season, currentSeason, language)
+  const week = weekName(season, currentSeason, language)
   const current = season === currentSeason
   const endsAt = current ? seasonEndsAt(season) : null
   const rules = effectiveBallparkRules(ballpark, currentSeason)
@@ -195,19 +195,19 @@ export function SeasonHeading({
     <header className="board-heading">
       <p className="eyebrow">{boardCopy.eyebrow(venueCopy.themes[ballpark.theme])}</p>
       <div className="board-title-row">
-        <h1>{current ? boardCopy.title : boardCopy.finalTitle(month)}</h1>
+        <h1>{current ? boardCopy.title : boardCopy.finalTitle(week)}</h1>
         <div className="board-season">
           <button
             type="button"
             className="board-season-step"
             aria-label={boardCopy.previousSeason}
             disabled={season <= oldestShownSeason(currentSeason)}
-            onClick={() => onSeason(previousRankingMonth(season))}
+            onClick={() => onSeason(previousRankingWeek(season))}
           >
             ‹
           </button>
           <p className="board-season-pill">
-            <b>{boardCopy.season(month)}</b>
+            <b>{boardCopy.season(week)}</b>
             <span aria-hidden="true">·</span>
             <span>{endsAt ? boardCopy.daysLeft(daysUntilSeasonEnds(endsAt, now)) : boardCopy.seasonOver}</span>
           </p>
@@ -216,7 +216,7 @@ export function SeasonHeading({
             className="board-season-step"
             aria-label={boardCopy.nextSeason}
             disabled={current}
-            onClick={() => onSeason(nextRankingMonth(season))}
+            onClick={() => onSeason(nextRankingWeek(season))}
           >
             ›
           </button>
@@ -225,11 +225,11 @@ export function SeasonHeading({
       {current && (
         <p className="board-meta">
           {endsAt && <span>{seasonResetText(endsAt, language)}</span>}
-          <span>{venueCopy.rulesThisMonth(rules.pitchCount, venueCopy.difficulties[rules.difficulty])}</span>
+          <span>{venueCopy.rulesThisWeek(rules.pitchCount, venueCopy.difficulties[rules.difficulty])}</span>
           {upcoming && (
             <span>
               {venueCopy.rulesFrom(
-                monthName(upcoming.fromMonth, currentSeason, language),
+                weekName(upcoming.fromWeek, currentSeason, language),
                 upcoming.rules.pitchCount,
                 venueCopy.difficulties[upcoming.rules.difficulty],
               )}
@@ -261,8 +261,8 @@ export function BoardSections({
   const copy = languageCopy[language].baseball.leaderboard
   const reducedMotion = useReducedMotion()
   const { season, podium, ranks, own } = board
-  const month = monthName(season.id, currentSeason, language)
-  const emptyMonth = !season.final && podium.length === 0
+  const week = weekName(season.id, currentSeason, language)
+  const emptyWeek = !season.final && podium.length === 0
   const [revealing, setRevealing] = useState(() => !season.final && podium.length > 0 && !hasSeenReveal(season.id))
   const [shownPlates, setShownPlates] = useState<ReadonlySet<StatueRank>>(() => new Set(revealing ? [] : STATUE_RANKS))
   const [listing, setListing] = useState(false)
@@ -295,7 +295,7 @@ export function BoardSections({
 
   return (
     <>
-      <section className="board-podium" aria-labelledby="board-statues-title" data-empty={emptyMonth || undefined}>
+      <section className="board-podium" aria-labelledby="board-statues-title" data-empty={emptyWeek || undefined}>
         <h2 id="board-statues-title" className="sr-only">
           {copy.statues}
         </h2>
@@ -309,12 +309,12 @@ export function BoardSections({
             onPlateShown={showPlate}
             onRevealEnd={finishReveal}
           />
-          {emptyMonth && (
+          {emptyWeek && (
             <div className="board-empty-banner">
               <p>
-                <b>{copy.emptyMonth}</b>
+                <b>{copy.emptyWeek}</b>
               </p>
-              <p>{copy.emptyMonthHint}</p>
+              <p>{copy.emptyWeekHint}</p>
               <a className="primary-button compact" href={BASEBALL_PATH}>
                 {copy.challenge}
               </a>
@@ -327,9 +327,9 @@ export function BoardSections({
               key={rank}
               rank={rank}
               row={podium.find((row) => row.rank === rank) ?? null}
-              finalMonth={season.final ? month : null}
+              finalWeek={season.final ? week : null}
               shown={shownPlates.has(rank) || reducedMotion}
-              challenge={!season.final && !emptyMonth}
+              challenge={!season.final && !emptyWeek}
               season={season.id}
               contactEmail={contactEmail}
               language={language}
@@ -343,7 +343,7 @@ export function BoardSections({
       <OwnRecordCard
         own={own}
         final={season.final}
-        month={month}
+        week={week}
         language={language}
         onOpen={() => setListing(true)}
         onUnlist={async () => {
@@ -364,7 +364,7 @@ export function BoardSections({
       </OwnRecordCard>
       <section className="board-list-card" aria-labelledby="board-list-title">
         <div className="board-list-head">
-          <h2 id="board-list-title">{season.final ? copy.finalListTitle(month) : copy.listTitle}</h2>
+          <h2 id="board-list-title">{season.final ? copy.finalListTitle(week) : copy.listTitle}</h2>
           {ranks.length > 0 && <p>{copy.listFrom(ranks.length)}</p>}
         </div>
         {ranks.length > 0 ? (
@@ -399,6 +399,7 @@ export function BoardSections({
           </div>
         )}
         <p className="board-tie-rule">{copy.tieRule}</p>
+        <p className="board-tie-rule">{copy.statueRule}</p>
         <a className="board-hall-link" href={HALL_OF_FAME_PATH}>
           {copy.hallOfFameLink} <span aria-hidden="true">›</span>
         </a>
@@ -490,7 +491,7 @@ export function Bunting() {
 export function BoardPlate({
   rank,
   row,
-  finalMonth,
+  finalWeek,
   shown,
   challenge,
   season,
@@ -499,7 +500,7 @@ export function BoardPlate({
 }: {
   rank: StatueRank
   row: BoardRow | null
-  finalMonth: string | null
+  finalWeek: string | null
   shown: boolean
   challenge: boolean
   season: string
@@ -527,7 +528,7 @@ export function BoardPlate({
       <span className="board-medal" aria-hidden="true">
         {rank}
       </span>
-      <p className="board-plate-label">{finalMonth ? copy.plaqueFinal(finalMonth, rank) : copy.plaqueLive(rank)}</p>
+      <p className="board-plate-label">{finalWeek ? copy.plaqueFinal(finalWeek, rank) : copy.plaqueLive(rank)}</p>
       <p className="board-plate-name" data-placeholder={row.nameState !== 'approved' || undefined}>
         {name}
       </p>
@@ -689,14 +690,14 @@ export function BoardListRow({
 }
 
 /**
- * The visitor's own record on this board, kept in this browser only, with what they can do with it: this month's
+ * The visitor's own record on this board, kept in this browser only, with what they can do with it: this week's
  * record goes on or off the board or changes; a past season's, or one disqualified, can still turn its LinkedIn link
  * off. A change the board did not take says so. Deleting every record sits in the page's footer.
  */
 export function OwnRecordCard({
   own,
   final,
-  month,
+  week,
   language,
   onOpen,
   onUnlist,
@@ -705,7 +706,7 @@ export function OwnRecordCard({
 }: {
   own: BoardOwnEntry | null
   final: boolean
-  month: string
+  week: string
   language: AppLanguage
   onOpen: () => void
   onUnlist: () => Promise<void>
@@ -745,7 +746,7 @@ export function OwnRecordCard({
       <Portrait profile={own.takedown ? null : own.profile} className="board-portrait board-own-portrait" />
       <div>
         <h2 id="board-own-title">{copy.board.ownTitle}</h2>
-        <p className="board-own-title">{ownHeadline(own, final, month, language)}</p>
+        <p className="board-own-title">{ownHeadline(own, final, week, language)}</p>
         <p className="board-own-detail">
           {[own.name, recordText(own.homeRuns, own.totalDistanceDm, language)].filter(Boolean).join(' · ')}
         </p>
@@ -795,7 +796,7 @@ export function OwnRecordCard({
   )
 }
 
-/** Last month's champions under an empty month's pedestals, with the way to their final board. */
+/** Last week's champions under an empty week's pedestals, with the way to their final board. */
 export function LastSeasonStrip({
   board,
   currentSeason,
@@ -811,7 +812,7 @@ export function LastSeasonStrip({
   return (
     <div className="board-last-season">
       <button type="button" className="board-last-season-title" onClick={() => onSeason(board.season.id)}>
-        {copy.lastSeason(monthName(board.season.id, currentSeason, language))} <span aria-hidden="true">›</span>
+        {copy.lastSeason(weekName(board.season.id, currentSeason, language))} <span aria-hidden="true">›</span>
       </button>
       <ol>
         {board.podium.map((row) => (

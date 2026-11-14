@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { rankingMonth } from '../../data/ballparkRules'
+import { rankingWeek } from '../../data/ballparkRules'
 import { recordText, rowName } from '../../data/boardRecord'
 import { type BoardRow, fetchHallOfFame, type HallOfFameSeason } from '../../data/leaderboardApi'
 import type { TownSnapshot } from '../../data/models'
 import { usePageLanguage } from '../../hooks/usePageLanguage'
-import { type AppLanguage, languageCopy, monthName } from '../../i18n/language'
+import { type AppLanguage, languageCopy, weekName } from '../../i18n/language'
 import { STATUE_RANKS, type StatueRank } from '../../scene/statues/statueFinishes'
 import { BOARD_PATH } from '../baseballRoute'
 import {
@@ -30,7 +30,7 @@ export function HallOfFamePage({ town }: { town: TownSnapshot }) {
   const [language, setLanguage] = usePageLanguage()
   const copy = languageCopy[language]
   const boardCopy = copy.baseball.leaderboard
-  const [currentSeason] = useState(() => rankingMonth(new Date()))
+  const [currentSeason] = useState(() => rankingWeek(new Date()))
   const { load, reload } = useRead(fetchHallOfFame)
   const contactEmail = town.owner.contactEmail
 
@@ -114,7 +114,7 @@ export function HallOfFameSeasons({
   )
 }
 
-/** A season's card: its month, the way to its final board, and a statue or an empty pedestal for each place. */
+/** A season's card: its week, the way to its final board, and a statue or an empty pedestal for each place. */
 export function HallOfFameSeasonCard({
   season,
   currentSeason,
@@ -127,13 +127,13 @@ export function HallOfFameSeasonCard({
   language: AppLanguage
 }) {
   const copy = languageCopy[language].baseball.leaderboard
-  const month = monthName(season.id, currentSeason, language)
+  const week = weekName(season.id, currentSeason, language)
   return (
     <li className="board-hall-season">
       <div className="board-hall-season-head">
-        <h2>{copy.season(month)}</h2>
+        <h2>{copy.season(week)}</h2>
         <a href={`${BOARD_PATH}${seasonSearch(season.id)}`}>
-          {copy.finalListTitle(month)} <span aria-hidden="true">›</span>
+          {copy.finalListTitle(week)} <span aria-hidden="true">›</span>
         </a>
       </div>
       <ol className="board-hall-statues">

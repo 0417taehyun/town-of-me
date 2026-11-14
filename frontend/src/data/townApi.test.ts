@@ -32,7 +32,7 @@ const ballpark = {
   theme: 'garden',
   colors: { roof: '#e8735a' },
   rules: { pitchCount: 7, difficulty: 'hard' },
-  scheduledRules: { fromMonth: '2026-12', rules: { pitchCount: 3, difficulty: 'easy' } },
+  scheduledRules: { fromWeek: '2026-12-07', rules: { pitchCount: 3, difficulty: 'easy' } },
 } as const
 
 const withBallpark = (changes: Record<string, unknown>) =>
@@ -167,8 +167,10 @@ describe('town layout API boundary', () => {
     expect(withBallpark({ colors }).colors).toEqual({ roof: '#e8735a', accent: '#F2C14E' })
   })
 
-  it('drops a schedule without a YYYY-MM month and keeps the rules in effect', () => {
-    const schedules = [{ ...ballpark.scheduledRules, fromMonth: '2026-13' }, { rules: ballpark.rules }, '2026-12', null]
+  it('drops a schedule whose week is not the date of a Monday and keeps the rules in effect', () => {
+    const tuesday = { ...ballpark.scheduledRules, fromWeek: '2026-12-08' }
+    const byMonth = { fromMonth: '2026-12', rules: ballpark.rules }
+    const schedules = [tuesday, byMonth, { rules: ballpark.rules }, '2026-12-07', null]
     const parsed = schedules.map((scheduledRules) => withBallpark({ scheduledRules }))
     expect(parsed.map((settings) => settings.scheduledRules)).toEqual(schedules.map(() => undefined))
     expect(parsed.map((settings) => settings.rules)).toEqual(schedules.map(() => ballpark.rules))

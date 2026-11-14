@@ -118,7 +118,12 @@ describe('leaderboard API boundary', () => {
       ...fields,
     })
     const payload = {
-      season: { id: '2026-11', startsAt: '2026-10-31T15:00:00.000Z', endsAt: '2026-11-30T15:00:00.000Z', final: false },
+      season: {
+        id: '2026-11-09',
+        startsAt: '2026-11-08T15:00:00.000Z',
+        endsAt: '2026-11-15T15:00:00.000Z',
+        final: false,
+      },
       podium: [
         row(1, {
           name: 'Momo',
@@ -139,8 +144,8 @@ describe('leaderboard API boundary', () => {
       own: null,
     }
     const request = vi.fn<typeof fetch>(async () => Response.json(payload))
-    const board = await fetchBoard('2026-11', request)
-    expect(request.mock.calls[0][0]).toBe('/v1/games/home-run-derby/leaderboard?season=2026-11')
+    const board = await fetchBoard('2026-11-09', request)
+    expect(request.mock.calls[0][0]).toBe('/v1/games/home-run-derby/leaderboard?season=2026-11-09')
     const [champion, second] = board.podium
     expect(board.podium.map(({ rank }) => rank)).toEqual([1, 2])
     expect(champion.profile).toMatchObject({
@@ -169,11 +174,11 @@ describe('leaderboard API boundary', () => {
       statueRow(3, { profile: null }),
       statueRow(4),
     ]
-    const request = vi.fn<typeof fetch>(async () => Response.json({ season: { id: '2026-11' }, podium }))
+    const request = vi.fn<typeof fetch>(async () => Response.json({ season: { id: '2026-11-09' }, podium }))
     const read = await fetchPodium(false, request)
     expect(request.mock.calls[0][0]).toBe('/v1/games/home-run-derby/podium')
     expect(request.mock.calls[0][1]).toMatchObject({ credentials: 'omit' })
-    expect(read.season).toBe('2026-11')
+    expect(read.season).toBe('2026-11-09')
     expect(read.rows.map(({ id }) => id)).toEqual(['entry-1', 'entry-2'])
     expect(read.rows.map(({ linkedInProfileUrl }) => linkedInProfileUrl)).toEqual([
       'https://www.linkedin.com/in/example-momo',
@@ -187,7 +192,7 @@ describe('leaderboard API boundary', () => {
   it('reads the hall of fame without the cookie, in the server’s order, dropping only what it cannot show', async () => {
     const seasons = [
       {
-        id: '2026-10',
+        id: '2026-11-02',
         champions: [
           statueRow(1, { linkedInProfileUrl: 'https://www.linkedin.com/in/example-momo' }),
           statueRow(1, { id: 'entry-again' }),
@@ -196,13 +201,13 @@ describe('leaderboard API boundary', () => {
         ],
       },
       { id: 'October', champions: [statueRow(1)] },
-      { id: '2026-08' },
+      { id: '2026-10-19' },
     ]
     const request = vi.fn<typeof fetch>(async () => Response.json({ seasons }))
     const read = await fetchHallOfFame(request)
     expect(request.mock.calls[0][0]).toBe('/v1/games/home-run-derby/hall-of-fame')
     expect(request.mock.calls[0][1]).toMatchObject({ credentials: 'omit' })
-    expect(read.map(({ id }) => id)).toEqual(['2026-10', '2026-08'])
+    expect(read.map(({ id }) => id)).toEqual(['2026-11-02', '2026-10-19'])
     expect(read[0].champions.map(({ id, linkedInProfileUrl }) => [id, linkedInProfileUrl])).toEqual([
       ['entry-1', 'https://www.linkedin.com/in/example-momo'],
       ['entry-2', null],
@@ -216,36 +221,38 @@ describe('leaderboard API boundary', () => {
   it('finds the visitor’s past statues: listed in the top three, read only from seasons that have statues', async () => {
     const standing = (id: string) => ({ id, champions: [statueRow(1)] })
     const ownOn: Record<string, object | null> = {
-      '2026-10': { ...ownEntry, listed: true, rank: 3 },
-      '2026-09': { ...ownEntry, listed: true, rank: 4 },
-      '2026-08': { ...ownEntry, listed: false, rank: 1 },
-      '2026-07': { ...ownEntry, listed: true, rank: null },
-      '2026-06': null,
+      '2026-11-02': { ...ownEntry, listed: true, rank: 3 },
+      '2026-10-26': { ...ownEntry, listed: true, rank: 4 },
+      '2026-10-19': { ...ownEntry, listed: false, rank: 1 },
+      '2026-10-12': { ...ownEntry, listed: true, rank: null },
+      '2026-10-05': null,
+      // A place among the first three that waits for approval is empty for everyone, so it is no statue yet.
+      '2026-09-21': { ...ownEntry, listed: true, rank: 2, awaitingApproval: true },
     }
-    const seasons = [...Object.keys(ownOn).map(standing), { id: '2026-05', champions: [] }]
+    const seasons = [...Object.keys(ownOn).map(standing), { id: '2026-09-28', champions: [] }]
     const request = vi.fn<typeof fetch>(async (input) => {
       const season = new URL(String(input), 'https://town.example').searchParams.get('season')
       if (!season) return Response.json({ seasons })
-      const bounds = { id: season, startsAt: `${season}-01T00:00:00Z`, endsAt: `${season}-28T00:00:00Z`, final: true }
+      const bounds = { id: season, startsAt: `${season}T00:00:00Z`, endsAt: `${season}T12:00:00Z`, final: true }
       const own = ownOn[season] && { ...ownOn[season], profile: visitor }
       return Response.json({ season: bounds, podium: [], ranks: [], own })
     })
     const statues = await fetchOwnStatues(request)
-    expect(statues.map(({ season, own }) => [season.id, own.rank])).toEqual([['2026-10', 3]])
+    expect(statues.map(({ season, own }) => [season.id, own.rank])).toEqual([['2026-11-02', 3]])
     expect(request.mock.calls.map(([input]) => String(input))).not.toContain(
-      '/v1/games/home-run-derby/leaderboard?season=2026-05',
+      '/v1/games/home-run-derby/leaderboard?season=2026-09-28',
     )
 
     const failing = vi.fn<typeof fetch>(async (input) =>
-      String(input).includes('2026-09') ? new Response(null, { status: 500 }) : request(input),
+      String(input).includes('2026-10-26') ? new Response(null, { status: 500 }) : request(input),
     )
     await expect(fetchOwnStatues(failing)).rejects.toThrow()
   })
 
   it('takes down the named season’s statue, and a failed hand-over does not pass for one', async () => {
     const request = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }))
-    await anonymizeOwnRecord('2026-10', request)
-    expect(request.mock.calls[0][0]).toBe('/v1/games/home-run-derby/entries/own?season=2026-10')
+    await anonymizeOwnRecord('2026-11-02', request)
+    expect(request.mock.calls[0][0]).toBe('/v1/games/home-run-derby/entries/own?season=2026-11-02')
     expect(sentBody(request, 0)).toEqual({ anonymize: true })
 
     await forgetVisitor(request)

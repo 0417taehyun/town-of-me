@@ -10,7 +10,7 @@ import { recordText } from '../../data/boardRecord'
 import { linkedInStatusText } from './derbyCues'
 
 /**
- * The visitor's own record on this month's board, read at the computer rather than from the plate: off the board, it
+ * The visitor's own record on this week's board, read at the computer rather than from the plate: off the board, it
  * asks first (nothing ticked beforehand), with what posting shows, where, and for how long; on it, the same form changes
  * the name, takes the record off, or turns the statue's LinkedIn link on or off. The name is the board's own, at first
  * the character's; left empty, the record shows as an anonymous batter without the character. The link offered is the
@@ -52,6 +52,8 @@ export function ListingView({
   }
   const record = recordText(entry.homeRuns, entry.totalDistanceDm, language)
   const rank = entry.rank ?? 0
+  // A posted record among the first three shows to others only once the admin has approved it.
+  const onBoard = entry.awaitingApproval ? copy.onBoardAwaiting : copy.onBoard
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -68,7 +70,7 @@ export function ListingView({
   return (
     <section className="baseball-card derby-listing" aria-labelledby="derby-listing-title">
       <h1 id="derby-listing-title">{entry.listed ? copy.ownTitle : copy.consentTitle}</h1>
-      <p className="derby-listing-record">{entry.listed ? copy.onBoard(record, rank) : copy.wouldBe(record, rank)}</p>
+      <p className="derby-listing-record">{entry.listed ? onBoard(record, rank) : copy.wouldBe(record, rank)}</p>
       {entry.listed && entry.nameStatus && entry.nameStatus !== 'approved' && (
         <p className="baseball-note">{copy.nameStatus[entry.nameStatus]}</p>
       )}
@@ -174,7 +176,7 @@ export function ListingView({
 
 /**
  * Deletes every record of this browser, in every season, after a second press. The board's page offers it too, so a
- * record of a past month, one disqualified or held, or no record this month leaves it within reach.
+ * record of a past week, one disqualified or held, or no record this week leaves it within reach.
  */
 export function DeleteOwnRecords({ language, onDelete }: { language: AppLanguage; onDelete: () => Promise<void> }) {
   const copy = languageCopy[language].baseball.board

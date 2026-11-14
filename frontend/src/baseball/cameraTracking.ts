@@ -124,10 +124,11 @@ export const BROWSER_CAMERA_PARTS: CameraTrackingParts = {
 /**
  * Turns the camera on into `video` and tracks the visitor's pose on it until `signal` aborts. Reports every status
  * after `starting`, and nothing once `signal` aborts; the caller aborts it when a status leaves the camera off. The
- * pose task and the object detector load while the browser asks for the camera, so a first visit waits for all at
- * once; a camera that does not start names its cause, and a pose task that does not (or fails later) is a tracking
- * problem, not the camera's. The game needs no object detector: without one the visitor plays in free mode, or taps
- * the object in the camera picture.
+ * pose task loads while the browser asks for the camera, so a first visit waits for both at once; a camera that does
+ * not start names its cause, and a pose task that does not (or fails later) is a tracking problem, not the camera's.
+ * The object detector starts loading only once the pose task is ready, so its model never slows the download a pitch
+ * waits for. The game needs no object detector: without one the visitor plays in free mode, or taps the object in the
+ * camera picture.
  */
 export async function trackCamera(
   video: HTMLVideoElement,
@@ -142,7 +143,7 @@ export async function trackCamera(
   const tracker = createTracker()
   // Its failure is reported once the camera is on; until then nothing waits on it.
   void tracker.catch(() => undefined)
-  const objects = readyObjectDetector(createObjects(), signal)
+  const objects = readyObjectDetector(tracker.then(createObjects), signal)
   const camera = await start(video, { signal, onStopped: (stoppedBy) => report({ kind: 'off', stoppedBy }) }).catch(
     (error: unknown) => {
       report({ kind: 'problem', problem: cameraProblem(error) })

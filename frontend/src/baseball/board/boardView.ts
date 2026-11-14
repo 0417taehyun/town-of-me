@@ -33,7 +33,7 @@ export function takedownHref(contactEmail: string, subject: string) {
   return `mailto:${contactEmail}?subject=${encodeURIComponent(subject)}`
 }
 
-/** The first look at a month's statues plays once per browser; only the month is kept, nothing personal. */
+/** The first look at a week's statues plays once per browser; only the week is kept, nothing personal. */
 export function revealedKey(season: string) {
   return `town-of-me:board-revealed:${season}`
 }
@@ -87,11 +87,15 @@ export function listingBatter(own: BoardOwnEntry, sessionProfile: PlayerProfile 
   })
 }
 
-/** What the visitor's record says first: its statue or place, where it would stand if posted, or that it is off. */
-export function ownHeadline(own: BoardOwnEntry, final: boolean, month: string, language: AppLanguage) {
+/**
+ * What the visitor's record says first: its statue or place, where it would stand if posted, or that it is off. A
+ * posted record among the first three that the admin has not approved says so, since nobody else sees it there yet.
+ */
+export function ownHeadline(own: BoardOwnEntry, final: boolean, week: string, language: AppLanguage) {
   const copy = languageCopy[language].baseball
   if (own.rank === null) return copy.board.excluded
   if (!own.listed) return copy.board.offBoard(own.rank)
-  if (final) return copy.leaderboard.ownFinalRank(month, own.rank)
+  if (own.awaitingApproval) return copy.board.awaitingApproval(own.rank)
+  if (final) return copy.leaderboard.ownFinalRank(week, own.rank)
   return own.rank <= STATUE_RANKS.length ? copy.board.statue(own.rank) : copy.leaderboard.ownRank(own.rank)
 }

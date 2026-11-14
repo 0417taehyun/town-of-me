@@ -22,7 +22,7 @@ describe('baseball route', () => {
     expect(others.map(isBaseballPath)).toEqual([false, false, false, false, false, false])
   })
 
-  it("previews next month's rules or this month's only when the query asks, as the editor's links do", () => {
+  it("previews next week's rules or this week's only when the query asks, as the editor's links do", () => {
     const links = [NEXT_RULES_PREVIEW_PATH, CURRENT_RULES_PREVIEW_PATH].map(
       (path) => new URL(path, 'https://town.example'),
     )
@@ -31,7 +31,7 @@ describe('baseball route', () => {
       'current',
     ])
     expect(baseballPreview('?lang=ko&rules=next')).toBe('next')
-    expect(['', '?rules=nextmonth', '?rule=next'].map(baseballPreview)).toEqual([null, null, null])
+    expect(['', '?rules=nextweek', '?rule=next'].map(baseballPreview)).toEqual([null, null, null])
   })
 
   it('opens a hidden ballpark only for a signed-in admin on the preview, asking who is signed in only then', async () => {

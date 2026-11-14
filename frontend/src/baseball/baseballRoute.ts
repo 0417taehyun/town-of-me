@@ -6,7 +6,7 @@ import type { BallparkSettings } from '../data/models'
 /** Mirrors the `/baseball` location in docker/nginx.conf, which gives these pages their own CSP and camera permission. */
 export const BASEBALL_PATH = '/baseball'
 
-/** The derby's monthly board, under the derby's path so it gets the same strict policy. */
+/** The derby's weekly board, under the derby's path so it gets the same strict policy. */
 export const BOARD_PATH = `${BASEBALL_PATH}/ranking`
 
 /** Every finished season's statues, a view of the board's page under the same gate. */
@@ -28,13 +28,13 @@ export function isBoardPath(pathname: string) {
   return pathname.replace(/\/+$/u, '') === BOARD_PATH
 }
 
-/** The derby under the rules scheduled for next month, for the admin to try; such a run is never ranked. */
+/** The derby under the rules scheduled for next week, for the admin to try; such a run is never ranked. */
 export const NEXT_RULES_PREVIEW_PATH = `${BASEBALL_PATH}?rules=next`
 
-/** The derby under this month's rules, for the admin to try while the ballpark is hidden; never ranked either. */
+/** The derby under this week's rules, for the admin to try while the ballpark is hidden; never ranked either. */
 export const CURRENT_RULES_PREVIEW_PATH = `${BASEBALL_PATH}?rules=current`
 
-/** An admin's preview, by whose rules it plays: next month's or this month's. */
+/** An admin's preview, by whose rules it plays: next week's or this week's. */
 export type BaseballPreview = 'next' | 'current'
 
 /** The preview the page's query asks for (`rules=next` or `rules=current`), or null for a visitor's game. */

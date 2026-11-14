@@ -119,12 +119,12 @@ export const DEFAULT_TOWN_MOVEMENT: TownMovement = { gait: 'plantedFeet', skid: 
 export const BALLPARK_THEMES = ['garden'] as const
 export const BALLPARK_COLOR_ROLES = ['walls', 'roof', 'trim', 'accent'] as const
 
-// Mirrors ballparkDifficulties, ballparkPitchCountRange, and rankingMonthPattern in backend/src/town.ts, which checks
+// Mirrors ballparkDifficulties, ballparkPitchCountRange, and rankingWeekPattern in backend/src/town.ts, which checks
 // the rules exactly because ranked runs will snapshot them.
 export const BASEBALL_DIFFICULTIES = ['easy', 'normal', 'hard'] as const
 export const PITCH_COUNT_RANGE = { minimum: 3, maximum: 10 } as const
-/** A KST calendar month written `YYYY-MM`; such months sort as text. */
-export const RANKING_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/u
+/** A KST week written as its Monday's date, `YYYY-MM-DD`; such weeks sort as text. */
+export const RANKING_WEEK_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/u
 
 export type BallparkTheme = (typeof BALLPARK_THEMES)[number]
 export type BallparkColorRole = (typeof BALLPARK_COLOR_ROLES)[number]
@@ -132,12 +132,12 @@ export type BaseballDifficulty = (typeof BASEBALL_DIFFICULTIES)[number]
 
 export type BallparkRules = { pitchCount: number; difficulty: BaseballDifficulty }
 
-/** Rules that take over from 00:00 KST on the first day of `fromMonth`, a ranking month. */
-export type ScheduledBallparkRules = { fromMonth: string; rules: BallparkRules }
+/** Rules that take over from 00:00 KST on the Monday `fromWeek`, a ranking week. */
+export type ScheduledBallparkRules = { fromWeek: string; rules: BallparkRules }
 
 /**
  * Whether visitors see it and its look apply as soon as they are saved; the rules change only from the start of a KST
- * ranking month.
+ * ranking week.
  */
 export type BallparkSettings = {
   /** The admin's switch: while hidden, visitors cannot open `/baseball`, and only the admin's preview plays it. */
@@ -146,7 +146,7 @@ export type BallparkSettings = {
   /** Only the roles the admin overrides; every other role keeps the theme's color. */
   colors: Partial<Record<BallparkColorRole, string>>
   /**
-   * The rules before `scheduledRules` takes over. Read a month's rules with `effectiveBallparkRules`
+   * The rules before `scheduledRules` takes over. Read a week's rules with `effectiveBallparkRules`
    * (data/ballparkRules.ts); the backend folds a due schedule into these on the next save.
    */
   rules: BallparkRules

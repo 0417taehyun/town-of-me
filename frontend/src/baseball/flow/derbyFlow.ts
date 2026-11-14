@@ -1,4 +1,4 @@
-import { effectiveBallparkRules, rankingMonth } from '../../data/ballparkRules'
+import { effectiveBallparkRules, rankingWeek } from '../../data/ballparkRules'
 import type { IssuedRun } from '../../data/leaderboardApi'
 import type { BallparkSettings, BaseballDifficulty } from '../../data/models'
 import type { CameraStatus } from '../cameraTracking'
@@ -178,9 +178,9 @@ export function pausedForAway(step: DerbyStep, present: boolean, betweenPitches:
 export const DEFAULT_BATTING_SIDE: BattingSide = 'right'
 
 /**
- * A run played as `log` says under the rules `rulesFor` picks for the KST month of `now`: by default those in effect,
- * or in an admin's preview those planned next (data/ballparkRules.ts). Each run reads the month when it starts, so a
- * page left open into a new month plays the rules `ballpark` scheduled for it (as loaded with the page) from its next
+ * A run played as `log` says under the rules `rulesFor` picks for the KST week of `now`: by default those in effect,
+ * or in an admin's preview those planned next (data/ballparkRules.ts). Each run reads the week when it starts, so a
+ * page left open into a new week plays the rules `ballpark` scheduled for it (as loaded with the page) from its next
  * run. A ranked run takes its plan from the server instead (createRankedRun).
  */
 export function createDerbyRun(
@@ -190,7 +190,7 @@ export function createDerbyRun(
   log: Omit<DerbyInputLog, 'swings'>,
   rulesFor = effectiveBallparkRules,
 ): StageRunSetup {
-  return { plan: createRunPlan(rulesFor(ballpark, rankingMonth(now)), seed), log }
+  return { plan: createRunPlan(rulesFor(ballpark, rankingWeek(now)), seed), log }
 }
 
 /**
@@ -205,7 +205,7 @@ export function createPracticeRun(
   rulesFor = effectiveBallparkRules,
 ): StageRunSetup {
   return {
-    plan: createPracticePlan(rulesFor(ballpark, rankingMonth(now))),
+    plan: createPracticePlan(rulesFor(ballpark, rankingWeek(now))),
     log: { side, practice: [] },
     practice: true,
   }
@@ -223,7 +223,7 @@ export function createMorePracticeRun(
   rulesFor = effectiveBallparkRules,
 ): StageRunSetup {
   return {
-    plan: createPracticePlan(rulesFor(ballpark, rankingMonth(now)), MORE_PRACTICE_SCHEDULE),
+    plan: createPracticePlan(rulesFor(ballpark, rankingWeek(now)), MORE_PRACTICE_SCHEDULE),
     log: { side, practice },
     practice: true,
   }

@@ -45,9 +45,9 @@ npm run build
 - **Houses:** approaching one shows its owner's name, linked to their LinkedIn profile when the town has one.
 - **The ballpark:** once the admin shows it, the hedge opens at the end of the north road onto the garden ballpark's
   gate, and `E` there opens `/baseball`; coming back starts you at the gate. A branch of the road leads to a podium
-  garden where this month's home-run leaders stand as statues; walking up to one opens a card with their record, their
-  LinkedIn link once the admin approved it (with a menu to report it), and the board, and an empty pedestal invites you
-  to swing. While it is hidden the hedge stays closed and none of it shows.
+  garden where this week's home-run leaders stand as statues once the admin approved their records; walking up to one
+  opens a card with their record, their LinkedIn link once the admin approved it (with a menu to report it), and the
+  board, and an empty pedestal invites you to swing. While it is hidden the hedge stays closed and none of it shows.
 - **Guestbook:** anyone may write one note a day per browser and edit it that day. Notes appear after an admin approves
   them, and only the character's name and look are sent with a note.
 - **Time and seasons:** lighting, sky, lamps, music, birds, and clouds follow local time; the season follows the
@@ -82,7 +82,8 @@ clouds, birds, and water; the system's reduced-motion setting slows them instead
 ballpark; until then it says it is coming soon and loads nothing else. In the town, its gate is at the end of the
 north road.
 
-- **Rules:** the pitch count (3–10) and difficulty set for this month in Korean time; a change starts next month.
+- **Rules:** the pitch count (3–10) and difficulty set for this week (Monday to Sunday in Korean time); a change starts
+  next Monday.
 - **What counts:** home runs and their total distance. A ball in play is a home run, a hit, or a foul; a pitch let go is
   a strike and a swing through it a miss; there are no outs. The pitcher throws only strikes, through a faint box that
   shows the zone, and the pitch type shows only after the pitch.
@@ -100,11 +101,14 @@ north road.
 - **Too few swings counted:** with fewer than three valid practice swings, the stance hold or the main button throws
   three more practice pitches, as often as you like; `Play ball anyway` plays on, unranked and on the standard timing.
 - **Away:** practice and a run pause between pitches while you are out of the camera's view.
-- **Monthly board:** each run after practice is ranked when the board answers; the result says your place, and
-  `Show me on the board` posts it, with your name once the admin checks it, or as an anonymous batter. The top three
-  stand as statues, which may show your LinkedIn link after you put the given code on your profile. A preview, or a
+- **Weekly board:** a season is one week, Monday 00:00 KST to the next Monday. Each run after practice is ranked when
+  the board answers; the result says your place, and `Show me on the board` posts it, with your name once the admin
+  checks it, or as an anonymous batter. The top three stand as statues only after the admin has checked their records:
+  such a result says it is being checked, your own card says the place it takes once checked, and until then the
+  pedestal stays empty for everyone while places from fourth on show at once. A statue may show your LinkedIn link
+  after you put the given code on your profile. A preview, or a
   run the board cannot be reached for, is not ranked. `See the board` (on the rules card and the result) opens
-  `/baseball/ranking`: the statues, places 4 to 50, your own record, and the last twelve months' final boards.
+  `/baseball/ranking`: the statues, places 4 to 50, your own record, and the last twelve weeks' final boards.
   `Past seasons · Hall of fame` shows every finished season's statues; your own card can take a past statue down or
   turn its link off, and `It’s someone else’s turn` leaves this browser a new visitor on a shared device.
 
@@ -149,14 +153,17 @@ the role again on every save.
   handles as a resident route; `Use the default walk` goes back to the loop that follows the fountain.
 - **Ballpark** (town settings): `Show the ballpark` lets visitors open `/baseball`; it starts off and, like the walls,
   roof, trim, and accent colors (or `Use theme color`), applies once saved. While it is off, visitors read that the
-  ballpark is coming soon, and `Preview the ballpark` plays it for you with this month's rules at
-  `/baseball?rules=current`. The pitch count (3–10) and difficulty change only from midnight KST on the first of next
-  month, so the admin schedules next month's rules or cancels the change, and this month's games never change. Once
-  saved, `Try next month's rules` plays them at `/baseball?rules=next`. Both previews open in the same tab and are never
+  ballpark is coming soon, and `Preview the ballpark` plays it for you with this week's rules at
+  `/baseball?rules=current`. The pitch count (3–10) and difficulty change only from midnight KST next Monday,
+  so the admin schedules next week's rules or cancels the change, and this week's games never change. Once
+  saved, `Try next week's rules` plays them at `/baseball?rules=next`. Both previews open in the same tab and are never
   ranked.
 - **Guestbook review:** approve or delete notes, waiting ones first.
 - **Derby review:** the home-run derby's queue, most urgent first: approve or reject names and records, disqualify and
   undo, check a link's code, settle reports, hide a character, take a record down, and accept or dismiss held runs.
+  Places 1–3 stay empty until you approve their records, and every result that would take one is held for you
+  (`Would take a statue`); approving or accepting publishes at once. A run may also be held as `Not sent like the game
+page`, which a script can fake.
   `Find a record` reaches any record by season and record number or name, which is how a takedown email gets handled.
   It loads in its own chunk when opened, and with the ballpark hidden the queue is simply empty.
 - **Admins:** add an email (it gets the editor at its next sign-in) or remove one (its sessions end at once). Your own

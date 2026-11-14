@@ -2,6 +2,7 @@ import { GAIT_STYLES } from '../scene/motion/gait'
 import { SKID_STYLES } from '../scene/motion/skidTurn'
 import { normalizeLinkedInProfileUrl } from './linkedInProfile'
 import { recordOrEmpty, requestJson, requireList, requireRecord, requireText, responseRecord } from './apiClient'
+import { isRankingWeek } from './ballparkRules'
 import { isPlayerColor, normalizePlayerProfile, profileAppearance } from './playerProfile'
 import {
   BALLPARK_COLOR_ROLES,
@@ -11,7 +12,6 @@ import {
   DEFAULT_TOWN_VENUES,
   PET_ROUTE_POINTS,
   PITCH_COUNT_RANGE,
-  RANKING_MONTH_PATTERN,
   TOWN_GROUND_LIMIT,
   TOWN_OBJECT_TYPES,
   TOWN_OBJECT_VARIANTS,
@@ -223,11 +223,11 @@ export function isPitchCount(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= minimum && value <= maximum
 }
 
-/** A schedule without a `YYYY-MM` month cannot take over, so it is dropped and the rules in effect stay. */
+/** A schedule without a ranking week (a Monday's `YYYY-MM-DD`) cannot take over, so it is dropped and the rules in effect stay. */
 export function parseScheduledRules(value: unknown): ScheduledBallparkRules | undefined {
   const input = recordOrEmpty(value)
-  if (typeof input.fromMonth !== 'string' || !RANKING_MONTH_PATTERN.test(input.fromMonth)) return undefined
-  return { fromMonth: input.fromMonth, rules: parseBallparkRules(input.rules) }
+  if (typeof input.fromWeek !== 'string' || !isRankingWeek(input.fromWeek)) return undefined
+  return { fromWeek: input.fromWeek, rules: parseBallparkRules(input.rules) }
 }
 
 // The admin email shape in backend/src/admins.ts.
