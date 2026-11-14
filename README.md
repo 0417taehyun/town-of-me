@@ -69,8 +69,8 @@ live in the code.
 ## Status
 
 The project runs in production with Docker Compose on a single server ([docker/README.md](docker/README.md)), with
-LinkedIn sign-in for the admin and OpenRouter drafts of resident dialogue. Visitors never sign in; their characters stay
-in the browser tab.
+LinkedIn sign-in for the admin and OpenRouter drafts of resident dialogue. Visitors never need to sign in, and their
+characters stay in the browser tab; a visitor signs in with LinkedIn only to show their own profile link on a derby record.
 
 ## License
 

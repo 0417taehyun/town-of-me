@@ -29,7 +29,7 @@ deployment is one town: no code, URL, or response names it.
 | Venue settings: whether visitors see the ballpark, its colors, pitch count, and difficulty, and next week's rules              | database (`towns.venues`)                                  | admins at `/admin`              |
 | Admin emails                                                                                                                   | database (`admin_emails`), filled from `ADMIN_EMAILS` once | admins at `/admin`              |
 | Guestbook notes                                                                                                                | database (`guestbook_entries`)                             | visitors write, admins approve  |
-| Ranked derby runs, each visitor's best record per KST week, its optional LinkedIn link, reports, and blocked links             | database (`minigame_*`)                                    | visitors play, admins review    |
+| Ranked derby runs, each visitor's best record per KST week, its optional LinkedIn link, reports, and blocked links             | database (`minigame_*`)                                    | visitors play, admins remove    |
 | Anonymous daily totals of what people do in the town                                                                           | database (`site_event_counts`)                             | visitors' browsers add to them  |
 | A visitor's character, camera settings, guide progress, language                                                               | the browser tab (`sessionStorage`)                         | the visitor                     |
 | Object kinds, variants, walks, skids, copy, procedural geometry                                                                | frontend code                                              | contributors                    |
@@ -140,7 +140,7 @@ browser. Why each rule and number is what it is lives in the commit messages.
 - **`vision/`:** MediaPipe (`tasksVision.ts`), the camera stream (`cameraInput.ts`), the pose loop, the held object
   (`heldObject.ts`), the swing tracker (`swingTracker.ts`), motion energy, and the performance tier.
 - **`flow/`:** the steps after the rules card (`derbyFlow.ts`), the stance hold (`stanceHold.ts`), a run and the board
-  (`rankedRun.ts`), full screen, and the wake lock.
+  (`rankedRun.ts`), the prompt before leaving with a record not posted (`leaveGuard.ts`), full screen, and the wake lock.
 - **`ui/`:** DOM overlays: the HUD and what it may show (`DerbyHud.tsx`, `derbyCues.ts`), the camera panel and its
   layout (`cameraPanelLayout.ts`), the setup, practice, result, listing, and blocked screens, and the diagnostics
   panel.
@@ -205,16 +205,17 @@ go on by the focused button or by holding the batting stance about three seconds
 good, or late against the visitor's own usual timing (`practiceCalibration`) and calibrates the runs. Practice and a run
 stand still between pitches while the visitor is out of view, and a camera that turns off goes back to the rules card.
 The HUD and the result show the outcome, the distance, and the pitch type, never a timing verdict or power. The result
-also says where the run left the visitor on the board; its listing card (`ui/ListingView.tsx`) posts the record only
-after the visitor ticks the box, with the name (or none, an anonymous batter) and, opted in, the character's LinkedIn
-link, whose ownership code it then shows.
+also says where the run left the visitor on the board and asks at once whether to post it; its listing card
+(`ui/ListingView.tsx`) posts the record with the name (or none, an anonymous batter) and, opted in, a LinkedIn
+link the visitor enters, which shows only after the visitor signs in with LinkedIn. Leaving with a record not posted says so
+first.
 
 `board/BoardPage.tsx` shows a season's board (`?season=YYYY-MM-DD` for one of the last twelve final boards), which works
 on phones too: the top three as painted statues over DOM name plates (read 1, 2, 3, shown 2, 1, 3; the canvas is
 `aria-hidden`), which rise third to first the first time a browser sees a week; places 4 to 50 as an `<ol>`; and the
 visitor's own record between them, which the same listing card posts, hides, or changes (a past season's record can
-still turn its LinkedIn link off). It shows names only once approved, a LinkedIn chip only on a statue whose link the
-admin approved, and the server's order, whose ties go to the earlier record. Every row's menu reports its name,
+still turn its LinkedIn link off). It shows names at once, a LinkedIn chip only on a statue whose link its
+visitor verified by signing in, and the server's order, whose ties go to the earlier record. Every row's menu reports its name,
 character, or link, copies its number, or mails the owner a takedown request, and the footer deletes all of the
 visitor's records whatever their state. The result screen and the rules card link to it.
 
@@ -239,10 +240,11 @@ server.mjs (Node runtime: .env, store, seeding, HTTP)
 | `seed.ts`                      | Stores the seed town at startup when the store holds no town.                      |
 | `validation.ts`                | Shared input helpers; every request body passes through them.                      |
 | `derbyJudge/`                  | Copy of the frontend's `baseball/game/` judge: scores a run again from its log.    |
-| `homeRunDerby.ts`              | The ranked derby: its result's shape, the server's score, and the review checks.   |
+| `homeRunDerby.ts`              | The ranked derby: its result's shape, the server's score, and the suspicion marks. |
 | `leaderboard.ts`               | Runs, weekly records, the public order, and how a scored run changes a record.     |
 | `leaderboardIdentity.ts`       | What a record shows of its player: the board's name check and LinkedIn link check. |
-| `leaderboardReview.ts`         | The admin's review queue and actions on records and held runs, and reports.        |
+| `leaderboardReview.ts`         | The admin's list of plays, the actions that remove from a record, and reports.     |
+| `linkVerification.ts`          | A visitor's LinkedIn sign-in that verifies a record's link; keeps only the name.   |
 | `siteStats.ts`                 | The anonymous daily totals: the list of events and what the admin reads.           |
 
 Tests run with `npm test` through `test/run.ts`. `test/storeContract.ts` runs the same behaviors against both stores
@@ -257,8 +259,8 @@ Tests run with `npm test` through `test/run.ts`. `test/storeContract.ts` runs th
 - **Guestbook:** anyone writes one note a day per browser cookie; notes stay pending until an admin approves them.
 - **Ranked run:** the derby asks for a run (rules for the KST week, a seed) → plays it → sends the raw swing numbers
   → the server scores them again and keeps the visitor's best record for the week the run was issued in. A listed
-  record joins the public board, whose first three are the statues (`/podium`); a place among those three stays empty
-  until an admin approves its record, and an admin reviews held runs, links, and reports.
+  record joins the public board, whose first three are the statues (`/podium`); a result stands at once with the
+  server's suspicion marks, and an admin reads the list of plays and removes a record, name, or link afterwards.
 - **Resident dialogue:** an admin drafts it from a reference with OpenRouter and reviews it before saving; visits never
   call an LLM.
 - **Usage statistics:** what a visitor does in the town adds to anonymous daily totals (`data/siteEvents.ts` →
