@@ -10,23 +10,24 @@ import { nextRankingWeek, rankingDay, rankingWeekInput, rankingWeekStart } from 
 import { inputRecord, invalidInput, optionalInput, singleLineText } from './validation.js'
 
 // The weekly boards, apart from any one game: a board is a game and a KST week (its season), and each visitor has at
-// most one record on it, their best accepted run. The public order is home runs, then their distance, then whoever got
-// there first; its first three are the statues. A run held for review never touches a record, so it never stands, and
-// a place among the statues is published only once the admin has approved its record (`publishedPlaces`).
+// most one record on it, their best scored run. The public order is home runs, then their distance, then whoever got
+// there first; its first three are the statues. A result stands at once, wherever it places: nothing waits for the
+// admin, who removes a bad record afterwards (`leaderboardReview.ts`).
 
 /** A run is open this long after it is issued: a five-pitch run takes about two minutes, pauses included. */
 export const runLifetimeMs = 10 * 60_000
-/** The public order's first places, which stand as statues, and which only an approved record is published in. */
+/** The public order's first places, which stand as statues. */
 export const statueCount = 3
-/**
- * Why a run with nothing else against it is held: it would be its visitor's best and place among the statues, where
- * nothing is published before the admin has seen it.
- */
-export const podiumPlaceFlag = 'podium-place'
+/** A record whose best run arrived after its season ended may still be listed this long after; then that board is final. */
+export const lateListingMs = 7 * 24 * 60 * 60_000
 /** How many places the leaderboard lists. */
 export const leaderboardLength = 50
 
-/** `issued` until a result arrives; a new run abandons the visitor's open one. Only `scored` runs reach a board. */
+/**
+ * `issued` until a result arrives; a new run abandons the visitor's open one. A result is `scored` and reaches its
+ * board at once, or `rejected` as impossible. `flagged` is only on runs stored before results stood at once: held for
+ * review then and never accepted, so they never counted, and no run gets it any more.
+ */
 export type RunStatus = 'issued' | 'abandoned' | 'scored' | 'flagged' | 'rejected'
 
 /** One ranked game the server started; its result is accepted once. */
@@ -50,20 +51,20 @@ export interface GameRun {
   result: DerbyRunRecord | null
   score: number | null
   tiebreak: number | null
-  /** Why a run is held for review, or why it was rejected. */
+  /** What looked unusual about a scored run, for the admin to read: marks that never keep it off the board. */
   flags: string[]
-  /** A held run's profile, so accepting it settles the record as if it had scored at once; `null` for any other run. */
-  profile: RunProfile | null
-  /** When the admin accepted or dismissed a held run; `null` while it waits. */
-  reviewedAt: string | null
 }
 
-/** How a run ends: `scored`, `flagged`, or `rejected`, with what the server worked out. */
-export type FinishedRun = Pick<
-  GameRun,
-  'status' | 'inputLog' | 'result' | 'score' | 'tiebreak' | 'flags' | 'profile'
-> & {
+/** How a run ends: `scored` or `rejected`, with what the server worked out. */
+export type FinishedRun = Pick<GameRun, 'inputLog' | 'result' | 'score' | 'tiebreak' | 'flags'> & {
+  status: 'scored' | 'rejected'
   submittedAt: string
+}
+
+/** Where a page of a board's runs starts: after this run, newest first. */
+export interface RunCursor {
+  issuedAt: string
+  id: string
 }
 
 export interface BoardKey {
@@ -71,23 +72,27 @@ export interface BoardKey {
   season: string
 }
 
-/** A name waits for the admin before anyone else reads it. */
-export type NameStatus = 'pending' | 'approved' | 'rejected'
-/** `pending` hides a record only among the statues (`publishedPlaces`); `disqualified` takes it off the board. */
-export type ReviewStatus = 'pending' | 'approved' | 'disqualified'
-/** `pending` until the admin sees the code on the profile; `reported` once someone said the profile is theirs. */
-export type LinkedInStatus = 'pending' | 'approved' | 'reported'
+/** A name shows at once; `rejected` is one the name check refused or the admin took off. */
+export type NameStatus = 'shown' | 'rejected'
+/**
+ * `unverified` until the visitor signs in with LinkedIn (`linkVerification.ts`); `reported` once someone said the
+ * profile is theirs, which hides the link until the admin decides.
+ */
+export type LinkedInStatus = 'unverified' | 'verified' | 'reported'
 
-/** A record's optional LinkedIn link, which only its statue shows, and only once approved. */
+/** A record's optional LinkedIn link, which only its statue shows, and only once verified. */
 export interface EntryLinkedIn {
   /** `https://www.linkedin.com/in/<id>`, the id percent-encoded. */
   profileUrl: string
   status: LinkedInStatus
-  /** What the visitor puts on the profile for the admin to see (`ownershipCode`). */
-  code: string
+  /**
+   * The display name of the LinkedIn account that signed in, for the admin to compare with the address; nothing else
+   * of that account is kept. `null` before sign-in, and on a link the admin confirmed before sign-in existed.
+   */
+  verifiedName: string | null
 }
 
-/** A visitor's best accepted run on one board, and how it is shown. */
+/** A visitor's best scored run on one board, and how it is shown. */
 export interface LeaderboardEntry {
   id: string
   game: string
@@ -111,7 +116,8 @@ export interface LeaderboardEntry {
   appearancePublic: boolean
   /** Whether the visitor put the record on the public board. */
   listed: boolean
-  reviewStatus: ReviewStatus
+  /** The admin took the record off its board; the visitor's later runs on that board stay off too. */
+  disqualified: boolean
   /** Only on a listed record, in any season, while its visitor keeps it on. */
   linkedIn: EntryLinkedIn | null
   /** Anonymised on a takedown request: on this board it never shows a name, link, or appearance again. */
@@ -129,7 +135,7 @@ export type EntryChanges = Pick<
   | 'appearance'
   | 'appearancePublic'
   | 'listed'
-  | 'reviewStatus'
+  | 'disqualified'
   | 'linkedIn'
   | 'takedown'
   | 'updatedAt'
@@ -151,12 +157,6 @@ export interface PastEntryUpdate {
   linkedInOff: boolean
 }
 
-/** The new name's status, decided before the change (`leaderboardNameStatus`), and a code in case a link is new. */
-export interface OwnEntryDecisions {
-  nameStatus: NameStatus
-  linkedInCode: string
-}
-
 /** Who a run's result says played it: an appearance, and a name when the tab had one. */
 export interface RunProfile {
   name: string | null
@@ -174,9 +174,7 @@ export interface BoardCandidate {
   achievedAt: string
   profile: RunProfile
   /** What the profile's name gets if the record is new and listed (`leaderboardNameStatus`). */
-  nameStatus: Extract<NameStatus, 'pending' | 'rejected'>
-  /** A run the admin accepted enters `approved`, since they have seen it; any other enters `pending`. */
-  reviewStatus: Extract<ReviewStatus, 'pending' | 'approved'>
+  nameStatus: NameStatus
 }
 
 /** What a scored run does to its visitor's record. */
@@ -202,13 +200,12 @@ export interface RankedRecord {
 
 /** The visitor's view of how a run went. */
 export type RunStanding =
-  | { kind: 'reviewing' }
   | { kind: 'excluded' }
   | { kind: 'ranked'; rank: number; personalBest: boolean }
   | { kind: 'unlisted' | 'consentNeeded'; wouldBeRank: number; personalBest: boolean }
 
 /** How the public reads a record's name. */
-export type PublicNameState = 'approved' | 'reviewing' | 'anonymous'
+export type PublicNameState = 'shown' | 'anonymous'
 
 /** A run's seed: any 32-bit unsigned integer. */
 export function randomRunSeed(): number {
@@ -234,62 +231,9 @@ export function textOrder(left: string, right: string): number {
   return left < right ? -1 : 1
 }
 
-/**
- * In the public order: listed and not disqualified. Such a record holds its place, though a place among the statues
- * is shown only once it is approved (`publishedPlaces`).
- */
+/** In the public order, where anyone sees it at its place: listed and not disqualified. */
 export function isPublicEntry(entry: LeaderboardEntry): boolean {
-  return entry.listed && entry.reviewStatus !== 'disqualified'
-}
-
-/** The place `place` would take among the records in the public order, the visitor's own record aside. */
-export function wouldBePlace(
-  publicEntries: readonly LeaderboardEntry[],
-  place: BoardPlace,
-  visitorHash: string,
-): number {
-  return publicEntries.filter((entry) => entry.visitorHash !== visitorHash && boardOrder(entry, place) < 0).length + 1
-}
-
-/**
- * Whether a record at `rank` waits for the admin before anyone else sees it there: a place among the statues takes
- * approval, however the record came to it. Whether the record is listed is left out on purpose, so the visitor of an
- * unlisted one is told before listing it.
- */
-export function awaitsApproval(entry: LeaderboardEntry, rank: number): boolean {
-  return rank <= statueCount && entry.reviewStatus === 'pending'
-}
-
-/**
- * What everyone may see of a board, and the one place that decides it: the board, the statues, the hall of fame, and
- * a run's standing all read this. `publicEntries` is the top of the public order (`isPublicEntry`, best first). A
- * record keeps its place, but one among the statues that the admin has not approved is left out, and its place stays
- * empty rather than pass to the next record: that record would lose the statue again on approval, and a finished
- * season would have shown a champion it never had. So no path to the first three goes around the admin, neither a
- * record listed later nor one that moved up when a record above it was deleted, disqualified, unlisted, or changed.
- */
-export function publishedPlaces(publicEntries: readonly LeaderboardEntry[]): RankedRecord[] {
-  return publicEntries
-    .map((entry, index) => ({ entry, rank: index + 1 }))
-    .filter(({ entry, rank }) => !awaitsApproval(entry, rank))
-}
-
-/**
- * Whether a run nothing else holds must still wait for the admin (`podiumPlaceFlag`): it would become its visitor's
- * record and place among the statues. `top` is the top of the public order, at least one more than the statues, so
- * the visitor's own record can be set aside. Whether the record is or would be listed plays no part, so a result
- * cannot be scored unlisted and listed afterwards. An approved record the run would improve keeps standing until the
- * run is accepted. A disqualified visitor's run changes nothing anyone sees, so it is not held.
- */
-export function wouldTakePodium(
-  place: BoardPlace,
-  current: LeaderboardEntry | null,
-  top: readonly LeaderboardEntry[],
-  visitorHash: string,
-): boolean {
-  if (current?.reviewStatus === 'disqualified') return false
-  if (current && boardOrder(current, place) < 0) return false
-  return wouldBePlace(top, place, visitorHash) <= statueCount
+  return entry.listed && !entry.disqualified
 }
 
 /** A record's version after a change at `now`: always later than `previous`, even within the same millisecond. */
@@ -305,7 +249,7 @@ export function entryChanges(entry: LeaderboardEntry, changes: Partial<EntryChan
     appearance: entry.appearance,
     appearancePublic: entry.appearancePublic,
     listed: entry.listed,
-    reviewStatus: entry.reviewStatus,
+    disqualified: entry.disqualified,
     linkedIn: entry.linkedIn,
     takedown: entry.takedown,
     ...changes,
@@ -377,7 +321,7 @@ export function firstEntry(
       appearance: candidate.profile.appearance,
       appearancePublic: true,
       listed,
-      reviewStatus: candidate.reviewStatus,
+      disqualified: false,
       linkedIn: null,
       takedown: false,
       createdAt: candidate.achievedAt,
@@ -389,8 +333,8 @@ export function firstEntry(
 }
 
 /**
- * A better run replaces the record and returns it to review, though a disqualification stays; an equal one keeps the
- * earlier record. A run that looks like someone else's takes a listed record off the board with its name and link, so
+ * A better run replaces the record, though a disqualification stays, so a removed visitor's replay on that board does
+ * not put them back; an equal one keeps the earlier record. A run that looks like someone else's takes a listed record off the board with its name and link, so
  * a shared browser never publishes the next player's score under the last one's consent.
  */
 export function revisedEntry(candidate: BoardCandidate, current: LeaderboardEntry): EntrySettlement {
@@ -406,7 +350,6 @@ export function revisedEntry(candidate: BoardCandidate, current: LeaderboardEntr
         result: candidate.result,
         achievedAt: candidate.achievedAt,
         appearance: candidate.profile.appearance,
-        reviewStatus: current.reviewStatus === 'disqualified' ? current.reviewStatus : candidate.reviewStatus,
       }
     : {}
   return {
@@ -455,30 +398,26 @@ export function parsePastEntryUpdate(input: Record<string, unknown>): PastEntryU
 
 /**
  * The visitor's change to this week's record: a listed record shows the profile's name, an unlisted one keeps none
- * and no link. A new name gets its checked status while the record's own name keeps its status, a new appearance
- * returns the record to review, so a statue leaves its place empty until the admin has seen the new look, and a
- * taken-down record stays nameless.
+ * and no link. A new name gets its checked status (`newNameStatus`) while the record's own name keeps its status, and
+ * a taken-down record stays nameless.
  */
 export function ownEntryChanges(
   entry: LeaderboardEntry,
   update: OwnEntryUpdate,
   now: string,
-  decisions: OwnEntryDecisions,
+  newNameStatus: NameStatus,
 ): EntryChanges {
   const listed = update.listed ?? entry.listed
-  const appearance = update.profile?.appearance ?? entry.appearance
   const named = listed && !entry.takedown
   const authorName = named ? (update.profile ? update.profile.name : entry.authorName) : null
-  const appearanceChanged = !isDeepStrictEqual(appearance, entry.appearance)
   return entryChanges(
     entry,
     {
       listed,
       authorName,
-      nameStatus: nameStatusFor(entry, authorName, decisions.nameStatus),
-      appearance,
-      linkedIn: ownLinkedIn(entry, update.linkedIn, listed, decisions.linkedInCode),
-      reviewStatus: appearanceChanged && entry.reviewStatus !== 'disqualified' ? 'pending' : entry.reviewStatus,
+      nameStatus: nameStatusFor(entry, authorName, newNameStatus),
+      appearance: update.profile?.appearance ?? entry.appearance,
+      linkedIn: ownLinkedIn(entry, update.linkedIn, listed),
     },
     now,
   )
@@ -495,21 +434,17 @@ export function nameStatusFor(
 }
 
 /**
- * The link stays unless the visitor turns it off or unlists the record. A new address waits for the admin with a new
- * code; sending a reported address again gets a new code but stays hidden until the admin sees that code.
+ * The link stays unless the visitor turns it off or unlists the record. A new address is stored `unverified`, which
+ * nobody else sees until the visitor signs in with LinkedIn; the address the record already has keeps its state.
  */
 export function ownLinkedIn(
   entry: LeaderboardEntry,
   requested: LinkedInLink | null | undefined,
   listed: boolean,
-  freshCode: string,
 ): EntryLinkedIn | null {
   if (!listed || requested === null) return null
-  if (requested === undefined) return entry.linkedIn
-  const current = entry.linkedIn
-  const sameAddress = current !== null && current.profileUrl === requested.profileUrl
-  if (sameAddress && current.status !== 'reported') return current
-  return { profileUrl: requested.profileUrl, status: sameAddress ? 'reported' : 'pending', code: freshCode }
+  if (requested === undefined || requested.profileUrl === entry.linkedIn?.profileUrl) return entry.linkedIn
+  return { profileUrl: requested.profileUrl, status: 'unverified', verifiedName: null }
 }
 
 /** Anonymising a past record drops its name and link; the score keeps its place. */
@@ -518,32 +453,21 @@ export function pastEntryChanges(entry: LeaderboardEntry, update: PastEntryUpdat
   return entryChanges(entry, { ...anonymized, linkedIn: null }, now)
 }
 
-/**
- * A run held for review leaves the record as it was; a disqualified record is off this board whatever the run did. A
- * listed record waiting for approval among the statues is answered like a held run, since nobody else sees it yet.
- */
-export function runStanding(
-  run: GameRun,
-  entry: LeaderboardEntry | null,
-  rank: number,
-  consentNeeded: boolean,
-): RunStanding {
-  if (run.status !== 'scored' || !entry) return { kind: 'reviewing' }
-  if (entry.reviewStatus === 'disqualified') return { kind: 'excluded' }
-  if (entry.listed && awaitsApproval(entry, rank)) return { kind: 'reviewing' }
-  const personalBest = entry.bestRunId === run.id
+/** How the run left its visitor: a disqualified record is off this board whatever the run did. */
+export function runStanding(runId: string, entry: LeaderboardEntry, rank: number, consentNeeded: boolean): RunStanding {
+  if (entry.disqualified) return { kind: 'excluded' }
+  const personalBest = entry.bestRunId === runId
   if (entry.listed) return { kind: 'ranked', rank, personalBest }
   return { kind: consentNeeded ? 'consentNeeded' : 'unlisted', wouldBeRank: rank, personalBest }
 }
 
-/** Names show once approved; a record without one, or with a rejected one, is an anonymous batter. */
+/** A name shows unless it was refused or taken off; a record without one is an anonymous batter. */
 export function publicNameState(entry: LeaderboardEntry): PublicNameState {
-  if (entry.authorName === null || entry.nameStatus === 'rejected') return 'anonymous'
-  return entry.nameStatus === 'approved' ? 'approved' : 'reviewing'
+  return entry.authorName !== null && entry.nameStatus === 'shown' ? 'shown' : 'anonymous'
 }
 
 /**
- * A record as anyone sees it: no visitor hash, review state, or exact time. An anonymous batter keeps their score but
+ * A record as anyone sees it: no visitor hash, admin state, or exact time. An anonymous batter keeps their score but
  * shows the default silhouette, since a character can be recognized without a name, and so does a hidden appearance.
  */
 export function rankedEntry(entry: LeaderboardEntry, rank: number) {
@@ -552,7 +476,7 @@ export function rankedEntry(entry: LeaderboardEntry, rank: number) {
   return {
     id: entry.id,
     rank,
-    name: nameState === 'approved' ? entry.authorName : null,
+    name: nameState === 'shown' ? entry.authorName : null,
     nameState,
     profile: silhouette ? { kind: 'default' as const } : entry.appearance,
     homeRuns: entry.score,
@@ -561,19 +485,17 @@ export function rankedEntry(entry: LeaderboardEntry, rank: number) {
   }
 }
 
-/** A statue, this week's or a past season's: a public record with its LinkedIn link once the admin approved it. */
+/** A statue, this week's or a past season's: a public record with its LinkedIn link once its visitor signed in. */
 export function podiumEntry(entry: LeaderboardEntry, rank: number) {
-  const linkedIn = entry.linkedIn?.status === 'approved' ? { linkedInProfileUrl: entry.linkedIn.profileUrl } : {}
+  const linkedIn = entry.linkedIn?.status === 'verified' ? { linkedInProfileUrl: entry.linkedIn.profileUrl } : {}
   return { ...rankedEntry(entry, rank), ...linkedIn }
 }
 
 /**
- * The visitor's own record: the real name and its status, its place or the place it would have if listed, whether
- * that place waits for the admin's approval before anyone else sees it (`awaitsApproval`), and its link by a hint
- * only, since the next person on a shared device sees this too.
+ * The visitor's own record: the real name and its status, its place or the place it would have if listed, and its
+ * link by a hint only, since the next person on a shared device sees this too.
  */
 export function ownEntry(entry: LeaderboardEntry, rank: number) {
-  const disqualified = entry.reviewStatus === 'disqualified'
   const linkedIn = entry.linkedIn
   return {
     id: entry.id,
@@ -581,20 +503,15 @@ export function ownEntry(entry: LeaderboardEntry, rank: number) {
     listed: entry.listed,
     name: entry.authorName,
     nameStatus: entry.nameStatus,
-    disqualified,
+    disqualified: entry.disqualified,
     profile: entry.takedown ? { kind: 'default' as const } : entry.appearance,
     appearancePublic: entry.appearancePublic,
     takedown: entry.takedown,
-    linkedIn: linkedIn && {
-      profileHint: profileHint(linkedIn.profileUrl),
-      status: linkedIn.status,
-      code: linkedIn.code,
-    },
+    linkedIn: linkedIn && { profileHint: profileHint(linkedIn.profileUrl), status: linkedIn.status },
     homeRuns: entry.score,
     totalDistanceDm: entry.tiebreak,
     achievedAt: entry.achievedAt,
-    rank: disqualified ? null : rank,
-    awaitingApproval: awaitsApproval(entry, rank),
+    rank: entry.disqualified ? null : rank,
   }
 }
 
@@ -606,4 +523,19 @@ export function seasonView(season: string, currentSeason: string) {
     endsAt: new Date(rankingWeekStart(nextRankingWeek(season))).toISOString(),
     final: season < currentSeason,
   }
+}
+
+/** Until when a record of `season` whose best run arrived late may still be listed. */
+export function lateListingDeadline(season: string): number {
+  return rankingWeekStart(nextRankingWeek(season)) + lateListingMs
+}
+
+/**
+ * Whether a past season's record still takes its visitor's listing like this week's: its best run, issued in the
+ * season, arrived only after the season ended, so the visitor never had the chance. Only for a week; then that board
+ * is final.
+ */
+export function listableAfterSeason(bestRun: GameRun | null, now: number): boolean {
+  if (!bestRun?.submittedAt || now >= lateListingDeadline(bestRun.season)) return false
+  return Date.parse(bestRun.submittedAt) >= rankingWeekStart(nextRankingWeek(bestRun.season))
 }

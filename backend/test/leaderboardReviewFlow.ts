@@ -1,19 +1,19 @@
 import { isDeepStrictEqual } from 'node:util'
 import {
-  dismissedRunsLimit,
   DomainError,
   forgetQuietReporters,
   hashToken,
   leaderboardLinkedInUrl,
   leaderboardNameStatus,
   MemoryStore,
-  overlapWarnings,
   parseTownLayout,
   rankingWeek,
   rankingWeekStart,
   reservedNameForms,
-  warnedRecordsLimit,
   type EntryReviewAction,
+  type GameRun,
+  type LinkedInOidcAdapter,
+  type VerifiedLinkedInIdentity,
 } from '../src/index.js'
 import {
   adminActor,
@@ -30,18 +30,32 @@ import { sampleTownLayout } from './townFlow.js'
 
 type ReviewedEntry = {
   id: string
+  visitor: string
   rank: number | null
   updatedAt: string
   name: string | null
-  reviewStatus: string
-  linkedIn: { profileUrl: string; status: string; code: string } | null
+  nameStatus: string | null
+  disqualified: boolean
+  listed: boolean
+  profile: object | null
+  linkedIn: { profileUrl: string; status: string; verifiedName: string | null } | null
+  reports: Array<{ target: string; count: number; mine: boolean }>
 }
-type ReviewItem = {
-  kind: string
-  entry: ReviewedEntry | null
-  reports: Array<{ target: string }>
-  warnings: Array<{ kind: string }>
-  runs: Array<{ id: string; wouldBeRank: number; result: { pitches: Array<{ power: number | null }> } | null }>
+type ReviewedRun = {
+  id: string
+  visitor: string
+  status: string
+  flags: string[]
+  best: boolean
+  homeRuns: number | null
+  result: { pitches: Array<{ power: number | null }> } | null
+}
+type Plays = {
+  season: string
+  runs: ReviewedRun[]
+  records: ReviewedEntry[]
+  reported: ReviewedEntry[]
+  nextCursor: string | null
 }
 type PublicEntry = {
   id: string
@@ -51,19 +65,31 @@ type PublicEntry = {
   linkedInProfileUrl?: string
   rank?: number
 }
-type OwnEntry = { linkedIn: { profileHint: string; status: string; code: string } | null; name: string | null }
+type OwnEntry = { linkedIn: { profileHint: string; status: string } | null; name: string | null }
 
+const origin = 'https://town.example'
 const seed = 404
 const cookieOf = (token: string) => `__Host-tom_visitor=${token}`
 const linkOf = (id: string) => ({ profileUrl: `https://linkedin.com/in/${id}?trk=public`, ownProfile: true })
+/** What LinkedIn says of the account that signs in: everything but the display name must stay out of storage. */
+const linkedInAccount: VerifiedLinkedInIdentity = {
+  issuer: 'https://www.linkedin.com',
+  subject: 'visitor-linkedin-subject',
+  displayName: '  Sprout \n  Sample ',
+  email: 'sprout@mail.example',
+  emailVerified: true,
+  pictureUrl: 'https://media.example/sprout-portrait.jpg',
+}
+const linkedInOidc: LinkedInOidcAdapter = {
+  createAuthorizationUrl: (input) =>
+    new URL(`https://www.linkedin.com/oauth/v2/authorization?state=${input.state}&scope=${input.scopes.join('+')}`),
+  exchangeAndVerify: async () => linkedInAccount,
+}
 
-/**
- * A store with the ballpark open, an admin and a member signed in, and helpers to play, list, and review. `play`
- * accepts a run held only for its place among the statues, so the checks start from records the admin approved.
- */
+/** A store with the ballpark open, LinkedIn configured, an admin and a member signed in, and helpers to play and act. */
 async function reviewHarness() {
-  const harness = leaderboardHarness()
-  const { store, send, setBallpark } = harness
+  const harness = leaderboardHarness(linkedInOidc)
+  const { store, service, send, setBallpark } = harness
   await setBallpark({ visible: true, rules: fiveNormal })
   await store.seedAdminEmails(['review-admin@example.com'])
   const admin = await signedIn(store, 'review-admin')
@@ -72,13 +98,15 @@ async function reviewHarness() {
 
   const own = (token: string, body: unknown, week?: string) =>
     send('PUT', `/v1/games/${game}/entries/own${week ? `?season=${week}` : ''}`, { body, cookie: cookieOf(token) })
-  const act = (path: string, body: unknown, method = 'POST') =>
-    send(method, `/v1/admin/games/${game}/${path}`, { body, cookie: admin })
   const entryOf = async (token: string, week = season) =>
     store.getBoardEntryByVisitor({ game, season: week }, await hashToken(token))
-  async function review(): Promise<ReviewItem[]> {
-    const response = await send('GET', `/v1/admin/games/${game}/review`, { cookie: admin })
-    return ((await response.json()) as { items: ReviewItem[] }).items
+  /** An admin's action on the visitor's record, from the version it has now. */
+  async function act(token: string, path: string, body: object = {}, method = 'POST') {
+    const entry = await entryOf(token)
+    return send(method, `/v1/admin/games/${game}/entries/${entry?.id}/${path}`, {
+      body: { updatedAt: entry?.updatedAt, ...body },
+      cookie: admin,
+    })
   }
   async function podium(): Promise<PublicEntry[]> {
     return ((await (await send('GET', `/v1/games/${game}/podium`)).json()) as { podium: PublicEntry[] }).podium
@@ -87,12 +115,54 @@ async function reviewHarness() {
     const response = await send('GET', `/v1/games/${game}/leaderboard?season=${week}`)
     return (await response.json()) as { podium: PublicEntry[]; ranks: PublicEntry[] }
   }
-  /** Approves the record's link as the admin who saw its code on the profile. */
-  async function verifyLink(token: string) {
-    const entry = await entryOf(token)
-    return act(`entries/${entry?.id}/linkedin-review`, { updatedAt: entry?.updatedAt, decision: 'code-verified' })
+  const report = async (token: string, target: string, body: object) =>
+    send('POST', `/v1/games/${game}/entries/${(await entryOf(target))?.id}/report`, { body, cookie: cookieOf(token) })
+  /** Starts the visitor's LinkedIn sign-in: the state LinkedIn would send back and the cookies of the browser. */
+  async function startSignIn(token: string) {
+    const response = await send('POST', `/v1/games/${game}/entries/own/linkedin-verification`, {
+      cookie: cookieOf(token),
+    })
+    const body = (await response.json()) as { authorizationUrl?: string }
+    const authorization = new URL(body.authorizationUrl ?? 'https://none.example')
+    const linkCookie = response.headers.get('Set-Cookie')?.split(';')[0] ?? ''
+    return {
+      response,
+      authorization,
+      state: authorization.searchParams.get('state') ?? '',
+      cookies: `${cookieOf(token)}; ${linkCookie}`,
+    }
   }
-  return { ...harness, admin, member, season, own, act, entryOf, review, podium, board, verifyLink }
+  /** The browser coming back from LinkedIn, as a top-level navigation: no `Origin`. */
+  const callback = (state: string, cookie: string) =>
+    send('GET', `/v1/auth/linkedin/callback?state=${state}&code=code`, { cookie, origin: null })
+  /** Signs the visitor in for their record's link, as one who finished the round trip. */
+  async function verifyLink(token: string) {
+    const started = await startSignIn(token)
+    return callback(started.state, started.cookies)
+  }
+  /** Plays, lists under `name`, and returns the record. */
+  async function stand(token: string, errorsMs: Array<number | null>, name: string) {
+    const named = { ...profile, name }
+    await harness.play(token, errorsMs, { profile: named })
+    await service.updateOwnEntry(game, await hashToken(token), { listed: true, profile: named })
+    return entryOf(token)
+  }
+  return {
+    ...harness,
+    admin,
+    member,
+    season,
+    own,
+    act,
+    entryOf,
+    podium,
+    board,
+    report,
+    startSignIn,
+    callback,
+    verifyLink,
+    stand,
+  }
 }
 
 async function signedIn(store: MemoryStore, subject: string): Promise<string> {
@@ -110,22 +180,21 @@ async function signedIn(store: MemoryStore, subject: string): Promise<string> {
 }
 
 /**
- * The admin's review of the weekly board: a queue led by the statues' places, actions that only apply to the
- * version the admin read, links that show on statues only once their code is seen, reports, takedowns, and deletion.
+ * The admin's side of the weekly board, where nothing waits for approval: a list of who played, actions that only
+ * apply to the version the admin read, a link that shows once its visitor signs in with LinkedIn, reports, takedowns,
+ * and deletion.
  */
 export async function checkLeaderboardReviewFlow(assert: Assert): Promise<void> {
   checkIdentityRules(assert)
   checkReportCounter(assert)
-  await checkReviewActions(assert)
-  await checkBoardRecords(assert)
-  await checkRecordWarnings(assert)
-  await checkListedDismissal(assert)
-  await checkTakenDownReadBack(assert)
+  await checkRecordActions(assert)
+  await checkLinkVerification(assert)
+  await checkLinkReports(assert)
+  await checkPlaysList(assert)
   await checkTakedownAndErasure(assert)
   await checkPastSeason(assert)
   await checkHallOfFame(assert)
   await checkVisitorForget(assert)
-  await checkTownLinkWarning(assert)
 }
 
 /** Names that pass for the town or a contact, and link ids that hide something, never reach the board. */
@@ -134,13 +203,13 @@ function checkIdentityRules(assert: Assert): void {
   const rejected = [
     ['로 빈', "the owner's Korean name, spaced"],
     ['ROBIN', "the owner's name in capitals"],
-    ['R\u041EBIN', "the owner's name with a Cyrillic O (U+041E)"],
+    ['RОBIN', "the owner's name with a Cyrillic O (U+041E)"],
     ['Maple Fan', "a name containing a resident's"],
     ['Official Sprout', 'a name passing for the site'],
-    ['JUNIPER', "another visitor's approved name"],
-    ['\u1160', 'a Hangul filler alone'],
-    ['Sp\u202Erout', 'a direction override'],
-    ['x\u0301\u0302\u0303', 'stacked combining marks'],
+    ['JUNIPER', "another visitor's shown name"],
+    ['ᅠ', 'a Hangul filler alone'],
+    ['Sp‮rout', 'a direction override'],
+    ['x́̂̃', 'stacked combining marks'],
     ['call 010 1234 5678', 'a phone number, spaced'],
     ['sprout.com', 'a domain'],
     ['@sprout', 'a handle'],
@@ -150,8 +219,8 @@ function checkIdentityRules(assert: Assert): void {
     assert(leaderboardNameStatus(name, context) === 'rejected', `${label} is rejected as a board name`)
   }
   assert(
-    leaderboardNameStatus('Sprout', context) === 'pending' && leaderboardNameStatus('새싹 🌱', context) === 'pending',
-    'an ordinary name waits for approval',
+    leaderboardNameStatus('Sprout', context) === 'shown' && leaderboardNameStatus('새싹 🌱', context) === 'shown',
+    'an ordinary name shows at once',
   )
 
   for (const id of ['%2F', '%2E%2E', 'sprout%E2%80%AE', '%zz', 'ab', 'sprout_sample', 'www-sprout']) {
@@ -189,240 +258,471 @@ function rejectionOf(action: () => unknown): unknown {
   }
 }
 
-async function checkReviewActions(assert: Assert): Promise<void> {
-  const { store, service, send, admin, member, play, own, act, entryOf, review, podium, board, verifyLink } =
-    await reviewHarness()
-  const reviewPath = `/v1/admin/games/${game}/review`
-  assert((await send('GET', reviewPath)).status === 401, 'the review queue needs a signed-in admin')
-  assert((await send('GET', reviewPath, { cookie: member })).status === 403, 'a member cannot read the review queue')
+/** What the admin does to a record afterwards: only an admin, only from the version read, and shown at once. */
+async function checkRecordActions(assert: Assert): Promise<void> {
+  const { store, service, send, admin, member, play, act, entryOf, podium, report, stand } = await reviewHarness()
+  const leader = await stand('action-leader', [12, -21, null, 33, -27], 'Sprout')
+  await stand('action-second', [12, -21, null, 33, null], 'Pebble')
+  const path = `/v1/admin/games/${game}/entries/${leader?.id}/name`
+  const hide = { updatedAt: leader?.updatedAt, public: false }
   assert(
-    (await send('GET', '/v1/admin/games/ballpark/review', { cookie: admin })).status === 404,
-    'an unknown game has no review queue',
-  )
-
-  const players: Array<[string, Array<number | null>, string]> = [
-    ['review-four', [12, -21, null, 33, -27], 'Sprout'],
-    ['review-three', [12, -21, null, 33, null], 'Pebble'],
-    ['review-two', [12, null, null, 33, null], 'Clover'],
-    ['review-held', [12, null, null, null, null], 'Juniper'],
-  ]
-  for (const [token, errorsMs, name] of players) {
-    await play(token, errorsMs, { profile: { ...profile, name } })
-    await own(token, { listed: true, profile: { ...profile, name } })
-  }
-  const strongProfile = { ...profile, name: 'Juniper' }
-  const held = await play('review-held', [12, -21, -8, 33, -27], {
-    claimed: { homeRuns: 0, totalDistanceDm: 0 },
-    profile: strongProfile,
-  })
-  assert(held.standing.kind === 'reviewing', 'a strong run with claimed totals the server does not reach is held')
-
-  const leader = await entryOf('review-four')
-  const statue = { updatedAt: leader?.updatedAt }
-  const stale = { updatedAt: '2000-01-01T00:00:00.000Z' }
-  assert(
-    (await send('POST', `/v1/admin/games/${game}/entries/${leader?.id}/approval`, { body: statue, cookie: member }))
-      .status === 403 &&
-      (
-        await send('POST', `/v1/admin/games/${game}/entries/${leader?.id}/approval`, {
-          body: statue,
-          origin: null,
-          cookie: admin,
-        })
-      ).status === 403,
-    'a member cannot act on a record, nor an admin from a page without an allowed origin',
-  )
-
-  const queue = await review()
-  assert(
-    queue.map(({ kind, entry }) => `${kind}:${entry?.rank}`).join() === 'statue:1,statue:2,statue:3,statue-run:4',
-    'the queue starts with the statues whose names wait, then the held run that would stand',
-  )
-  const heldItem = queue[3]
-  assert(
-    heldItem?.runs.length === 1 &&
-      heldItem.runs[0]?.wouldBeRank === 1 &&
-      heldItem.runs[0].result?.pitches.every((pitch) => pitch.power === null || pitch.power > 0),
-    'a held run shows the admin its would-be place and the power the visitor never sees',
-  )
-
-  assert(
-    (await act(`entries/${leader?.id}/approval`, { ...stale, name: 'approve' })).status === 409,
-    'an approval of a version that is no longer current changes nothing',
-  )
-  assert(
-    (await act(`entries/${leader?.id}/approval`, { ...statue, name: 'approve' })).status === 200 &&
+    (await send('POST', path, { body: hide })).status === 401 &&
+      (await send('POST', path, { body: hide, cookie: member })).status === 403 &&
+      (await send('POST', path, { body: hide, cookie: admin, origin: null })).status === 403 &&
       (await podium())[0]?.name === 'Sprout',
-    'approving a statue and its name shows the name at once',
+    'only an admin acts on a record, and only from a page with an allowed origin',
+  )
+  assert(
+    (await act('action-leader', 'name', { updatedAt: '2000-01-01T00:00:00.000Z', public: false })).status === 409 &&
+      (await act('action-leader', 'name', { public: 'no' })).status === 400 &&
+      (await podium())[0]?.name === 'Sprout',
+    'an action on a version that is no longer current, or a malformed one, changes nothing',
+  )
+  const hidden = await act('action-leader', 'name', { public: false })
+  const answered = ((await hidden.json()) as { entry: ReviewedEntry }).entry
+  const anonymous = (await podium())[0]
+  assert(
+    hidden.status === 200 &&
+      answered.name === 'Sprout' &&
+      answered.nameStatus === 'rejected' &&
+      answered.rank === 1 &&
+      anonymous?.id === leader?.id &&
+      anonymous?.name === null &&
+      anonymous.profile.kind === 'default',
+    'taking a name off leaves an anonymous batter on the same place, and the admin still reads the name',
+  )
+  await act('action-leader', 'name', { public: true })
+  await act('action-leader', 'appearance', { public: false })
+  const named = (await podium())[0]
+  assert(
+    named?.name === 'Sprout' && named.profile.kind === 'default',
+    'the admin puts a name back, and hides a character while the name stays',
   )
 
-  const linked = await own('review-four', { linkedIn: linkOf('sprout-sample') })
-  const linkedEntry = ((await linked.json()) as { entry: OwnEntry }).entry
-  assert(
-    linked.status === 200 &&
-      linkedEntry.linkedIn?.status === 'pending' &&
-      /^TOM-[0-9A-HJKMNP-TV-Z]{4}$/u.test(linkedEntry.linkedIn.code) &&
-      linkedEntry.linkedIn.profileHint === 'linkedin.com/in/sp•••',
-    'turning a link on gives an ownership code and shows its owner only a hint of the address',
-  )
-  assert(
-    (await podium())[0]?.linkedInProfileUrl === undefined &&
-      (await review()).find((item) => item.entry?.id === leader?.id)?.kind === 'linkedin',
-    "a statue's link stays hidden and waits in the queue until the admin sees its code",
-  )
-  assert((await verifyLink('review-four')).status === 200, 'the admin approves a link after seeing its code')
-  assert(
-    (await podium())[0]?.linkedInProfileUrl === 'https://www.linkedin.com/in/sprout-sample',
-    'an approved link shows on its statue',
-  )
-  await own('review-held', { linkedIn: linkOf('juniper-sample') })
-  await verifyLink('review-held')
-  const listedBoard = await board()
-  assert(
-    listedBoard.ranks.length === 1 && !JSON.stringify(listedBoard.ranks).includes('juniper-sample'),
-    'an approved link shows on statues only, never on the places below them',
-  )
-
-  await play('review-reporter', [12, null, null, null, null])
-  const report = (token: string, body: unknown, entryId = leader?.id) =>
-    send('POST', `/v1/games/${game}/entries/${entryId}/report`, { body, cookie: cookieOf(token) })
-  const unreported = await entryOf('review-four')
-  const lurkerHash = await hashToken('review-lurker')
+  await play('action-reporter', [12, null, null, null, null])
+  const lurkerHash = await hashToken('action-lurker')
   const lurkerRun = await service.issueRun(game, lurkerHash, Date.now(), seed)
   await rejection(() =>
     service.submitRunResult(game, lurkerHash, lurkerRun.id, resultBody(fiveNormal, seed, [10, 10, 10, 10, 10]), true),
   )
-  const ownReport = await report('review-four', { target: 'link', reason: 'mine' })
-  const lurkerReport = await report('review-lurker', { target: 'name' })
+  const unreported = await entryOf('action-second')
+  const ownReport = await report('action-second', 'action-second', { target: 'name' })
+  const lurkerReport = await report('action-lurker', 'action-second', { target: 'name' })
   assert(
-    ownReport.status === 204 &&
-      lurkerReport.status === 204 &&
-      (await entryOf('review-four'))?.updatedAt === unreported?.updatedAt &&
-      store.entryReports.size === 0 &&
-      (await podium())[0]?.linkedInProfileUrl !== undefined,
-    "a report from the record's owner, or from a browser whose only run was refused as too fast, is answered the same and changes nothing",
+    ownReport.status === 204 && lurkerReport.status === 204 && store.entryReports.size === 0,
+    "a report from the record's owner, or from a browser whose only run was refused as too fast, is answered the same and counts for nothing",
   )
-  await report('review-reporter', { target: 'link', reason: 'other' })
+  await report('action-reporter', 'action-second', { target: 'name' })
+  await report('action-reporter', 'action-second', { target: 'character' })
   assert(
-    [...store.entryReports.values()].length === 1 && (await podium())[0]?.linkedInProfileUrl !== undefined,
+    [...store.entryReports.values()].length === 2 &&
+      (await podium())[1]?.name === 'Pebble' &&
+      (await podium())[1]?.profile.kind !== 'default' &&
+      (await entryOf('action-second'))?.updatedAt === unreported?.updatedAt,
+    'a report on a name or a character is stored for the admin and hides nothing',
+  )
+  const resolved = await act('action-second', 'report-resolution', { target: 'name', resolution: 'removed' })
+  const afterResolution = ((await resolved.json()) as { entry: ReviewedEntry }).entry
+  assert(
+    (await podium())[1]?.name === null &&
+      afterResolution.reports.map(({ target }) => target).join() === 'character' &&
+      [...store.entryReports.values()].filter((entry) => entry.resolvedAt === null).length === 1,
+    'removing a reported name takes it off and closes the reports on it, and no others',
+  )
+}
+
+/**
+ * A link is asked with the listing, stored unseen, and made public by its visitor's LinkedIn sign-in, which is tied to
+ * the visitor cookie and the record, used once, and never makes a user or a session.
+ */
+async function checkLinkVerification(assert: Assert): Promise<void> {
+  const unconfigured = leaderboardHarness()
+  await unconfigured.setBallpark({ visible: true, rules: fiveNormal })
+  await unconfigured.play('link-unconfigured', [12, null, null, null, null])
+  const plainListing = { listed: true, profile }
+  const refused = await unconfigured.send('PUT', `/v1/games/${game}/entries/own`, {
+    body: { ...plainListing, linkedIn: linkOf('sprout-sample') },
+    cookie: cookieOf('link-unconfigured'),
+  })
+  const listedWithout = await unconfigured.send('PUT', `/v1/games/${game}/entries/own`, {
+    body: { ...plainListing, linkedIn: null },
+    cookie: cookieOf('link-unconfigured'),
+  })
+  const startedWithout = await unconfigured.send('POST', `/v1/games/${game}/entries/own/linkedin-verification`, {
+    cookie: cookieOf('link-unconfigured'),
+  })
+  const unconfiguredBoard = (await (await unconfigured.send('GET', `/v1/games/${game}/leaderboard`)).json()) as {
+    linkedInAvailable: boolean
+  }
+  assert(
+    unconfiguredBoard.linkedInAvailable === false &&
+      refused.status === 503 &&
+      startedWithout.status === 503 &&
+      listedWithout.status === 200,
+    'without LinkedIn configured the board says a link is unavailable, and a record still lists without one',
+  )
+
+  const { store, service, send, own, entryOf, podium, startSignIn, callback, stand, warnings } = await reviewHarness()
+  await stand('link-owner', [12, -21, null, 33, -27], 'Sprout')
+  await stand('link-other', [12, -21, null, 33, null], 'Pebble')
+  const linked = await own('link-owner', { listed: true, profile: { ...profile, name: 'Sprout' }, ...linkRequest() })
+  const linkedEntry = ((await linked.json()) as { entry: OwnEntry }).entry
+  const configuredBoard = (await (await send('GET', `/v1/games/${game}/leaderboard`)).json()) as {
+    linkedInAvailable: boolean
+  }
+  assert(
+    configuredBoard.linkedInAvailable &&
+      isDeepStrictEqual(linkedEntry.linkedIn, { profileHint: 'linkedin.com/in/sp•••', status: 'unverified' }) &&
+      (await podium())[0]?.linkedInProfileUrl === undefined,
+    'a link sent with the listing is stored but shown to nobody before its visitor signs in, and its owner sees only a hint',
+  )
+
+  const usersBefore = store.users.size
+  const sessionsBefore = store.sessions.size
+  const startPath = `/v1/games/${game}/entries/own/linkedin-verification`
+  assert(
+    (await send('POST', startPath)).status === 404 &&
+      (await send('POST', startPath, { cookie: cookieOf('link-owner'), origin: null })).status === 403 &&
+      (await startSignIn('link-other')).response.status === 409,
+    'a sign-in starts only from an allowed page, for the browser that has a record with a link waiting',
+  )
+  const failed = `${origin}/baseball/ranking?linkedin=failed`
+  const unchanged = async () =>
+    (await entryOf('link-owner'))?.linkedIn?.status === 'unverified' &&
+    (await podium())[0]?.linkedInProfileUrl === undefined
+
+  const wrongState = await startSignIn('link-owner')
+  assert(
+    wrongState.response.status === 200 &&
+      wrongState.state.startsWith('link.') &&
+      wrongState.authorization.searchParams.get('scope') === 'openid profile' &&
+      /^__Host-tom_link=.+; Secure; HttpOnly; SameSite=Lax; Path=\/; Max-Age=600$/u.test(
+        wrongState.response.headers.get('Set-Cookie') ?? '',
+      ),
+    "a sign-in asks LinkedIn for no email and keeps its id in an HttpOnly cookie of its own, apart from the admin sign-in's",
+  )
+  const forged = await callback('link.forged-state', wrongState.cookies)
+  assert(
+    forged.status === 302 && forged.headers.get('Location') === failed && (await unchanged()),
+    'a callback with a state that is not the started one changes nothing',
+  )
+  const usedUp = await callback(wrongState.state, wrongState.cookies)
+  assert(
+    usedUp.headers.get('Location') === failed && (await unchanged()),
+    'a sign-in a failed callback used up cannot be finished afterwards',
+  )
+
+  const stolen = await startSignIn('link-owner')
+  const linkCookie = stolen.cookies.split('; ')[1] ?? ''
+  const otherVisitor = await callback(stolen.state, `${cookieOf('link-other')}; ${linkCookie}`)
+  const cookieless = await startSignIn('link-owner')
+  const noVisitor = await callback(cookieless.state, cookieless.cookies.split('; ')[1] ?? '')
+  assert(
+    otherVisitor.headers.get('Location') === failed &&
+      noVisitor.headers.get('Location') === failed &&
+      (await unchanged()),
+    "a callback from another visitor's browser, or from one without the visitor cookie, changes nothing",
+  )
+
+  const ownerHash = await hashToken('link-owner')
+  const startedAt = Date.now()
+  const slow = await service.beginLinkVerification(linkedInOidc, game, ownerHash, null, startedAt)
+  const slowState = new URL(slow.authorizationUrl).searchParams.get('state') ?? ''
+  const expired = await rejection(() =>
+    service.completeLinkVerification(
+      linkedInOidc,
+      { transactionId: slow.transactionId, state: slowState, code: 'code' },
+      ownerHash,
+      startedAt + 11 * minute,
+    ),
+  )
+  assert(
+    expired instanceof DomainError && expired.code === 'FORBIDDEN' && (await unchanged()),
+    'a callback more than ten minutes after the start changes nothing',
+  )
+
+  const moved = await startSignIn('link-owner')
+  await own('link-owner', linkRequest('sprout-elsewhere'))
+  const movedCallback = await callback(moved.state, moved.cookies)
+  assert(
+    movedCallback.headers.get('Location') === failed &&
+      (await entryOf('link-owner'))?.linkedIn?.status === 'unverified' &&
+      warnings.every((warning) => !warning.includes(linkedInAccount.email ?? 'no email')),
+    'a sign-in started for one address does not verify another the record took meanwhile',
+  )
+  await own('link-owner', linkRequest())
+
+  const valid = await startSignIn('link-owner')
+  const verified = await callback(valid.state, valid.cookies)
+  const setCookies = verified.headers.getSetCookie()
+  assert(
+    verified.status === 302 &&
+      verified.headers.get('Location') === `${origin}/baseball/ranking?linkedin=verified` &&
+      verified.headers.get('Cache-Control') === 'no-store' &&
+      setCookies.length === 1 &&
+      /^__Host-tom_link=; .*Max-Age=0$/u.test(setCookies[0] ?? ''),
+    "a valid callback returns the browser to the board page of the frontend's own origin with only an outcome mark, and clears its cookie",
+  )
+  assert(
+    (await podium())[0]?.linkedInProfileUrl === 'https://www.linkedin.com/in/sprout-sample',
+    'after a valid callback the link is public at once',
+  )
+  const stored = JSON.stringify([...store.leaderboardEntries.values()])
+  assert(
+    isDeepStrictEqual((await entryOf('link-owner'))?.linkedIn, {
+      profileUrl: 'https://www.linkedin.com/in/sprout-sample',
+      status: 'verified',
+      verifiedName: 'Sprout Sample',
+    }) &&
+      !stored.includes(linkedInAccount.subject) &&
+      !stored.includes('mail.example') &&
+      !stored.includes('media.example'),
+    "only the signed-in account's display name is stored on the record: no subject, email, or picture",
+  )
+  assert(
+    store.users.size === usersBefore && store.sessions.size === sessionsBefore && store.linkVerifications.size === 0,
+    'a link sign-in makes no user and no session, and leaves no verification behind',
+  )
+  const replayed = await callback(valid.state, valid.cookies)
+  assert(
+    replayed.headers.get('Location') === failed &&
+      (await startSignIn('link-owner')).response.status === 409 &&
+      (await entryOf('link-owner'))?.linkedIn?.status === 'verified',
+    'a callback sent again does nothing, and a verified link starts no new sign-in',
+  )
+  const belowStatues = await send('GET', `/v1/games/${game}/leaderboard`, { cookie: cookieOf('link-owner') })
+  assert(
+    !(await belowStatues.text()).includes('Sprout Sample'),
+    "the display name is for the admin only: neither the board nor the record's own view carries it",
+  )
+}
+
+function linkRequest(id = 'sprout-sample') {
+  return { linkedIn: linkOf(id) }
+}
+
+/**
+ * A profile owner's report hides a link at once, and nothing its record's visitor does brings it back before the admin
+ * decides; the admin restores it, or takes it down and blocks it.
+ */
+async function checkLinkReports(assert: Assert): Promise<void> {
+  const { store, play, own, act, entryOf, podium, report, startSignIn, verifyLink, stand } = await reviewHarness()
+  await stand('claim-owner', [12, -21, null, 33, -27], 'Sprout')
+  await stand('claim-second', [12, -21, null, 33, null], 'Pebble')
+  await play('claim-reporter', [12, null, null, null, null])
+  await own('claim-owner', linkRequest())
+  await verifyLink('claim-owner')
+  const shown = async () => (await podium())[0]?.linkedInProfileUrl !== undefined
+
+  await report('claim-reporter', 'claim-owner', { target: 'link', reason: 'other' })
+  assert(
+    store.entryReports.size === 1 && (await shown()),
     'a link report from someone who does not say the profile is theirs is stored and leaves the link showing',
   )
-  const codeBefore = (await entryOf('review-four'))?.linkedIn?.code
+  await report('claim-reporter', 'claim-owner', { target: 'link', reason: 'mine' })
   assert(
-    (await report('review-reporter', { target: 'link', reason: 'mine' })).status === 204 &&
-      (await podium())[0]?.linkedInProfileUrl === undefined &&
-      (await entryOf('review-four'))?.linkedIn?.status === 'reported' &&
-      (await entryOf('review-four'))?.linkedIn?.code !== codeBefore,
-    "a profile owner's report hides the link at once and makes a new code for the next check",
+    !(await shown()) && (await entryOf('claim-owner'))?.linkedIn?.status === 'reported',
+    "a profile owner's report hides the link at once",
   )
-  const reported = await entryOf('review-four')
-  await act(`entries/${reported?.id}/approval`, { updatedAt: reported?.updatedAt, name: 'approve' })
+  const resent = await own('claim-owner', linkRequest())
+  const signIn = await startSignIn('claim-owner')
+  await own('claim-owner', { linkedIn: null })
+  const readded = await own('claim-owner', linkRequest())
   assert(
-    (await podium())[0]?.linkedInProfileUrl === undefined,
-    'approving the record does not bring back a reported link',
-  )
-  const approved = await entryOf('review-four')
-  await report('review-reporter', { target: 'name' })
-  await report('review-reporter', { target: 'character' })
-  const openTargets = (await review()).find((item) => item.entry?.id === leader?.id)?.reports
-  assert(
-    (await podium())[0]?.name === 'Sprout' &&
-      (await podium())[0]?.profile.kind !== 'default' &&
-      (await entryOf('review-four'))?.updatedAt === approved?.updatedAt &&
-      openTargets?.map(({ target }) => target).join() === 'name,character,link',
-    'a report on a name or a character hides nothing and waits in the queue',
-  )
-  assert(
-    (
-      await act(`entries/${leader?.id}/report-resolution`, {
-        updatedAt: approved?.updatedAt,
-        target: 'name',
-        resolution: 'kept',
-      })
-    ).status === 200 && (await podium())[0]?.name === 'Sprout',
-    'keeping a reported name that was never hidden leaves it showing',
-  )
-  const named = await entryOf('review-four')
-  await act(`entries/${leader?.id}/report-resolution`, {
-    updatedAt: named?.updatedAt,
-    target: 'character',
-    resolution: 'removed',
-  })
-  assert(
-    (await podium())[0]?.profile.kind === 'default' &&
-      [...store.entryReports.values()].filter((entry) => entry.target !== 'link' && !entry.resolvedAt).length === 0,
-    'removing a reported character hides it, though the report had not, and closes the reports on it',
+    resent.status === 409 &&
+      signIn.response.status === 409 &&
+      readded.status === 409 &&
+      (await entryOf('claim-owner'))?.linkedIn === null,
+    'while that report is open the record takes no link: sending it again, signing in, or turning it off and on',
   )
 
-  const heldEntry = await entryOf('review-held')
-  const acceptance = (body: unknown) => act(`runs/${held.run.id}/acceptance`, body)
+  await own('claim-second', linkRequest('pebble-sample'))
+  await verifyLink('claim-second')
+  await report('claim-reporter', 'claim-second', { target: 'link', reason: 'mine' })
+  const kept = await act('claim-second', 'report-resolution', { target: 'link', resolution: 'kept' })
+  const restored = ((await kept.json()) as { entry: ReviewedEntry }).entry
   assert(
-    (await acceptance({ updatedAt: null })).status === 409 && (await acceptance(stale)).status === 409,
-    "accepting a held run from a version of the visitor's record that is not current changes nothing",
-  )
-  const accepted = await acceptance({ updatedAt: heldEntry?.updatedAt })
-  const acceptedBody = (await accepted.json()) as { entry: ReviewedEntry }
-  const statues = await podium()
-  assert(
-    accepted.status === 200 &&
-      acceptedBody.entry.reviewStatus === 'approved' &&
-      statues[0]?.id === heldEntry?.id &&
-      statues.length === 3,
-    'an accepted held run becomes the record at once, approved, and stands as a statue',
-  )
-  assert(
-    (await acceptance({ updatedAt: acceptedBody.entry.updatedAt })).status === 409,
-    'a held run is accepted only once',
+    restored.linkedIn?.status === 'verified' &&
+      restored.linkedIn.verifiedName === 'Sprout Sample' &&
+      restored.reports.length === 0 &&
+      (await podium())[1]?.linkedInProfileUrl === 'https://www.linkedin.com/in/pebble-sample',
+    "the admin's keeping a reported link shows it again at once and closes its reports",
   )
 
-  const top = await entryOf('review-held')
+  await report('claim-reporter', 'claim-second', { target: 'link', reason: 'other' })
+  const removal = await act('claim-second', 'linkedin-removal', { blockLinkedIn: true })
+  const removedEntry = ((await removal.json()) as { entry: ReviewedEntry }).entry
   assert(
-    (await act(`entries/${top?.id}/disqualification`, stale)).status === 409,
-    'a disqualification of a version that is no longer current changes nothing',
+    removal.status === 200 &&
+      removedEntry.linkedIn === null &&
+      removedEntry.reports.length === 0 &&
+      (await podium())[1]?.linkedInProfileUrl === undefined &&
+      (await act('claim-second', 'linkedin-removal')).status === 409,
+    'taking a link down deletes it at once and closes the reports on it',
   )
-  await act(`entries/${top?.id}/disqualification`, { updatedAt: top?.updatedAt })
-  const afterDisqualification = (await podium()).map(({ id }) => id)
-  const expected = await Promise.all(['review-four', 'review-three', 'review-two'].map((token) => entryOf(token)))
   assert(
-    afterDisqualification.join() === expected.map((entry) => entry?.id).join(),
-    'disqualifying a statue lets the fourth record stand',
+    (await own('claim-second', linkRequest('PEBBLE-sample'))).status === 400 &&
+      (await own('claim-second', linkRequest('pebble-other'))).status === 200,
+    'a link taken down with a block cannot be linked again by any record, whatever its case, and another address can',
   )
-  const disqualified = await entryOf('review-held')
-  await act(`entries/${disqualified?.id}/disqualification`, { updatedAt: disqualified?.updatedAt }, 'DELETE')
-  assert(
-    (await podium()).map(({ rank }) => rank).join() === '2,3',
-    'undoing a disqualification puts the record back on its place, which stays empty until it is approved again',
-  )
-  const restored = await entryOf('review-held')
-  await act(`entries/${restored?.id}/approval`, { updatedAt: restored?.updatedAt })
-  assert((await podium())[0]?.id === top?.id, 'approving it again shows it on its place at once')
+}
 
-  const renamed = await play('review-held', [12, null, null, null, null], {
-    profile: { ...strongProfile, name: 'Juniper Two' },
-  })
+/**
+ * The admin's list: a board's runs of every status, newest first, a page at a time, with the records of the visitors
+ * on the page, and on the first page the records with open reports wherever their runs are.
+ */
+async function checkPlaysList(assert: Assert): Promise<void> {
+  const { store, service, send, admin, member, play, entryOf } = await reviewHarness()
+  const week = '2026-03-02'
+  const start = rankingWeekStart(week) + 60 * minute
+  const at = (step: number) => start + step * 3 * minute
+  const path = (query = '') => `/v1/admin/games/${game}/plays?season=${week}${query}`
+  const read = async (query = '') => {
+    const response = await send('GET', path(query), { cookie: admin })
+    return { response, body: (await response.json()) as Plays }
+  }
   assert(
-    renamed.entry?.listed === false && (await entryOf('review-held'))?.linkedIn === null,
-    'a run under another name takes the record off the board with its link',
+    (await send('GET', path())).status === 401 &&
+      (await send('GET', path(), { cookie: member })).status === 403 &&
+      (await send('GET', `/v1/admin/games/ballpark/plays`, { cookie: admin })).status === 404,
+    'only an admin reads who played, and an unknown game has no list',
+  )
+
+  const named = { ...profile, name: 'Sprout' }
+  const first = await play('plays-reported', [12, -21, null, 33, -27], { profile: named }, at(0))
+  await service.updateOwnEntry(game, await hashToken('plays-reported'), { listed: true, profile: named }, week, at(0))
+  const weaker = await play('plays-reported', [12, null, null, null, null], { profile: named }, at(1))
+  const marked = await play(
+    'plays-marked',
+    [12, -21, null, 33, null],
+    { claimed: { homeRuns: 0, totalDistanceDm: 0 } },
+    at(2),
+  )
+  const refusedHash = await hashToken('plays-refused')
+  const refused = await service.issueRun(game, refusedHash, at(3), seed)
+  await rejection(() =>
+    service.submitRunResult(
+      game,
+      refusedHash,
+      refused.id,
+      resultBody(fiveNormal, seed, [10, 10, 10, 10, 10]),
+      true,
+      at(3),
+    ),
+  )
+  const abandoned = await service.issueRun(game, await hashToken('plays-quitter'), at(4), seed)
+  const open = await service.issueRun(game, await hashToken('plays-quitter'), at(5), seed)
+  // A run held under the old review and never accepted, as migration 010 leaves it.
+  const heldBefore: GameRun = { ...marked.run, id: crypto.randomUUID(), status: 'flagged', flags: ['podium-place'] }
+  const legacy = {
+    ...heldBefore,
+    visitorHash: await hashToken('plays-legacy'),
+    issuedAt: new Date(at(6)).toISOString(),
+  }
+  store.gameRuns.set(legacy.id, legacy)
+  await play('plays-reporter', [12, null, null, null, null], {}, at(7))
+  await service.reportEntry(game, await hashToken('plays-reporter'), first.entry.id, { target: 'name' }, at(7))
+  const expected = [legacy.id, open.id, abandoned.id, refused.id, marked.run.id, weaker.run.id, first.run.id]
+
+  const everything = await read()
+  const all = everything.body.runs
+  assert(
+    everything.response.headers.get('Cache-Control') === 'no-store' &&
+      everything.body.season === week &&
+      everything.body.nextCursor === null &&
+      all
+        .slice(1)
+        .map(({ id }) => id)
+        .join() === expected.join(),
+    'the list holds every run of the board, newest first by when it was issued',
+  )
+  assert(
+    all
+      .slice(1)
+      .map(({ status, flags }) => `${status}:${flags.join('+')}`)
+      .join() === 'flagged:podium-place,issued:,abandoned:,rejected:too-fast,scored:claimed-mismatch,scored:,scored:' &&
+      all.map(({ best }) => best).join() === 'true,false,false,false,false,true,false,true',
+    'each run says its status, its marks, and whether it is the record of its visitor',
+  )
+  const markedRow = all.find(({ id }) => id === marked.run.id)
+  const record = everything.body.records.find(({ id }) => id === first.entry.id)
+  assert(
+    markedRow?.homeRuns === 3 &&
+      markedRow.result?.pitches.some((pitch) => pitch.power !== null && pitch.power > 0) &&
+      markedRow.visitor !== record?.visitor &&
+      all.filter(({ visitor }) => visitor === record?.visitor).length === 2 &&
+      !JSON.stringify(everything.body).includes(await hashToken('plays-reported')),
+    "a run shows the power visitors never see, and a visitor's rows share a short key, never the whole hash",
+  )
+  assert(
+    everything.body.records.length === 3 &&
+      record?.name === 'Sprout' &&
+      record.listed &&
+      record.rank === 1 &&
+      record.reports.map(({ target, count }) => `${target}:${count}`).join() === 'name:1' &&
+      everything.body.records.find(({ id }) => id === marked.entry.id)?.listed === false,
+    'the records of the visitors who played come with their name, listing, place, and open reports',
+  )
+
+  const pageOne = await read('&limit=3')
+  const pageTwo = await read(`&limit=3&cursor=${pageOne.body.nextCursor}`)
+  const pageThree = await read(`&limit=3&cursor=${pageTwo.body.nextCursor}`)
+  const paged = [pageOne, pageTwo, pageThree].flatMap(({ body }) => body.runs.map(({ id }) => id))
+  assert(
+    paged.join() === all.map(({ id }) => id).join() &&
+      pageOne.body.runs.length === 3 &&
+      pageTwo.body.nextCursor !== null &&
+      pageThree.body.nextCursor === null,
+    'pages follow one another without a gap or a repeat, and the last says there is no more',
+  )
+  assert(
+    pageOne.body.records.every(({ id }) => id !== first.entry.id) &&
+      pageOne.body.reported.map(({ id }) => id).join() === first.entry.id &&
+      pageTwo.body.reported.length === 0 &&
+      pageThree.body.records.map(({ id }) => id).join() === first.entry.id,
+    'a page carries only the records of its own visitors, and the first page names the reported record wherever its runs are',
+  )
+  const laterRun = await service.issueRun(game, await hashToken('plays-late'), at(8), seed)
+  const afterLater = await read(`&limit=3&cursor=${pageOne.body.nextCursor}`)
+  assert(
+    afterLater.body.runs.map(({ id }) => id).join() === pageTwo.body.runs.map(({ id }) => id).join() &&
+      (await read('&limit=1')).body.runs[0]?.id === laterRun.id,
+    'a run that arrives while the admin pages does not shift the pages after it',
+  )
+  for (const query of [
+    '&cursor=yesterday',
+    `&cursor=${pageOne.body.nextCursor}x`,
+    '&limit=0',
+    '&limit=101',
+    '&limit=ten',
+  ]) {
+    assert((await read(query)).response.status === 400, `the list refuses ${query}`)
+  }
+
+  const legacyVisitor = await hashToken('plays-legacy')
+  const resent = await rejection(() =>
+    service.submitRunResult(game, legacyVisitor, legacy.id, resultBody(fiveNormal, seed, [12]), true, at(6)),
+  )
+  assert(
+    resent instanceof DomainError &&
+      resent.code === 'CONFLICT' &&
+      (await entryOf('plays-legacy', week)) === null &&
+      (await store.hasJudgedRun(game, legacyVisitor)),
+    'a run held under the old review stays as it was: never a record, not recordable again, and still a judged run',
   )
 }
 
 async function checkTakedownAndErasure(assert: Assert): Promise<void> {
-  const { store, send, play, own, act, entryOf, podium, verifyLink } = await reviewHarness()
-  const players: Array<[string, Array<number | null>, string]> = [
-    ['erase-four', [12, -21, null, 33, -27], 'Sprout'],
-    ['erase-three', [12, -21, null, 33, null], 'Pebble'],
-    ['erase-two', [12, null, null, 33, null], 'Clover'],
-    ['erase-one', [12, null, null, null, null], 'Thistle'],
-  ]
-  for (const [token, errorsMs, name] of players) {
-    await play(token, errorsMs, { profile: { ...profile, name } })
-    await own(token, { listed: true, profile: { ...profile, name } })
-  }
+  const { store, send, play, own, act, entryOf, podium, verifyLink, startSignIn, stand } = await reviewHarness()
+  await stand('erase-four', [12, -21, null, 33, -27], 'Sprout')
+  await stand('erase-three', [12, -21, null, 33, null], 'Pebble')
+  await stand('erase-two', [12, null, null, 33, null], 'Clover')
+  const one = await stand('erase-one', [12, null, null, null, null], 'Thistle')
   assert(
-    (await own('erase-one', { linkedIn: linkOf('%EB%A9%94%EC%9D%B4%ED%94%8C-sample') })).status === 400,
+    (await own('erase-one', linkOfRequest('%EB%A9%94%EC%9D%B4%ED%94%8C-sample'))).status === 400,
     "a resident's link cannot be claimed by a record",
   )
-  const filler = await own('erase-one', { listed: true, profile: { ...profile, name: '\u3164' } })
+  const filler = await own('erase-one', { listed: true, profile: { ...profile, name: 'ㅤ' } })
   const fillerBoard = (await (await send('GET', `/v1/games/${game}/leaderboard`)).json()) as { ranks: PublicEntry[] }
   assert(
     filler.status === 200 &&
@@ -431,13 +731,16 @@ async function checkTakedownAndErasure(assert: Assert): Promise<void> {
     'a name of only a Hangul filler is rejected: an anonymous batter that keeps its place',
   )
 
-  await own('erase-three', { linkedIn: linkOf('pebble-sample') })
+  await own('erase-three', linkOfRequest('pebble-sample'))
   await verifyLink('erase-three')
   const pebble = await entryOf('erase-three')
-  const takedown = await act(`entries/${pebble?.id}/takedown`, { updatedAt: pebble?.updatedAt, blockLinkedIn: true })
+  const takedown = await act('erase-three', 'takedown', { blockLinkedIn: true })
+  const answered = ((await takedown.json()) as { entry: ReviewedEntry }).entry
   const anonymous = (await podium())[1]
   assert(
     takedown.status === 200 &&
+      answered.profile === null &&
+      answered.name === null &&
       anonymous !== undefined &&
       anonymous.id === pebble?.id &&
       anonymous.name === null &&
@@ -445,22 +748,24 @@ async function checkTakedownAndErasure(assert: Assert): Promise<void> {
       anonymous.profile.kind === 'default' &&
       anonymous.linkedInProfileUrl === undefined &&
       (await entryOf('erase-three'))?.linkedIn === null,
-    'a takedown anonymises the record, statue included, and keeps its score and place',
+    'a takedown anonymises the record, statue included, keeps its score and place, and the admin reads no name or character of it',
   )
   const renamedTakedown = await own('erase-three', { listed: true, profile: { ...profile, name: 'Pebble' } })
   assert(
     renamedTakedown.status === 200 &&
       (await entryOf('erase-three'))?.authorName === null &&
-      (await own('erase-three', { linkedIn: linkOf('pebble-other') })).status === 409,
+      (await own('erase-three', linkOfRequest('pebble-other'))).status === 409,
     'a record taken down never shows a name or a link again',
   )
   assert(
-    (await own('erase-two', { linkedIn: linkOf('pebble-sample') })).status === 400,
+    (await own('erase-two', linkOfRequest('pebble-sample'))).status === 400,
     'a link a takedown blocked cannot be linked by another record',
   )
 
   const pastTime = rankingWeekStart('2026-01-05') + 60 * minute
   await play('erase-two', [12, null, null, 33, null], { profile: { ...profile, name: 'Clover' } }, pastTime)
+  await own('erase-two', linkOfRequest('clover-sample'))
+  await startSignIn('erase-two')
   const twoHash = await hashToken('erase-two')
   assert(
     (await send('DELETE', `/v1/games/${game}/entries/own`, { cookie: cookieOf('erase-nobody') })).status === 204 &&
@@ -472,205 +777,18 @@ async function checkTakedownAndErasure(assert: Assert): Promise<void> {
   assert(
     erased.status === 204 &&
       [...store.leaderboardEntries.values()].every((entry) => entry.visitorHash !== twoHash) &&
-      [...store.gameRuns.values()].every((run) => run.visitorHash !== twoHash),
-    "a visitor's deletion removes their runs and records of the game in every season",
+      [...store.gameRuns.values()].every((run) => run.visitorHash !== twoHash) &&
+      store.linkVerifications.size === 0,
+    "a visitor's deletion removes their runs and records of the game in every season, and a sign-in started for them",
   )
-  const one = await entryOf('erase-one')
-  const statuesAfter = (await podium()).map(({ id }) => id)
-  assert(
-    statuesAfter.join() === [statuesBefore[0], statuesBefore[1]].join(),
-    'a deleted statue leaves its place empty while the next record, never approved, waits for the admin',
-  )
-  await act(`entries/${one?.id}/approval`, { updatedAt: one?.updatedAt })
   assert(
     (await podium()).map(({ id }) => id).join() === [statuesBefore[0], statuesBefore[1], one?.id].join(),
-    "once approved, the next record takes the deleted statue's place",
+    "the next record takes a deleted statue's place at once",
   )
 }
 
-/** The admin reaches every record on a board and a record's best run, whatever the queue lists; no one else does. */
-async function checkBoardRecords(assert: Assert): Promise<void> {
-  const { send, admin, member, season, play, own, act, entryOf, review } = await reviewHarness()
-  const recordsPath = `/v1/admin/games/${game}/entries?season=${season}`
-  const players: Array<[string, Array<number | null>, string]> = [
-    ['records-gone', [12, -21, null, 33, -27], 'Sprout'],
-    ['records-statue', [12, -21, null, 33, null], 'Pebble'],
-    ['records-next', [12, null, null, 33, null], 'Clover'],
-  ]
-  for (const [token, errorsMs, name] of players) {
-    await play(token, errorsMs, { profile: { ...profile, name } })
-    await own(token, { listed: true, profile: { ...profile, name } })
-  }
-  await play('records-unlisted', [12, -21, -8, 33, -27], { profile: { ...profile, name: 'Juniper' } })
-  const gone = await entryOf('records-gone')
-  const statue = await entryOf('records-statue')
-  await act(`entries/${gone?.id}/disqualification`, { updatedAt: gone?.updatedAt })
-  await act(`entries/${statue?.id}/approval`, { updatedAt: statue?.updatedAt, name: 'approve' })
-
-  assert(
-    (await send('GET', recordsPath)).status === 401 &&
-      (await send('GET', recordsPath, { cookie: member })).status === 403,
-    "only an admin reads a board's records",
-  )
-  const queued = (await review()).map(({ entry }) => entry?.id)
-  const response = await send('GET', recordsPath, { cookie: admin })
-  const { entries: records, season: recordsSeason } = (await response.json()) as {
-    season: string
-    entries: Array<ReviewedEntry & { bestRunId: string }>
-  }
-  assert(recordsSeason === season, 'the records say which season they are')
-  assert(
-    !queued.includes(gone?.id) &&
-      !queued.includes(statue?.id) &&
-      records.map(({ name, rank }) => `${name}:${rank}`).join() === 'null:1,Sprout:1,Pebble:1,Clover:2',
-    'the records hold what the queue leaves out, in public order, each at the place it holds or would take',
-  )
-
-  const bestRunPath = `/v1/admin/games/${game}/runs/${statue?.bestRunId}`
-  assert((await send('GET', bestRunPath, { cookie: member })).status === 403, "a member cannot read a run's details")
-  const { run } = (await (await send('GET', bestRunPath, { cookie: admin })).json()) as {
-    run: ReviewItem['runs'][number]
-  }
-  assert(
-    run.result?.pitches.some((pitch) => pitch.power !== null && pitch.power > 0),
-    "a record's best run shows the admin the power visitors never see",
-  )
-}
-
-/** A record the search found shows what a queue item would, so its name cannot be approved blind. */
-async function checkRecordWarnings(assert: Assert): Promise<void> {
-  const { send, admin, member, season, play, own, act, entryOf } = await reviewHarness()
-  const posted = async (token: string, name: string, hair: string) => {
-    const look = { ...profile, name, hair }
-    await play(token, [12, null, null, null, null], { profile: look })
-    await own(token, { listed: true, profile: look })
-    return entryOf(token)
-  }
-  const refused = await posted('warned-robin', 'Robin Official', 'bob')
-  const plain = await posted('warned-plain', 'Clover', 'crop')
-  const twin = await posted('warned-twin', 'Thistle', 'crop')
-  const gone = await posted('warned-gone', 'Juniper', 'crop')
-  await act(`entries/${gone?.id}/takedown`, { updatedAt: gone?.updatedAt })
-  const hidden = await entryOf('warned-gone')
-  await act(`entries/${hidden?.id}/approval`, { updatedAt: hidden?.updatedAt })
-
-  const warningsOf = async (ids: readonly (string | undefined)[], cookie = admin) =>
-    send('GET', `/v1/admin/games/${game}/entries/warnings?season=${season}&ids=${ids.join()}`, { cookie })
-  assert(
-    (await warningsOf([refused?.id], member)).status === 403 &&
-      (await warningsOf(['not-a-record'])).status === 400 &&
-      (await warningsOf([])).status === 400 &&
-      (await warningsOf(Array.from({ length: warnedRecordsLimit + 1 }, () => refused?.id))).status === 400,
-    'only an admin reads warnings, of a short list of records',
-  )
-  const response = await warningsOf([refused?.id, plain?.id, gone?.id, crypto.randomUUID()])
-  const { warnings } = (await response.json()) as {
-    warnings: Record<string, Array<{ kind: string; name?: string | null }>>
-  }
-  const similar = warnings[refused?.id ?? '']?.flatMap(({ kind, name }) => (kind === 'similar-name' ? [name] : []))
-  assert(
-    refused?.nameStatus === 'rejected' && similar?.includes('Robin') && similar.includes('official'),
-    "an auto-rejected name warns of the town's and the reserved name it contains",
-  )
-  assert(
-    warnings[plain?.id ?? '']?.map(({ kind, name }) => `${kind}:${name}`).join() === 'same-appearance:Thistle' &&
-      Object.keys(warnings).length === 3,
-    "a record warns of its twin's look, not a taken-down record's, and only the listed records that exist answer",
-  )
-  assert(warnings[gone?.id ?? '']?.length === 0, 'a taken-down record warns of nothing that would say how it looks')
-
-  const crowd = Array.from({ length: 25 }, (_, index) => ({
-    ...twin!,
-    id: `crowd-${index}`,
-    visitorHash: `crowd-${index}`,
-  }))
-  const crowded = overlapWarnings(twin!, crowd, null).filter(({ kind }) => kind === 'same-appearance')
-  assert(crowded.length === 20, 'a flood of one look gives a record a bounded list of warnings')
-}
-
-/** The bulk dismissal takes the runs the admin saw listed, and nothing that arrived after the list loaded. */
-async function checkListedDismissal(assert: Assert): Promise<void> {
-  const { store, send, member, play, act, review } = await reviewHarness()
-  const claimedFalsely = { claimed: { homeRuns: 0, totalDistanceDm: 0 } }
-  const first = await play('bulk-first', [12, null, null, null, null], claimedFalsely)
-  const second = await play('bulk-second', [12, null, null, null, null], claimedFalsely)
-  const late = await play('bulk-late', [12, null, null, null, null], claimedFalsely)
-  const listed = [first.run.id, second.run.id]
-
-  const path = `/v1/admin/games/${game}/runs/rejection`
-  assert(
-    (await send('POST', path, { body: { runIds: listed }, cookie: member })).status === 403,
-    'a member cannot dismiss runs',
-  )
-  const tooMany = Array.from({ length: dismissedRunsLimit + 1 }, () => first.run.id)
-  const refused = [{ scope: 'no-history' }, { runIds: [] }, { runIds: ['not-a-run'] }, { runIds: tooMany }]
-  for (const body of refused) {
-    assert(
-      (await act('runs/rejection', body)).status === 400,
-      `dismissing with ${JSON.stringify(body).slice(0, 40)} is refused`,
-    )
-  }
-  assert(
-    (await store.listRunsForReview({ game, season: first.run.season })).length === 3,
-    'a refused dismissal dismisses nothing',
-  )
-
-  const answer = (await (await act('runs/rejection', { runIds: listed })).json()) as { rejected: number }
-  const waiting = (await review()).flatMap(({ runs }) => runs.map(({ id }) => id))
-  assert(
-    answer.rejected === 2 && waiting.join() === late.run.id,
-    'only the listed runs are dismissed; one that arrived after the list loaded still waits',
-  )
-  const again = (await (await act('runs/rejection', { runIds: listed })).json()) as { rejected: number }
-  assert(again.rejected === 0, 'runs no longer waiting are not counted')
-}
-
-/** Nothing the admin or the visitor can read brings a taken-down name or character back. */
-async function checkTakenDownReadBack(assert: Assert): Promise<void> {
-  const { store, send, admin, play, own, act, entryOf, review } = await reviewHarness()
-  const named = { ...profile, name: 'Sprout' }
-  const strong = [12, -21, -8, 33, -27]
-  const claimedFalsely = { claimed: { homeRuns: 0, totalDistanceDm: 0 } }
-  const readRun = async (id: string) => {
-    const response = await send('GET', `/v1/admin/games/${game}/runs/${id}`, { cookie: admin })
-    return ((await response.json()) as { run: { name: string | null; profile: object | null } }).run
-  }
-  await play('readback', [12, null, null, null, null], { profile: named })
-  await own('readback', { listed: true, profile: named })
-  const accepted = await play('readback', strong, { ...claimedFalsely, profile: named })
-  const before = await entryOf('readback')
-  await act(`runs/${accepted.run.id}/acceptance`, { updatedAt: before?.updatedAt })
-  const acceptedRun = await readRun(accepted.run.id)
-  assert(acceptedRun.name === null && acceptedRun.profile === null, 'an accepted run keeps no name or character')
-
-  const waiting = await play('readback', strong, { ...claimedFalsely, profile: named })
-  const record = await entryOf('readback')
-  const takedown = await act(`entries/${record?.id}/takedown`, { updatedAt: record?.updatedAt })
-  const answered = (await takedown.json()) as { entry: { profile: object | null; name: string | null } }
-  const waitingRun = await readRun(waiting.run.id)
-  assert(
-    answered.entry.profile === null && answered.entry.name === null,
-    'the admin reads no name or character of a record taken down',
-  )
-  assert(waitingRun.name === null && waitingRun.profile === null, 'a takedown takes both off a run still waiting')
-  const ownView = await send('GET', `/v1/games/${game}/leaderboard`, { cookie: cookieOf('readback') })
-  const ownEntry = ((await ownView.json()) as { own: { profile: { kind?: string } } }).own
-  assert(ownEntry.profile.kind === 'default', "the record's own browser reads the default batter too")
-
-  const taken = await entryOf('readback')
-  const acceptedAfter = await act(`runs/${waiting.run.id}/acceptance`, { updatedAt: taken?.updatedAt })
-  const settled = await entryOf('readback')
-  assert(
-    acceptedAfter.status === 200 && settled?.takedown === true && settled.authorName === null,
-    'a run that waited through a takedown can still be accepted, and the record stays anonymous',
-  )
-
-  const next = await play('readback', strong, { ...claimedFalsely, profile: named })
-  const queued = (await review()).flatMap(({ runs }) => runs).find(({ id }) => id === next.run.id)
-  assert(
-    (await store.getRun(next.run.id))?.profile === null && queued !== undefined,
-    'a later held run on that board waits without keeping who it was sent as',
-  )
+function linkOfRequest(id: string) {
+  return { linkedIn: linkOf(id) }
 }
 
 /** Past seasons stay as they are, but a past statue's link stays only while its owner keeps it on. */
@@ -679,23 +797,19 @@ async function checkPastSeason(assert: Assert): Promise<void> {
   const pastWeek = '2026-02-16'
   const pastTime = rankingWeekStart(pastWeek) + 60 * minute
   const visitorHash = await hashToken('past-champion')
-  await play('past-champion', [12, -21, null, 33, -27], { profile: { ...profile, name: 'Sprout' } }, pastTime)
-  await service.updateOwnEntry(
-    game,
+  const named = { ...profile, name: 'Sprout' }
+  await play('past-champion', [12, -21, null, 33, -27], { profile: named }, pastTime)
+  await service.updateOwnEntry(game, visitorHash, { listed: true, profile: named, ...linkRequest() }, null, pastTime)
+  const started = await service.beginLinkVerification(linkedInOidc, game, visitorHash, pastWeek)
+  const state = new URL(started.authorizationUrl).searchParams.get('state') ?? ''
+  await service.completeLinkVerification(
+    linkedInOidc,
+    { transactionId: started.transactionId, state, code: 'code' },
     visitorHash,
-    { listed: true, profile: { ...profile, name: 'Sprout' } },
-    null,
-    pastTime,
   )
-  await service.updateOwnEntry(game, visitorHash, { linkedIn: linkOf('sprout-sample') }, null, pastTime)
-  const champion = await entryOf('past-champion', pastWeek)
-  await service.reviewEntry(adminActor, game, champion?.id ?? '', 'linkedin-review', {
-    updatedAt: champion?.updatedAt,
-    decision: 'code-verified',
-  })
   assert(
     (await board(pastWeek)).podium[0]?.linkedInProfileUrl === 'https://www.linkedin.com/in/sprout-sample',
-    "a past season's statue keeps its approved link",
+    "a past season's statue shows its link once its visitor signs in, even after the season ended",
   )
   assert(
     (await own('past-champion', { listed: false }, pastWeek)).status === 400,
@@ -713,49 +827,6 @@ async function checkPastSeason(assert: Assert): Promise<void> {
     anonymized?.nameState === 'anonymous' && (await entryOf('past-champion', pastWeek))?.authorName === null,
     'a past record anonymised by its owner keeps its place without a name',
   )
-
-  const heldHash = await hashToken('past-held')
-  const heldRun = await service.issueRun(game, heldHash, pastTime - 2 * minute, seed)
-  const heldOutcome = await service.submitRunResult(
-    game,
-    heldHash,
-    heldRun.id,
-    { ...resultBody(fiveNormal, seed, [12, -21, null, 33, -27]), claimed: { homeRuns: 0, totalDistanceDm: 0 } },
-    true,
-    pastTime,
-  )
-  const seasonEnd = rankingWeekStart('2026-02-23')
-  const day = 24 * 60 * minute
-  const late = await rejection(() =>
-    service.acceptHeldRun(adminActor, game, heldOutcome.run.id, { updatedAt: null }, seasonEnd + 8 * day),
-  )
-  assert(
-    heldOutcome.standing.kind === 'reviewing' && late instanceof DomainError && late.code === 'CONFLICT',
-    "a past season's held run cannot be accepted more than a week after the season ended",
-  )
-  const accepted = await service.acceptHeldRun(adminActor, game, heldOutcome.run.id, { updatedAt: null }, seasonEnd)
-  const listedLate = await service.updateOwnEntry(
-    game,
-    heldHash,
-    { listed: true, profile: { ...profile, name: 'Juniper' } },
-    pastWeek,
-    seasonEnd + 3 * day,
-  )
-  const unlistedFinal = await rejection(() =>
-    service.updateOwnEntry(game, heldHash, { listed: false }, pastWeek, seasonEnd + 7 * day),
-  )
-  assert(
-    !accepted.entry.listed &&
-      listedLate.entry.listed &&
-      unlistedFinal instanceof DomainError &&
-      unlistedFinal.code === 'INVALID_INPUT',
-    "a held run accepted after its season ended may be listed by its visitor until that season's board is final",
-  )
-  const takenDownLate = await service.updateOwnEntry(game, heldHash, { anonymize: true }, pastWeek, seasonEnd + 3 * day)
-  assert(
-    takenDownLate.entry.authorName === null && takenDownLate.entry.listed,
-    'a statue still listable after its season can be taken down like any other past statue',
-  )
 }
 
 /** A finished season keeps the first three of its public order, showing only what each owner still shows. */
@@ -768,12 +839,19 @@ async function checkHallOfFame(assert: Assert): Promise<void> {
   }
   async function stand(token: string, errorsMs: Array<number | null>) {
     await playAt(token, errorsMs)
-    const listing = { listed: true, profile: { ...profile, name: token } }
+    const listing = { listed: true, profile: { ...profile, name: token }, linkedIn: linkOf(`${token}-sample`) }
     await service.updateOwnEntry(game, await hashToken(token), listing, null, at)
   }
-  async function adminAct(token: string, action: EntryReviewAction, input: object) {
+  async function adminAct(token: string, action: EntryReviewAction) {
     const entry = await entryOf(token, pastWeek)
-    await service.reviewEntry(adminActor, game, entry?.id ?? '', action, { updatedAt: entry?.updatedAt, ...input })
+    await service.reviewEntry(adminActor, game, entry?.id ?? '', action, { updatedAt: entry?.updatedAt })
+  }
+  async function signIn(token: string) {
+    const visitorHash = await hashToken(token)
+    const started = await service.beginLinkVerification(linkedInOidc, game, visitorHash, pastWeek)
+    const state = new URL(started.authorizationUrl).searchParams.get('state') ?? ''
+    const callback = { transactionId: started.transactionId, state, code: 'code' }
+    await service.completeLinkVerification(linkedInOidc, callback, visitorHash)
   }
   async function hall(cookie = 'hall-nobody') {
     const response = await send('GET', `/v1/games/${game}/hall-of-fame`, { cookie: cookieOf(cookie) })
@@ -784,33 +862,31 @@ async function checkHallOfFame(assert: Assert): Promise<void> {
 
   await playAt('hall-unlisted', [12, -21, -8, 33, -27])
   await stand('hall-out', [12, -21, -8, 33, -27])
-  await adminAct('hall-out', 'disqualification', {})
+  await adminAct('hall-out', 'disqualification')
   await stand('hall-first', [12, -21, null, 33, -27])
   await stand('hall-second', [12, -21, null, 33, null])
   await stand('hall-third', [12, null, null, 33, null])
   await stand('hall-fourth', [12, null, null, null, null])
-  await adminAct('hall-second', 'approval', { name: 'approve' })
-  for (const token of ['hall-first', 'hall-second', 'hall-third']) {
-    const link = { linkedIn: linkOf(`${token}-sample`) }
-    await service.updateOwnEntry(game, await hashToken(token), link, null, at)
-  }
-  await adminAct('hall-first', 'linkedin-review', { decision: 'code-verified' })
-  await adminAct('hall-second', 'linkedin-review', { decision: 'code-verified' })
+  await signIn('hall-first')
+  await signIn('hall-second')
   await playAt('hall-later', [12, null, null, null, null], rankingWeekStart('2026-02-02') + 60 * minute)
   await play('hall-current', [12, -21, -8, 33, -27], { profile: { ...profile, name: 'hall-current' } })
   await own('hall-current', { listed: true, profile: { ...profile, name: 'hall-current' } })
 
   const before = await hall()
   const standing = await Promise.all(
-    ['hall-first', 'hall-second', 'hall-third'].map((token) => entryOf(token, pastWeek)),
+    ['hall-first', 'hall-second', 'hall-third', 'hall-fourth'].map((token) => entryOf(token, pastWeek)),
   )
   assert(
     before.seasons.map(({ id }) => id).join() === `2026-02-02,${pastWeek}` && before.seasons[0]?.champions.length === 0,
     "finished seasons come newest first, this week's never, and one with no public record stands empty",
   )
   assert(
-    before.champions.map(({ id }) => id).join() === standing.map((entry) => entry?.id).join() &&
-      before.champions.map(({ rank }) => rank).join() === '1,2,3',
+    before.champions.map(({ id, rank }) => `${id}:${rank}`).join() ===
+      standing
+        .slice(0, 3)
+        .map((entry, index) => `${entry?.id}:${index + 1}`)
+        .join(),
     "a season's statues are its first three public records: not an unlisted or disqualified one, nor the fourth",
   )
   const hashes = await Promise.all(['hall-first', 'hall-unlisted', 'hall-out'].map((token) => hashToken(token)))
@@ -824,8 +900,9 @@ async function checkHallOfFame(assert: Assert): Promise<void> {
   )
   assert(
     before.champions[0]?.linkedInProfileUrl === 'https://www.linkedin.com/in/hall-first-sample' &&
-      before.champions[2]?.linkedInProfileUrl === undefined,
-    'a champion shows a link once the admin approved it, and not while it waits',
+      before.champions[2]?.linkedInProfileUrl === undefined &&
+      before.champions[1]?.name === 'hall-second',
+    'a champion shows a name at once, and a link once its visitor signed in and not before',
   )
 
   await own('hall-first', { linkedIn: null }, pastWeek)
@@ -833,7 +910,6 @@ async function checkHallOfFame(assert: Assert): Promise<void> {
     (await hall()).champions[0]?.linkedInProfileUrl === undefined,
     'a champion who turns their link off no longer shows it',
   )
-  assert((await hall()).champions[1]?.name === 'hall-second', "an approved champion's name shows")
   await own('hall-second', { anonymize: true }, pastWeek)
   const named = await own('hall-second', { listed: true, profile: { ...profile, name: 'hall-second' } }, pastWeek)
   const anonymous = (await hall()).champions[1]
@@ -847,34 +923,22 @@ async function checkHallOfFame(assert: Assert): Promise<void> {
     'a champion anonymised by its owner keeps its place, shows nothing of them, and cannot take a name back',
   )
 
-  await adminAct('hall-first', 'disqualification', {})
-  const fourth = await entryOf('hall-fourth', pastWeek)
-  const vacant = await hall()
+  await adminAct('hall-first', 'disqualification')
   assert(
-    vacant.champions.map(({ id, rank }) => `${id}:${rank}`).join() === `${standing[1]?.id}:1,${standing[2]?.id}:2` &&
-      !vacant.text.includes(fourth?.id ?? 'no record'),
-    "a record that moves up among a finished season's champions is not shown there before the admin approves it",
-  )
-  const queued = await service.getReviewQueue(adminActor, game, null)
-  assert(
-    queued.some(({ kind, season, entry }) => kind === 'statue' && season === pastWeek && entry?.id === fourth?.id),
-    'the default queue reaches back to a season, however old, where a champion waits for approval',
-  )
-  await adminAct('hall-fourth', 'approval', {})
-  assert(
-    (await hall()).champions.map(({ id, rank }) => `${id}:${rank}`).at(-1) === `${fourth?.id}:3`,
-    'once approved it is a champion, third',
+    (await hall()).champions.map(({ id, rank }) => `${id}:${rank}`).join() ===
+      standing
+        .slice(1)
+        .map((entry, index) => `${entry?.id}:${index + 1}`)
+        .join(),
+    "removing a finished season's champion moves the records below up at once, the fourth onto the third place",
   )
 }
 
 /** Forgetting the visitor ends this browser's hold on its records and leaves the records alone. */
 async function checkVisitorForget(assert: Assert): Promise<void> {
-  const { send, play, own, entryOf, board } = await reviewHarness()
+  const { send, own, entryOf, board, stand } = await reviewHarness()
   const forgetPath = '/v1/visitor/forget'
-  const named = { ...profile, name: 'Sprout' }
-  await play('forget-first', [12, -21, null, 33, -27], { profile: named })
-  await own('forget-first', { listed: true, profile: named })
-  const record = await entryOf('forget-first')
+  const record = await stand('forget-first', [12, -21, null, 33, -27], 'Sprout')
   assert(
     (await send('POST', forgetPath, { cookie: cookieOf('forget-first'), origin: null })).status === 403,
     'forgetting needs an allowed origin, like any write',
@@ -894,28 +958,5 @@ async function checkVisitorForget(assert: Assert): Promise<void> {
       isDeepStrictEqual(await entryOf('forget-first'), record) &&
       (await board()).podium[0]?.id === record?.id,
     "a browser's new cookie can neither change nor delete the record it left behind",
-  )
-}
-
-/** A record's link can match the town only if the town added it later, so the queue warns the admin. */
-async function checkTownLinkWarning(assert: Assert): Promise<void> {
-  const { store, play, own, review, entryOf } = await reviewHarness()
-  const named = (name: string) => ({ ...profile, name })
-  await play('warned-owner', [12, -21, null, 33, -27], { profile: named('Sprout') })
-  await own('warned-owner', { listed: true, profile: named('Sprout'), linkedIn: linkOf('Fern-sample') })
-  await play('warned-other', [12, -21, null, 33, null], { profile: named('Pebble') })
-  await own('warned-other', { listed: true, profile: named('Pebble'), linkedIn: linkOf('pebble-sample') })
-  const warningsOf = async (token: string) => {
-    const entry = await entryOf(token)
-    return (await review()).find((item) => item.entry?.id === entry?.id)?.warnings.map(({ kind }) => kind) ?? []
-  }
-  assert(!(await warningsOf('warned-owner')).includes('town-link'), 'a link the town does not show raises no warning')
-  const residents = [{ ...sampleTownLayout.residents[0], linkedInProfileUrl: 'https://linkedin.com/in/FERN-sample' }]
-  const layout = parseTownLayout({ ...sampleTownLayout, residents, venues: { ballpark: { visible: true } } })
-  await store.saveTown(layout, (await store.getTown())?.revision ?? 0)
-  assert(
-    (await warningsOf('warned-owner')).includes('town-link') &&
-      !(await warningsOf('warned-other')).includes('town-link'),
-    "a link equal to a resident's, whatever its case, is flagged in the queue, and no one else's is",
   )
 }

@@ -18,7 +18,7 @@ import {
 } from './validation.js'
 
 // The home run derby as a ranked game: what a run's result must hold, how the server scores it with the ported judge
-// (derbyJudge/), and which runs are held for the admin to look at. The client sends no score anyone keeps: only its
+// (derbyJudge/), and which runs are marked for the admin to look at. The client sends no score anyone keeps: only its
 // batting side, its practice numbers, and four numbers per pitch, never pose keypoints or motion.
 
 /** The one ranked game: the derby at the ballpark of the town the site serves. */
@@ -40,8 +40,9 @@ const shortestPitchMs = 800 + 900 + 1500
 const minimumRunShare = 0.85
 
 /**
- * What the server checks a run against (initial values, published like the judge): a held run is stored but stays off
- * the board until an admin accepts it. They only make cheap cheating cost more; none relies on being secret.
+ * What the server checks a run against (initial values, published like the judge). A run that trips a check is marked
+ * with its flag and scores like any other: the marks tell the admin where to look, and keep nothing off the board.
+ * None relies on being secret.
  */
 export const DERBY_REVIEW_RULES = {
   /** Three or more swings all this close (ms) to dead-on. */
@@ -69,19 +70,19 @@ export const DERBY_REVIEW_RULES = {
 /**
  * The flag of a result whose request did not look like the game page's own `fetch` from a browser. Only this yes or no
  * is kept, never a header's value, so nothing about the visitor or their device is stored. A script can send the same
- * headers a browser does, so it proves nothing by its absence: it only catches the lazy ones, and holds them for the
+ * headers a browser does, so it proves nothing by its absence: it only catches the lazy ones, and marks them for the
  * admin like any other flag.
  */
 export const notFromBrowserFlag = 'not-from-browser'
 
-/** What a run's result says beyond the log: the client's own totals, which only decide whether the run is held. */
+/** What a run's result says beyond the log: the client's own totals, which only decide whether the run is marked. */
 export interface DerbySubmission {
   log: DerbyInputLog
   clientElapsedMs: number
   claimed: { homeRuns: number; totalDistanceDm: number }
 }
 
-/** How the server judged a run, kept with it for review. */
+/** How the server judged a run, kept with it for the admin to read. */
 export interface DerbyRunRecord {
   pitches: PitchResult[]
   homeRuns: number
@@ -211,7 +212,7 @@ export function publicDerbyResult(record: DerbyRunRecord): PublicDerbyResult {
   }
 }
 
-/** Each review flag and when it holds; a run with any is held. */
+/** Each flag and when it marks a run. */
 export const derbyRunChecks: ReadonlyArray<readonly [string, (review: DerbyRunReview) => boolean]> = [
   ['claimed-mismatch', claimsOtherTotals],
   ['timing-too-precise', timesTooPrecisely],

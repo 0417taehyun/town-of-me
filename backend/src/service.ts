@@ -1,4 +1,5 @@
 import { adminEmail, type AdminEmail } from './admins.js'
+import type { LinkedInOidcAdapter } from './auth.js'
 import type { Actor, LinkedUser } from './domain.js'
 import { DomainError } from './domain.js'
 import { guestbookEntryNotFound, isRevisable, parseGuestbookInput, type GuestbookEntry } from './guestbook.js'
@@ -15,22 +16,19 @@ import {
 import {
   boardSeason,
   leaderboardLength,
+  listableAfterSeason,
   ownEntryChanges,
   parseOwnEntryUpdate,
   parsePastEntryUpdate,
   parseRunProfile,
   pastEntryChanges,
-  podiumPlaceFlag,
-  publishedPlaces,
   randomRunSeed,
   runLifetimeMs,
   runStanding,
   settleBoardEntry,
   statueCount,
-  wouldTakePodium,
   type BoardCandidate,
   type BoardKey,
-  type BoardPlace,
   type EntryChanges,
   type FinishedRun,
   type GameRun,
@@ -44,34 +42,37 @@ import {
   isTownProfile,
   leaderboardNameStatus,
   linkBlockHash,
-  ownershipCode,
   profileIdOf,
   reservedNameForms,
   takenNameForms,
   type LinkedInLink,
 } from './leaderboardIdentity.js'
 import {
-  acceptanceDeadline,
   entryReviewChanges,
   forgetQuietReporters,
-  fromVersion,
-  heldRunCandidate,
-  listableAfterSeason,
-  overlapWarnings,
+  hasOpenLinkClaim,
   parseEntryReport,
-  parseRecordIds,
+  parsePageLimit,
   parseReportResolution,
-  parseRunIds,
+  parseRunCursor,
   recentReports,
   reportedChanges,
+  reportedRecordsLimit,
   reportsPerHour,
   reportSweepIntervalMs,
-  reviewedBoard,
-  reviewQueue,
+  runCursorText,
   versionInput,
+  type EntryReport,
   type EntryReviewAction,
-  type ReviewBoard,
+  type PlaysPage,
+  type ReviewedRecord,
 } from './leaderboardReview.js'
+import {
+  assertVerificationMatches,
+  linkAuthorizationUrl,
+  newLinkVerification,
+  verifiedLinkChanges,
+} from './linkVerification.js'
 import { assertAdmin } from './policy.js'
 import {
   dailyEventTotals,
@@ -89,7 +90,6 @@ import {
   effectiveBallparkRules,
   parseResidentDialogueSource,
   parseTownLayout,
-  previousRankingWeek,
   rankingDay,
   rankingWeek,
   settleBallparkSettings,
@@ -100,15 +100,15 @@ import {
 
 export type ResidentDialogueGenerator = (source: ResidentDialogueSource) => Promise<ResidentDialogue>
 
-/** A finished run and where it left the visitor: their record on its board, that record's place, and the standing. */
+/** A scored run and where it left the visitor: their record on its board, that record's place, and the standing. */
 export interface RunOutcome {
   run: GameRun
-  entry: LeaderboardEntry | null
+  entry: LeaderboardEntry
   rank: number
   standing: RunStanding
 }
 
-/** A board's top places as anyone may see them (`publishedPlaces`), and the visitor's own record with its place. */
+/** A board's top places, and the visitor's own record with its place. */
 export interface Leaderboard {
   season: string
   currentSeason: string
@@ -116,10 +116,17 @@ export interface Leaderboard {
   own: RankedRecord | null
 }
 
-/** The statues of one season as anyone may see them: a place still waiting for approval is missing. */
+/** The statues of one season: the first three of its public order. */
 export interface SeasonStatues {
   season: string
   entries: RankedRecord[]
+}
+
+/** A visitor's callback from LinkedIn: the cookie's verification id, the state and code LinkedIn sent back. */
+export interface LinkVerificationCallback {
+  transactionId: string
+  state: string
+  code: string
 }
 
 export class BackendService {
@@ -328,19 +335,17 @@ export class BackendService {
       score: null,
       tiebreak: null,
       flags: [],
-      profile: null,
-      reviewedAt: null,
     }
     await this.store.issueRun(run)
     return run
   }
 
   /**
-   * Records a run's result once, scored by the server from the run's own rules and seed and the raw log. A result sent
-   * again gets the same answer; a run held for review leaves the visitor's record as it was. A run is held for what
-   * the judge finds unusual, for a request that did not look like the game page's (`fromGamePage`, which is all that is
-   * kept of the request), and for a place among the statues, which only an approved record takes. A malformed result
-   * leaves the run open for a fixed client to send again, but one that ends too soon uses the run up.
+   * Records a run's result once, scored by the server from the run's own rules and seed and the raw log, and settles
+   * the visitor's record at once, wherever it places. What the judge finds unusual, and a request that did not look
+   * like the game page's (`fromGamePage`, which is all that is kept of the request), are stored on the run as marks for
+   * the admin and keep nothing off the board. A result sent again gets the same answer. A malformed result leaves the
+   * run open for a fixed client to send again, but one that ends too soon uses the run up.
    */
   async submitRunResult(
     game: string,
@@ -352,7 +357,7 @@ export class BackendService {
   ): Promise<RunOutcome> {
     await this.openBallparkTown(game)
     const run = await this.ownRun(game, visitorHash, runId)
-    if (run.status === 'scored' || run.status === 'flagged') return this.runOutcome(run, null, false)
+    if (run.status === 'scored') return this.runOutcome(run, null, false)
     if (run.status !== 'issued' || Date.parse(run.expiresAt) <= now) {
       throw new DomainError('CONFLICT', 'This run can no longer be recorded')
     }
@@ -364,7 +369,6 @@ export class BackendService {
     const submission = parseDerbySubmission(input, run.rules)
     const profile = parseRunProfile(input.profile)
     const record = judgeDerbyRun(run.rules, run.seed, submission, serverElapsedMs)
-    const current = await this.store.getBoardEntryByVisitor(run, run.visitorHash)
     const candidate = {
       entryId: crypto.randomUUID(),
       runId: run.id,
@@ -373,47 +377,24 @@ export class BackendService {
       result: publicDerbyResult(record),
       achievedAt: submittedAt,
       profile,
-      reviewStatus: 'pending' as const,
     }
-    const place = {
-      id: candidate.entryId,
-      score: candidate.score,
-      tiebreak: candidate.tiebreak,
-      achievedAt: submittedAt,
-    }
-    const flags = [
-      ...derbyRunFlags({ rules: run.rules, log: submission.log, record }),
-      ...(fromGamePage ? [] : [notFromBrowserFlag]),
-      ...(await this.podiumFlags(run, place, current)),
-    ]
-    const held = flags.length > 0
-    // A held run keeps who it was sent as for its acceptance, unless a takedown already took that off this board.
-    const keepsProfile = held && !current?.takedown
     const finished: FinishedRun = {
-      status: held ? 'flagged' : 'scored',
+      status: 'scored',
       submittedAt,
       inputLog: submission.log,
       result: record,
       score: candidate.score,
       tiebreak: candidate.tiebreak,
-      flags,
-      profile: keepsProfile ? profile : null,
+      flags: [
+        ...derbyRunFlags({ rules: run.rules, log: submission.log, record }),
+        ...(fromGamePage ? [] : [notFromBrowserFlag]),
+      ],
     }
-    const settle = held ? null : await this.settlementFor(run, candidate)
+    const settle = await this.settlementFor(run, candidate)
     const saved = await this.store.finishRun(run.id, run.visitorHash, finished, settle)
     // Another result for this run, or a new run, got there first: answer as the run now stands.
     if (!saved) return this.submitRunResult(game, visitorHash, runId, input, fromGamePage, now)
     return this.runOutcome(saved.run, saved.settlement?.entry ?? null, saved.settlement?.consentNeeded ?? false)
-  }
-
-  /**
-   * `podiumPlaceFlag` for a run that would be its visitor's best among the statues (`wouldTakePodium`), read from the
-   * board as it stands. A record that reaches the statues some other way, or between this read and the write, is
-   * still not shown there unapproved: `publishedPlaces` decides that on every read.
-   */
-  async podiumFlags(run: GameRun, place: BoardPlace, current: LeaderboardEntry | null): Promise<string[]> {
-    const top = await this.store.listBoard(run, statueCount + 1)
-    return wouldTakePodium(place, current, top, run.visitorHash) ? [podiumPlaceFlag] : []
   }
 
   /** The town whose ballpark plays `game`, while the admin shows it: a hidden ballpark neither issues nor records runs. */
@@ -449,7 +430,6 @@ export class BackendService {
       score: null,
       tiebreak: null,
       flags: ['too-fast'],
-      profile: null,
     }
     const saved = await this.store.finishRun(run.id, run.visitorHash, tooFast, null)
     if (!saved) return this.submitRunResult(run.game, run.visitorHash, run.id, input, fromGamePage, now)
@@ -474,33 +454,34 @@ export class BackendService {
     return {
       season,
       currentSeason,
-      entries: await this.publishedBoard(board, leaderboardLength),
+      entries: await this.rankedTop(board, leaderboardLength),
       own: own && { entry: own, rank: await this.store.rankOf(own) },
     }
   }
 
-  /** The top of a board as anyone may see it: every public read of a board comes through here (`publishedPlaces`). */
-  async publishedBoard(board: BoardKey, limit: number): Promise<RankedRecord[]> {
-    return publishedPlaces(await this.store.listBoard(board, limit))
+  /** The top of a board's public order, each record with its place. */
+  async rankedTop(board: BoardKey, limit: number): Promise<RankedRecord[]> {
+    const top = await this.store.listBoard(board, limit)
+    return top.map((entry, index) => ({ entry, rank: index + 1 }))
   }
 
-  /** This KST week's statues: the approved of its public order's first three, read by the town without a cookie. */
+  /** This KST week's statues, read by the town without a cookie. */
   async getPodium(game: string, now = Date.now()): Promise<SeasonStatues> {
     assertRankedGame(game)
     const season = rankingWeek(now)
-    return { season, entries: await this.publishedBoard({ game, season }, statueCount) }
+    return { season, entries: await this.rankedTop({ game, season }, statueCount) }
   }
 
   /**
-   * Every finished season with a record, newest first, and the approved of its public order's first three as they
-   * stand now: a late acceptance, an approval, a disqualification, or an owner's change still moves them. One read per
-   * season, so a year adds fifty-two.
+   * Every finished season with a record, newest first, and the first three of its public order as they stand now: a
+   * late result, a disqualification, or an owner's change still moves them. One read per season, so a year adds
+   * fifty-two.
    */
   async getHallOfFame(game: string, now = Date.now()): Promise<SeasonStatues[]> {
     assertRankedGame(game)
     const seasons = await this.store.listEndedSeasons(game, rankingWeek(now))
     return Promise.all(
-      seasons.map(async (season) => ({ season, entries: await this.publishedBoard({ game, season }, statueCount) })),
+      seasons.map(async (season) => ({ season, entries: await this.rankedTop({ game, season }, statueCount) })),
     )
   }
 
@@ -508,8 +489,8 @@ export class BackendService {
    * The visitor lists or unlists this week's record, changes the character and name it shows, or turns its link on or
    * off. A past season's record (`season`) may only be anonymised or have its link turned off, unless its best run
    * came in after the season ended (`listableAfterSeason`): then it takes the same changes as this week's, and can
-   * still be anonymised, which only a past record offers. Listing never publishes a place among the statues by
-   * itself: that waits for the admin's approval (`publishedPlaces`).
+   * still be anonymised, which only a past record offers. A listed record and its name show at once; a new link is
+   * stored but shown to nobody until the visitor signs in with LinkedIn (`beginLinkVerification`).
    */
   async updateOwnEntry(
     game: string,
@@ -532,10 +513,9 @@ export class BackendService {
     if (update.linkedIn && (!listed || entry.takedown)) {
       throw new DomainError('CONFLICT', 'Only a listed record that was not taken down shows a link')
     }
-    if (update.linkedIn) await this.assertLinkAllowed(update.linkedIn)
+    if (update.linkedIn) await this.assertLinkAllowed(entry, update.linkedIn)
     const nameStatus = await this.newNameStatus(entry, update.profile?.name ?? null)
-    const changes = ownEntryChanges(entry, update, at, { nameStatus, linkedInCode: ownershipCode() })
-    return this.saveOwnChanges(entry, changes)
+    return this.saveOwnChanges(entry, ownEntryChanges(entry, update, at, nameStatus))
   }
 
   /** A browser without a visitor cookie, or without a record on the board, has nothing to change. */
@@ -557,23 +537,29 @@ export class BackendService {
     return { entry: updated, rank: await this.store.rankOf(updated) }
   }
 
-  /** A link the town shows already, or one a takedown blocked, cannot be claimed. */
-  async assertLinkAllowed(link: LinkedInLink): Promise<void> {
+  /**
+   * A link the town shows already, or one the admin blocked, cannot be claimed (`400`). Nor does a record take a link
+   * while a profile's owner has an open report on its link (`409`): the admin decides that first.
+   */
+  async assertLinkAllowed(entry: LeaderboardEntry, link: LinkedInLink): Promise<void> {
     const town = await this.store.getTown()
     if (isTownProfile(town, link.profileId) || (await this.store.isLinkBlocked(await linkBlockHash(link.profileId)))) {
       throw new DomainError('INVALID_INPUT', 'This link cannot be used')
+    }
+    if (hasOpenLinkClaim(await this.store.listOpenReports([entry.id]))) {
+      throw new DomainError('CONFLICT', "The record's link was reported and waits for the admin")
     }
   }
 
   /** The status a name the record does not have yet would get; the record's own name keeps the one it has. */
   async newNameStatus(entry: LeaderboardEntry, name: string | null): Promise<NameStatus> {
-    if (name === null || name === entry.authorName) return 'pending'
+    if (name === null || name === entry.authorName) return 'shown'
     return this.nameStatusOn(entry, entry.visitorHash, name)
   }
 
-  /** The board's name check, against the stored town and the board's approved names. */
-  async nameStatusOn(board: BoardKey, visitorHash: string, name: string | null): Promise<'pending' | 'rejected'> {
-    if (name === null) return 'pending'
+  /** The board's name check, against the stored town and the names the board shows. */
+  async nameStatusOn(board: BoardKey, visitorHash: string, name: string | null): Promise<NameStatus> {
+    if (name === null) return 'shown'
     const [town, entries] = await Promise.all([this.store.getTown(), this.store.listEntries(board)])
     return leaderboardNameStatus(name, {
       reserved: reservedNameForms(town),
@@ -582,17 +568,64 @@ export class BackendService {
   }
 
   /**
-   * How a scored or accepted run settles its visitor's record. Only a first record on the board can take the profile's
-   * name, so the name is checked only then; a record that appears meanwhile settles with the name pending, which shows
-   * nothing until it is approved.
+   * How a scored run settles its visitor's record. Only a first record on the board can take the profile's name, so
+   * the name is checked only then; should the record this read found be gone by the time the run settles, the first
+   * record made then takes the name unchecked and so `rejected`, an anonymous batter.
    */
   async settlementFor(run: GameRun, candidate: Omit<BoardCandidate, 'nameStatus'>): Promise<SettleEntry> {
     const existing = await this.store.getBoardEntryByVisitor(run, run.visitorHash)
-    const nameStatus = existing ? 'pending' : await this.nameStatusOn(run, run.visitorHash, candidate.profile.name)
+    const nameStatus = existing ? 'rejected' : await this.nameStatusOn(run, run.visitorHash, candidate.profile.name)
     return (current, latest) => settleBoardEntry({ ...candidate, nameStatus }, current, latest, run)
   }
 
-  /** Deletes the visitor's runs and records of the game in every season at once; a statue makes way for the next. */
+  /**
+   * Starts the visitor's LinkedIn sign-in for the link on their record of the season, this week's by default: `409`
+   * unless that link is `unverified`. It answers where to send the browser and the id for its cookie. Nothing here
+   * touches a user or a session (`linkVerification.ts`).
+   */
+  async beginLinkVerification(
+    adapter: LinkedInOidcAdapter | undefined,
+    game: string,
+    visitorHash: string | null,
+    requestedSeason: string | null,
+    now = Date.now(),
+  ): Promise<{ authorizationUrl: string; transactionId: string }> {
+    assertRankedGame(game)
+    if (!adapter) throw new DomainError('NOT_CONFIGURED', 'LinkedIn OIDC is not configured')
+    const board = { game, season: boardSeason(requestedSeason, rankingWeek(now)) }
+    const verification = newLinkVerification(await this.ownEntryOn(board, visitorHash), now)
+    await this.store.deleteExpiredLinkVerifications(now)
+    await this.store.saveLinkVerification(verification)
+    return { authorizationUrl: linkAuthorizationUrl(adapter, verification), transactionId: verification.id }
+  }
+
+  /**
+   * Finishes that sign-in: the verification is used up whatever happens next, and counts only with its own state, from
+   * the browser that started it, within ten minutes. Then the link, if the record still has the same one waiting,
+   * becomes public at once, with the signed-in account's display name and nothing else of it.
+   */
+  async completeLinkVerification(
+    adapter: LinkedInOidcAdapter | undefined,
+    callback: LinkVerificationCallback,
+    visitorHash: string | null,
+    now = Date.now(),
+  ): Promise<LeaderboardEntry> {
+    if (!adapter) throw new DomainError('NOT_CONFIGURED', 'LinkedIn OIDC is not configured')
+    const verification = await this.store.consumeLinkVerification(callback.transactionId)
+    assertVerificationMatches(verification, callback.state, visitorHash, now)
+    const identity = await adapter.exchangeAndVerify({ code: callback.code, expectedNonce: verification.nonce })
+    const entry = await this.store.getEntry(verification.entryId)
+    if (!entry) throw new DomainError('NOT_FOUND', 'Record not found')
+    const changes = verifiedLinkChanges(entry, verification, identity.displayName, new Date(now).toISOString())
+    const verified = await this.store.updateEntry(entry.id, entry.updatedAt, changes)
+    if (!verified) throw new DomainError('CONFLICT', 'The record changed while its link was being verified')
+    return verified
+  }
+
+  /**
+   * Deletes the visitor's runs and records of the game in every season at once; a statue makes way for the next. A
+   * disqualified record goes too, so the visitor's next run starts a new record, as it would from a new browser.
+   */
   async deleteOwnRecords(game: string, visitorHash: string | null): Promise<void> {
     assertRankedGame(game)
     if (visitorHash) await this.store.eraseVisitorGameData(game, visitorHash)
@@ -601,9 +634,8 @@ export class BackendService {
   /**
    * Takes a report on a record's name, character, or link, from any season. It answers the same whatever happens, so
    * nothing can be learned from it, and it counts only from a visitor with a run the server judged, about someone
-   * else's record, at most five an hour: a record's owner cannot report their own link to fix it as restored. A report
-   * only waits for the admin, so no visitor can blank the board; the one thing it hides at once is a link whose
-   * profile's owner says it is theirs.
+   * else's record, at most five an hour. A report only waits for the admin, so no visitor can blank the board; the one
+   * thing it hides at once is a link whose profile's owner says it is theirs.
    */
   async reportEntry(
     game: string,
@@ -630,8 +662,8 @@ export class BackendService {
       resolvedAt: null,
       resolution: null,
     })
-    const hidden = reportedChanges(entry, report, ownershipCode(), at)
-    // A record that changed meanwhile keeps its new version; the report still waits in the queue.
+    const hidden = reportedChanges(entry, report, at)
+    // A record that changed meanwhile keeps its new version; the report still waits for the admin.
     if (hidden) await this.store.updateEntry(entry.id, entry.updatedAt, hidden)
   }
 
@@ -643,84 +675,56 @@ export class BackendService {
   }
 
   /**
-   * The review queue of one season, or by default of this season, the last, and any older one with a statue's place
-   * waiting for approval (`leaderboardReview.ts`).
+   * Everyone who played on one season's board, this week's by default, for an admin: a page of its runs of every
+   * status, newest first, with the records of the visitors on that page, and on the first page the board's records
+   * with open reports. One read of the runs, one of the records, one of the reports, and one place per record, so a
+   * page costs the same however many runs a flood left on the board.
    */
-  async getReviewQueue(actor: Actor, game: string, requestedSeason: string | null, now = Date.now()) {
+  async getPlays(
+    actor: Actor,
+    game: string,
+    requestedSeason: string | null,
+    requestedCursor: string | null,
+    requestedLimit: string | null,
+    now = Date.now(),
+  ): Promise<PlaysPage> {
     assertAdmin(actor)
     assertRankedGame(game)
-    const currentSeason = rankingWeek(now)
-    const seasons =
-      requestedSeason === null
-        ? await this.seasonsToReview(game, currentSeason)
-        : [boardSeason(requestedSeason, currentSeason)]
-    const town = await this.store.getTown()
-    const boards = await Promise.all(seasons.map((season) => this.reviewBoard({ game, season })))
-    return reviewQueue(boards, { town, currentSeason, now })
-  }
-
-  /**
-   * This season and the last, whose held runs may still be accepted, then every older season where a record among the
-   * statues waits for approval: a record that moved up there leaves its place empty in the hall of fame until the
-   * admin sees it, so it must not wait where nobody looks.
-   */
-  async seasonsToReview(game: string, currentSeason: string): Promise<string[]> {
-    const lastSeason = previousRankingWeek(currentSeason)
-    const older = await this.store.listEndedSeasons(game, lastSeason)
-    const statues = await Promise.all(
-      older.map(async (season) => ({ season, top: await this.store.listBoard({ game, season }, statueCount) })),
-    )
-    const waiting = statues.filter(({ top }) => publishedPlaces(top).length < top.length)
-    return [currentSeason, lastSeason, ...waiting.map(({ season }) => season)]
-  }
-
-  async reviewBoard(board: BoardKey): Promise<ReviewBoard> {
-    const [entries, runs, reports, counts] = await Promise.all([
-      this.store.listEntries(board),
-      this.store.listRunsForReview(board),
-      this.store.listReports(board),
-      this.store.countRunsByVisitor(board),
+    const board = { game, season: boardSeason(requestedSeason, rankingWeek(now)) }
+    const before = parseRunCursor(requestedCursor)
+    const limit = parsePageLimit(requestedLimit)
+    const found = await this.store.listRuns(board, before, limit + 1)
+    const runs = found.slice(0, limit)
+    const visitors = [...new Set(runs.map((run) => run.visitorHash))]
+    const [entries, reported] = await Promise.all([
+      this.store.listEntriesByVisitors(board, visitors),
+      before ? [] : this.store.listReportedEntries(board, reportedRecordsLimit),
     ])
-    return { ...board, entries, runs, reports, counts }
+    const reports = await this.store.listOpenReports([...entries, ...reported].map(({ id }) => id))
+    const reviewed = (entry: LeaderboardEntry) => this.reviewedRecord(entry, reports)
+    const lastRun = runs.at(-1)
+    return {
+      season: board.season,
+      runs,
+      records: await Promise.all(entries.map(reviewed)),
+      reported: await Promise.all(reported.map(reviewed)),
+      nextCursor: found.length > limit && lastRun ? runCursorText(lastRun) : null,
+    }
   }
 
-  /**
-   * Every record on one season's board, including those the queue does not list, as an admin's search reads them, and
-   * the season that turned out to be. Warnings are read apart (`getRecordWarnings`).
-   */
-  async getBoardRecords(actor: Actor, game: string, requestedSeason: string | null, now = Date.now()) {
-    assertAdmin(actor)
-    assertRankedGame(game)
-    const season = boardSeason(requestedSeason, rankingWeek(now))
-    return { season, entries: reviewedBoard(await this.store.listEntries({ game, season })) }
-  }
-
-  /**
-   * The warnings of the records a search found, by id: a record outside the queue must not be approved blind. Only for
-   * those, since each compares against the whole board: at 3,000 records that takes 37 ms for twenty and 5.5 s of
-   * blocked event loop for all of them, on every reload after an action.
-   */
-  async getRecordWarnings(actor: Actor, game: string, requestedSeason: string | null, ids: string, now = Date.now()) {
-    assertAdmin(actor)
-    assertRankedGame(game)
-    const season = boardSeason(requestedSeason, rankingWeek(now))
-    const wanted = new Set(parseRecordIds(ids))
-    const [town, entries] = await Promise.all([this.store.getTown(), this.store.listEntries({ game, season })])
-    const found = entries.filter((entry) => wanted.has(entry.id))
-    return Object.fromEntries(found.map((entry) => [entry.id, overlapWarnings(entry, entries, town)]))
-  }
-
-  /** Any run of the game for an admin: a record's best run has scored, so it is not among the queue's held runs. */
-  async getReviewedRun(actor: Actor, game: string, runId: string): Promise<GameRun> {
-    assertAdmin(actor)
-    assertRankedGame(game)
-    return this.gameRun(game, runId)
+  /** A record with its place and those of `openReports` that are on it. */
+  async reviewedRecord(entry: LeaderboardEntry, openReports: readonly EntryReport[]): Promise<ReviewedRecord> {
+    return {
+      entry,
+      rank: await this.store.rankOf(entry),
+      reports: openReports.filter((report) => report.entryId === entry.id),
+    }
   }
 
   /**
    * An admin's action on a record (`entryReviewChanges`), only from the version they read: a record changed since is
-   * `409` and stays as it is. Approving a record publishes it at once, among the statues too; disqualifying a statue
-   * moves the next record up, where it is published only if it is approved.
+   * `409` and stays as it is. Everything shows at once: disqualifying a statue moves the next record up, and undoing
+   * it puts the record back on its place.
    */
   async reviewEntry(
     actor: Actor,
@@ -729,7 +733,7 @@ export class BackendService {
     action: EntryReviewAction,
     input: Record<string, unknown>,
     now = Date.now(),
-  ): Promise<RankedRecord> {
+  ): Promise<ReviewedRecord> {
     assertAdmin(actor)
     assertRankedGame(game)
     const expectedUpdatedAt = versionInput(input.updatedAt, 'updatedAt')
@@ -743,10 +747,13 @@ export class BackendService {
     )
     if (!updated) throw new DomainError('CONFLICT', 'The record changed after it was loaded')
     await this.followUpEntryReview(action, entry, input, at)
-    return { entry: updated, rank: await this.store.rankOf(updated) }
+    return this.reviewedRecord(updated, await this.store.listOpenReports([updated.id]))
   }
 
-  /** Closing the reports a resolution decided, and blocking a taken-down link when the admin asks. */
+  /**
+   * Closing the reports an action decided (a removed link's reports are closed with it), and blocking a removed or
+   * taken-down link when the admin asks.
+   */
   async followUpEntryReview(
     action: EntryReviewAction,
     entry: LeaderboardEntry,
@@ -757,78 +764,21 @@ export class BackendService {
       const { target, resolution } = parseReportResolution(input)
       await this.store.resolveReports(entry.id, target, resolution, now)
     }
-    if (action === 'takedown' && input.blockLinkedIn === true && entry.linkedIn) {
+    if (action === 'linkedin-removal') await this.store.resolveReports(entry.id, 'link', 'removed', now)
+    const removesLink = action === 'takedown' || action === 'linkedin-removal'
+    if (removesLink && input.blockLinkedIn === true && entry.linkedIn) {
       await this.store.blockLink(await linkBlockHash(profileIdOf(entry.linkedIn.profileUrl)), now)
     }
   }
 
   /**
-   * Accepts a held run as if it had scored, from the visitor's record as the admin read it (`updatedAt`, or `null` when
-   * there was none), which it leaves approved, so it is published at once wherever it places. A past season's run only
-   * until a week after it ended; then that board stays as it is.
+   * `entry` is the record the run just settled, if it did; otherwise the visitor's record is read as it stands now.
+   * A scored run settled a record in the same step, and the two are only ever deleted together.
    */
-  async acceptHeldRun(
-    actor: Actor,
-    game: string,
-    runId: string,
-    input: Record<string, unknown>,
-    now = Date.now(),
-  ): Promise<{ run: GameRun; entry: LeaderboardEntry }> {
-    assertAdmin(actor)
-    assertRankedGame(game)
-    const expectedUpdatedAt = input.updatedAt === null ? null : versionInput(input.updatedAt, 'updatedAt')
-    const run = await this.heldRun(game, runId)
-    if (now >= acceptanceDeadline(run.season)) throw new DomainError('CONFLICT', "That season's board is final")
-    const record = await this.store.getBoardEntryByVisitor(run, run.visitorHash)
-    const settle = await this.settlementFor(run, heldRunCandidate(run, crypto.randomUUID(), record))
-    const accepted = await this.store.acceptRun(
-      run.id,
-      new Date(now).toISOString(),
-      fromVersion(settle, expectedUpdatedAt),
-    )
-    if (!accepted) throw new DomainError('CONFLICT', 'The run was reviewed meanwhile')
-    return { run: accepted.run, entry: accepted.settlement.entry }
-  }
-
-  /** Dismisses a held run: it stays stored as evidence and leaves the queue. */
-  async rejectHeldRun(actor: Actor, game: string, runId: string, now = Date.now()): Promise<GameRun> {
-    assertAdmin(actor)
-    assertRankedGame(game)
-    const run = await this.heldRun(game, runId)
-    const rejected = await this.store.rejectRun(run.id, new Date(now).toISOString())
-    if (!rejected) throw new DomainError('CONFLICT', 'The run was reviewed meanwhile')
-    return rejected
-  }
-
-  /**
-   * Dismisses the held runs the admin listed, in one step, a flood's usual answer. Naming them means a run that arrived
-   * after the list loaded stays waiting, since a dismissal cannot be undone; any no longer waiting are not counted.
-   */
-  async rejectListedRuns(actor: Actor, game: string, input: Record<string, unknown>, now = Date.now()) {
-    assertAdmin(actor)
-    assertRankedGame(game)
-    const runIds = parseRunIds(input.runIds)
-    return { rejected: await this.store.rejectRuns(game, runIds, new Date(now).toISOString()) }
-  }
-
-  /** A held run nobody has reviewed; any other run is `409`, and another game's is not found. */
-  async heldRun(game: string, runId: string): Promise<GameRun> {
-    const run = await this.gameRun(game, runId)
-    if (run.status !== 'flagged' || run.reviewedAt !== null)
-      throw new DomainError('CONFLICT', 'The run is not waiting for review')
-    return run
-  }
-
-  async gameRun(game: string, runId: string): Promise<GameRun> {
-    const run = await this.store.getRun(runId)
-    if (!run || run.game !== game) throw new DomainError('NOT_FOUND', 'Run not found')
-    return run
-  }
-
-  /** `entry` is the record the run just settled, if it did; otherwise the visitor's record is read as it stands now. */
   async runOutcome(run: GameRun, entry: LeaderboardEntry | null, consentNeeded: boolean): Promise<RunOutcome> {
     const record = entry ?? (await this.store.getBoardEntryByVisitor(run, run.visitorHash))
-    const rank = record ? await this.store.rankOf(record) : 0
-    return { run, entry: record, rank, standing: runStanding(run, record, rank, consentNeeded) }
+    if (!record) throw new Error('A scored run has a record on its board')
+    const rank = await this.store.rankOf(record)
+    return { run, entry: record, rank, standing: runStanding(run.id, record, rank, consentNeeded) }
   }
 }

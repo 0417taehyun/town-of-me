@@ -13,13 +13,15 @@ import {
   type FinishedRun,
   type GameRun,
   type LeaderboardEntry,
+  type RunCursor,
   type SettleEntry,
 } from './leaderboard.js'
-import type { EntryReport, ReportResolution, ReportTarget, VisitorRunCounts } from './leaderboardReview.js'
+import type { EntryReport, ReportResolution, ReportTarget } from './leaderboardReview.js'
+import type { LinkVerification, LinkVerificationStore } from './linkVerification.js'
 import type { GameWeekCount, GuestbookDayCount, SiteEventCount } from './siteStats.js'
 import { rankingDay, type TownLayout, type TownLayoutInput } from './town.js'
 
-export interface Store extends AuthStore {
+export interface Store extends AuthStore, LinkVerificationStore {
   getUser(id: string): Promise<LinkedUser | null>
   /** The deployment's one town; `null` until it is seeded or the admin saves it for the first time. */
   getTown(): Promise<TownLayout | null>
@@ -68,53 +70,41 @@ export interface Store extends AuthStore {
   getBoardEntryByVisitor(board: BoardKey, visitorHash: string): Promise<LeaderboardEntry | null>
   /** 1 + the records ahead of `entry` in its board's public order: for an unlisted record, the place it would take. */
   rankOf(entry: LeaderboardEntry): Promise<number>
-  /**
-   * The top of the board's public order (listed and not disqualified), every record at its place. What of it anyone
-   * may see is decided by `publishedPlaces`, which leaves out a statue's place still waiting for approval.
-   */
+  /** The top of the board's public order (listed and not disqualified), every record at its place. */
   listBoard(board: BoardKey, limit: number): Promise<LeaderboardEntry[]>
-  /**
-   * Applies `changes` only while the record is still at `expectedUpdatedAt`; `null` if it is missing or changed. A record
-   * taken down also takes the name and look off its visitor's runs on that board, in the same step.
-   */
+  /** Applies `changes` only while the record is still at `expectedUpdatedAt`; `null` if it is missing or changed. */
   updateEntry(id: string, expectedUpdatedAt: string, changes: EntryChanges): Promise<LeaderboardEntry | null>
   getEntry(id: string): Promise<LeaderboardEntry | null>
   /** Every record on the board, listed or not, in public order. */
   listEntries(board: BoardKey): Promise<LeaderboardEntry[]>
   /** The seasons before `currentSeason` with any record of the game, listed or not, newest first. */
   listEndedSeasons(game: string, currentSeason: string): Promise<string[]>
-  /** The board's held runs nobody has reviewed yet. */
-  listRunsForReview(board: BoardKey): Promise<GameRun[]>
-  /** Per visitor with a run for the board: how many they started, abandoned, and had held. */
-  countRunsByVisitor(board: BoardKey): Promise<VisitorRunCounts[]>
   /**
-   * Whether the server judged a run of the game by the visitor: one it scored or held. A run rejected as too fast
-   * does not count, since sending one takes no play.
+   * The board's runs of every status, newest first by when they were issued, then by id descending: up to `limit` of
+   * those after `before`, or from the newest when it is `null`.
+   */
+  listRuns(board: BoardKey, before: RunCursor | null, limit: number): Promise<GameRun[]>
+  /** The board's records of these visitors, in no particular order. */
+  listEntriesByVisitors(board: BoardKey, visitorHashes: readonly string[]): Promise<LeaderboardEntry[]>
+  /** The board's records with an open report, the one reported longest ago first, up to `limit`. */
+  listReportedEntries(board: BoardKey, limit: number): Promise<LeaderboardEntry[]>
+  /**
+   * Whether the server judged a run of the game by the visitor: one it scored, or held under the old review. A run
+   * rejected as too fast does not count, since sending one takes no play.
    */
   hasJudgedRun(game: string, visitorHash: string): Promise<boolean>
-  /**
-   * Accepts a held run nobody has reviewed: it becomes `scored`, its profile goes, since the record now holds what may be
-   * kept, and `settle` decides the visitor's record, in one step; if `settle` throws, nothing changes. `null`, with
-   * nothing changed, when the run is no longer waiting for review.
-   */
-  acceptRun(
-    id: string,
-    reviewedAt: string,
-    settle: SettleEntry,
-  ): Promise<{ run: GameRun; settlement: EntrySettlement } | null>
-  /** Marks a held run nobody has reviewed as reviewed, still held as evidence; `null` when it is not waiting. */
-  rejectRun(id: string, reviewedAt: string): Promise<GameRun | null>
-  /** `rejectRun` for those of `ids` that are the game's and still waiting, in one step; answers how many they were. */
-  rejectRuns(game: string, ids: readonly string[], reviewedAt: string): Promise<number>
   addReport(report: EntryReport): Promise<void>
-  /** Every report on the board's records, open or resolved, oldest first. */
-  listReports(board: BoardKey): Promise<EntryReport[]>
+  /** The open reports on these records, oldest first. */
+  listOpenReports(entryIds: readonly string[]): Promise<EntryReport[]>
   /** Resolves the record's open reports on `target`. */
   resolveReports(entryId: string, target: ReportTarget, resolution: ReportResolution, resolvedAt: string): Promise<void>
   isLinkBlocked(profileHash: string): Promise<boolean>
   /** Blocks the profile once; blocking it again changes nothing. */
   blockLink(profileHash: string, createdAt: string): Promise<void>
-  /** Deletes the visitor's runs and records of the game in every season, with the reports on those records. */
+  /**
+   * Deletes the visitor's runs and records of the game in every season, with the reports on those records and any
+   * LinkedIn sign-in started for them.
+   */
   eraseVisitorGameData(game: string, visitorHash: string): Promise<void>
   /** Adds one to the day's total in one atomic step, so increments at the same moment never lose a count. */
   addSiteEvent(day: string, event: string, subject: string): Promise<void>
@@ -146,6 +136,7 @@ export class MemoryStore implements Store {
   readonly leaderboardEntries = new Map<string, LeaderboardEntry>()
   readonly entryReports = new Map<string, EntryReport>()
   readonly linkBlocks = new Map<string, string>()
+  readonly linkVerifications = new Map<string, LinkVerification>()
   readonly siteEventCounts = new Map<string, SiteEventCount>()
 
   async saveTransaction(transaction: AuthTransaction): Promise<void> {
@@ -361,15 +352,7 @@ export class MemoryStore implements Store {
     if (entry?.updatedAt !== expectedUpdatedAt) return null
     const updated = { ...entry, ...structuredClone(changes) }
     this.leaderboardEntries.set(id, updated)
-    if (updated.takedown) this.forgetRunProfiles(updated)
     return structuredClone(updated)
-  }
-
-  forgetRunProfiles(entry: LeaderboardEntry): void {
-    const runs = [...this.gameRuns.values()].filter(
-      (run) => isOnBoard(run, entry) && run.visitorHash === entry.visitorHash,
-    )
-    runs.forEach((run) => this.gameRuns.set(run.id, { ...run, profile: null }))
   }
 
   async getEntry(id: string): Promise<LeaderboardEntry | null> {
@@ -389,18 +372,30 @@ export class MemoryStore implements Store {
     return [...new Set(ended.map(({ season }) => season))].sort().reverse()
   }
 
-  async listRunsForReview(board: BoardKey): Promise<GameRun[]> {
-    const held = [...this.gameRuns.values()].filter(
-      (run) => isOnBoard(run, board) && run.status === 'flagged' && run.reviewedAt === null,
-    )
-    return structuredClone(held)
+  async listRuns(board: BoardKey, before: RunCursor | null, limit: number): Promise<GameRun[]> {
+    const runs = [...this.gameRuns.values()]
+      .filter((run) => isOnBoard(run, board))
+      .sort(newestRunFirst)
+      .filter((run) => before === null || newestRunFirst(before, run) < 0)
+    return structuredClone(runs.slice(0, limit))
   }
 
-  async countRunsByVisitor(board: BoardKey): Promise<VisitorRunCounts[]> {
-    const counts = new Map<string, VisitorRunCounts>()
-    const runs = [...this.gameRuns.values()].filter((run) => isOnBoard(run, board))
-    runs.forEach((run) => counts.set(run.visitorHash, countedRun(counts.get(run.visitorHash), run)))
-    return [...counts.values()]
+  async listEntriesByVisitors(board: BoardKey, visitorHashes: readonly string[]): Promise<LeaderboardEntry[]> {
+    const visitors = new Set(visitorHashes)
+    const entries = [...this.leaderboardEntries.values()].filter(
+      (entry) => isOnBoard(entry, board) && visitors.has(entry.visitorHash),
+    )
+    return structuredClone(entries)
+  }
+
+  async listReportedEntries(board: BoardKey, limit: number): Promise<LeaderboardEntry[]> {
+    const open = [...this.entryReports.values()]
+      .filter((report) => report.resolvedAt === null)
+      .sort((left, right) => textOrder(left.createdAt, right.createdAt))
+    const reported = [...new Set(open.map((report) => report.entryId))]
+      .flatMap((id) => this.leaderboardEntries.get(id) ?? [])
+      .filter((entry) => isOnBoard(entry, board))
+    return structuredClone(reported.slice(0, limit))
   }
 
   async hasJudgedRun(game: string, visitorHash: string): Promise<boolean> {
@@ -410,46 +405,15 @@ export class MemoryStore implements Store {
     )
   }
 
-  // `settle` runs before anything is written, so a refusal changes nothing, like the PostgreSQL rollback.
-  async acceptRun(
-    id: string,
-    reviewedAt: string,
-    settle: SettleEntry,
-  ): Promise<{ run: GameRun; settlement: EntrySettlement } | null> {
-    const run = this.gameRuns.get(id)
-    if (run?.status !== 'flagged' || run.reviewedAt !== null) return null
-    const settlement = this.settleEntry(run, settle)
-    const accepted: GameRun = { ...run, status: 'scored', reviewedAt, profile: null }
-    this.gameRuns.set(id, accepted)
-    return { run: structuredClone(accepted), settlement }
-  }
-
-  async rejectRun(id: string, reviewedAt: string): Promise<GameRun | null> {
-    const run = this.gameRuns.get(id)
-    if (run?.status !== 'flagged' || run.reviewedAt !== null) return null
-    const rejected = { ...run, reviewedAt }
-    this.gameRuns.set(id, rejected)
-    return structuredClone(rejected)
-  }
-
-  async rejectRuns(game: string, ids: readonly string[], reviewedAt: string): Promise<number> {
-    const listed = new Set(ids)
-    const waiting = [...this.gameRuns.values()].filter(
-      (run) => listed.has(run.id) && run.game === game && run.status === 'flagged' && run.reviewedAt === null,
-    )
-    waiting.forEach((run) => this.gameRuns.set(run.id, { ...run, reviewedAt }))
-    return waiting.length
-  }
-
   async addReport(report: EntryReport): Promise<void> {
     this.entryReports.set(report.id, structuredClone(report))
   }
 
-  async listReports(board: BoardKey): Promise<EntryReport[]> {
-    const onBoard = new Set(
-      [...this.leaderboardEntries.values()].filter((entry) => isOnBoard(entry, board)).map(({ id }) => id),
+  async listOpenReports(entryIds: readonly string[]): Promise<EntryReport[]> {
+    const wanted = new Set(entryIds)
+    const reports = [...this.entryReports.values()].filter(
+      (report) => wanted.has(report.entryId) && report.resolvedAt === null,
     )
-    const reports = [...this.entryReports.values()].filter((report) => onBoard.has(report.entryId))
     return structuredClone(reports.sort((left, right) => textOrder(left.createdAt, right.createdAt)))
   }
 
@@ -481,9 +445,27 @@ export class MemoryStore implements Store {
       .filter((report) => entryIds.has(report.entryId))
       .map(({ id }) => id)
     const runIds = [...this.gameRuns.values()].filter(isTheirs).map(({ id }) => id)
+    const verificationIds = [...this.linkVerifications.values()]
+      .filter((verification) => entryIds.has(verification.entryId))
+      .map(({ id }) => id)
+    verificationIds.forEach((id) => this.linkVerifications.delete(id))
     reportIds.forEach((id) => this.entryReports.delete(id))
     entryIds.forEach((id) => this.leaderboardEntries.delete(id))
     runIds.forEach((id) => this.gameRuns.delete(id))
+  }
+
+  async saveLinkVerification(verification: LinkVerification): Promise<void> {
+    this.linkVerifications.set(verification.id, structuredClone(verification))
+  }
+
+  async consumeLinkVerification(id: string): Promise<LinkVerification | null> {
+    const verification = this.linkVerifications.get(id) ?? null
+    this.linkVerifications.delete(id)
+    return verification
+  }
+
+  async deleteExpiredLinkVerifications(now: number): Promise<void> {
+    deleteExpiredRecords(this.linkVerifications, now)
   }
 
   // Nothing is awaited between the read and the write, so this is one step like the PostgreSQL upsert.
@@ -525,15 +507,9 @@ export class MemoryStore implements Store {
   }
 }
 
-/** `counted` with `run` added. */
-export function countedRun(counted: VisitorRunCounts | undefined, run: GameRun): VisitorRunCounts {
-  const counts = counted ?? { visitorHash: run.visitorHash, runs: 0, abandoned: 0, flagged: 0 }
-  return {
-    visitorHash: counts.visitorHash,
-    runs: counts.runs + 1,
-    abandoned: counts.abandoned + Number(run.status === 'abandoned'),
-    flagged: counts.flagged + Number(run.status === 'flagged'),
-  }
+/** The later issued run first, then the greater id, like the list's PostgreSQL order. */
+export function newestRunFirst(left: RunCursor, right: RunCursor): number {
+  return textOrder(right.issuedAt, left.issuedAt) || textOrder(right.id, left.id)
 }
 
 /** Whether a record or run belongs to the board. */

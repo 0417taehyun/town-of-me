@@ -20,12 +20,17 @@ import {
   type GameRun,
   type RankedRecord,
 } from './leaderboard.js'
-import { reviewedEntry, reviewedRun, type EntryReviewAction } from './leaderboardReview.js'
+import { playsView, reviewedRecord, type EntryReviewAction } from './leaderboardReview.js'
+import { isLinkVerificationState } from './linkVerification.js'
 import { BackendService, type Leaderboard, type RunOutcome, type SeasonStatues } from './service.js'
 import { decodeComponent, inputRecord, invalidInput } from './validation.js'
 
 const sessionCookie = '__Host-tom_session'
 const oauthCookie = '__Host-tom_oauth'
+/** The id of a visitor's started LinkedIn sign-in for their record's link; never the admin sign-in's cookie. */
+const linkCookie = '__Host-tom_link'
+/** Where a visitor's link sign-in returns the browser: the derby's board page, on the frontend's own origin. */
+const boardPagePath = '/baseball/ranking'
 /** A random id for an anonymous guestbook writer's browser; only its hash is stored. */
 const visitorCookie = '__Host-tom_visitor'
 const visitorCookieLifetimeMs = 365 * 24 * 60 * 60_000
@@ -126,12 +131,13 @@ const routes: readonly Route[] = [
     const visitorHash = await readVisitorHash(request)
     const fromGamePage = looksLikePageFetch(request)
     const outcome = await dependencies.service.submitRunResult(game, visitorHash, runId, body, fromGamePage)
-    return json(runOutcomeView(outcome))
+    return json({ ...runOutcomeView(outcome), linkedInAvailable: dependencies.linkedInOidc !== undefined })
   }),
   route('GET', `/v1/games/(${gameId})/leaderboard`, async ({ request, url, pathId, dependencies }) => {
     const visitorHash = await readVisitorHash(request)
     const season = url.searchParams.get('season')
-    return json(leaderboardView(await dependencies.service.getLeaderboard(pathId, visitorHash, season)))
+    const board = await dependencies.service.getLeaderboard(pathId, visitorHash, season)
+    return json({ ...leaderboardView(board), linkedInAvailable: dependencies.linkedInOidc !== undefined })
   }),
   route('GET', `/v1/games/(${gameId})/podium`, servePodium),
   route('GET', `/v1/games/(${gameId})/hall-of-fame`, async ({ pathId, dependencies }) =>
@@ -139,11 +145,13 @@ const routes: readonly Route[] = [
   ),
   route('PUT', `/v1/games/(${gameId})/entries/own`, async ({ request, url, pathId, dependencies }) => {
     const body = await objectBody(request, gameBodyLimitBytes)
+    assertLinkAvailable(body, dependencies)
     const visitorHash = await readVisitorHash(request)
     const season = url.searchParams.get('season')
     const { entry, rank } = await dependencies.service.updateOwnEntry(pathId, visitorHash, body, season)
     return json({ entry: ownEntry(entry, rank) })
   }),
+  route('POST', `/v1/games/(${gameId})/entries/own/linkedin-verification`, serveLinkVerificationStart),
   route('DELETE', `/v1/games/(${gameId})/entries/own`, async ({ request, pathId, dependencies }) => {
     await dependencies.service.deleteOwnRecords(pathId, await readVisitorHash(request))
     return new Response(null, { status: 204 })
@@ -154,47 +162,24 @@ const routes: readonly Route[] = [
     await dependencies.service.reportEntry(game, await readVisitorHash(request), entryId, body)
     return new Response(null, { status: 204 })
   }),
-  route('GET', `/v1/admin/games/(${gameId})/review`, async ({ url, pathId, actor, dependencies }) => {
-    const season = url.searchParams.get('season')
-    return json({ items: await dependencies.service.getReviewQueue(await actor(), pathId, season) })
+  route('GET', `/v1/admin/games/(${gameId})/plays`, async ({ url, pathId, actor, dependencies }) => {
+    const { searchParams } = url
+    const page = await dependencies.service.getPlays(
+      await actor(),
+      pathId,
+      searchParams.get('season'),
+      searchParams.get('cursor'),
+      searchParams.get('limit'),
+    )
+    return json(playsView(page))
   }),
-  route('GET', `/v1/admin/games/(${gameId})/entries`, async ({ url, pathId, actor, dependencies }) => {
-    const season = url.searchParams.get('season')
-    return json(await dependencies.service.getBoardRecords(await actor(), pathId, season))
-  }),
-  route('GET', `/v1/admin/games/(${gameId})/entries/warnings`, async ({ url, pathId, actor, dependencies }) => {
-    const season = url.searchParams.get('season')
-    const ids = url.searchParams.get('ids') ?? ''
-    return json({ warnings: await dependencies.service.getRecordWarnings(await actor(), pathId, season, ids) })
-  }),
-  route('GET', `/v1/admin/games/(${gameId})/runs/(${uuid})`, async ({ pathIds, actor, dependencies }) => {
-    const [game = '', runId = ''] = pathIds
-    return json({ run: reviewedRun(await dependencies.service.getReviewedRun(await actor(), game, runId), null) })
-  }),
-  entryReviewRoute('POST', 'approval', 'approval'),
   entryReviewRoute('POST', 'disqualification', 'disqualification'),
   entryReviewRoute('DELETE', 'disqualification', 'restoration'),
-  entryReviewRoute('POST', 'linkedin-review', 'linkedin-review'),
-  entryReviewRoute('POST', 'report-resolution', 'report-resolution'),
+  entryReviewRoute('POST', 'name', 'name'),
   entryReviewRoute('POST', 'appearance', 'appearance'),
+  entryReviewRoute('POST', 'linkedin-removal', 'linkedin-removal'),
+  entryReviewRoute('POST', 'report-resolution', 'report-resolution'),
   entryReviewRoute('POST', 'takedown', 'takedown'),
-  route(
-    'POST',
-    `/v1/admin/games/(${gameId})/runs/(${uuid})/acceptance`,
-    async ({ request, pathIds, actor, dependencies }) => {
-      const [game = '', runId = ''] = pathIds
-      const body = await objectBody(request)
-      const { run, entry } = await dependencies.service.acceptHeldRun(await actor(), game, runId, body)
-      return json({ run: reviewedRun(run, null), entry: reviewedEntry(entry, null) })
-    },
-  ),
-  route('POST', `/v1/admin/games/(${gameId})/runs/(${uuid})/rejection`, async ({ pathIds, actor, dependencies }) => {
-    const [game = '', runId = ''] = pathIds
-    return json({ run: reviewedRun(await dependencies.service.rejectHeldRun(await actor(), game, runId), null) })
-  }),
-  route('POST', `/v1/admin/games/(${gameId})/runs/rejection`, async ({ request, pathId, actor, dependencies }) =>
-    json(await dependencies.service.rejectListedRuns(await actor(), pathId, await objectBody(request))),
-  ),
   route('GET', '/v1/town', async ({ dependencies }) => json({ town: await dependencies.service.getTown() })),
   route('PUT', '/v1/admin/town', async ({ request, actor, dependencies }) =>
     json({ town: await dependencies.service.saveTown(await actor(), await objectBody(request)) }),
@@ -215,20 +200,14 @@ const routes: readonly Route[] = [
   }),
 ]
 
-/** An admin's action on a record answers with the record as the review queue shows it. */
+/** An admin's action on a record answers with the record as the list shows it. */
 export function entryReviewRoute(method: string, path: string, action: EntryReviewAction): Route {
   const entryPath = `/v1/admin/games/(${gameId})/entries/(${uuid})/${path}`
   return route(method, entryPath, async ({ request, pathIds, actor, dependencies }) => {
     const [game = '', entryId = ''] = pathIds
     const reviewer = await actor()
-    const { entry, rank } = await dependencies.service.reviewEntry(
-      reviewer,
-      game,
-      entryId,
-      action,
-      await objectBody(request),
-    )
-    return json({ entry: reviewedEntry(entry, rank) })
+    const record = await dependencies.service.reviewEntry(reviewer, game, entryId, action, await objectBody(request))
+    return json({ entry: reviewedRecord(record) })
   })
 }
 
@@ -273,21 +252,80 @@ export async function serveLinkedInStart({ dependencies }: RouteContext): Promis
   })
 }
 
+/**
+ * The one callback address the LinkedIn app has, for both sign-ins: the state says which one this is, and each then
+ * checks it against its own stored transaction and its own cookie, so neither can finish the other.
+ */
+export function serveLinkedInCallback(context: RouteContext): Promise<Response> {
+  return isLinkVerificationState(context.url.searchParams.get('state'))
+    ? serveLinkVerificationCallback(context)
+    : serveLoginCallback(context)
+}
+
 /** Every outcome returns the browser to the frontend; failure details stay in the server log. */
-export async function serveLinkedInCallback({ request, url, dependencies }: RouteContext): Promise<Response> {
+export async function serveLoginCallback({ request, url, dependencies }: RouteContext): Promise<Response> {
   const headers = new Headers({ 'Cache-Control': 'no-store' })
   headers.append('Set-Cookie', cookie(oauthCookie, '', 0))
   try {
     const result = await completeLinkedInLogin({
       adapter: dependencies.linkedInOidc,
       store: dependencies.authStore,
-      ...callbackParameters(request, url),
+      ...callbackParameters(request, url, oauthCookie),
     })
     headers.append('Set-Cookie', cookie(sessionCookie, result.sessionToken, sessionLifetimeMs))
     return redirect(loginResultUrl(dependencies.frontendUrl, 'success'), headers)
   } catch (error) {
     dependencies.logger.warn(`LinkedIn sign-in failed: ${error instanceof Error ? error.message : 'unknown error'}`)
     return redirect(loginResultUrl(dependencies.frontendUrl, 'failed'), headers)
+  }
+}
+
+/**
+ * Starts a visitor's LinkedIn sign-in for the link on their own record (`?season=` for a past one), named by the
+ * visitor cookie alone: `{ authorizationUrl }` to send the browser to, and the cookie the callback needs.
+ */
+export async function serveLinkVerificationStart({ request, url, pathId, dependencies }: RouteContext) {
+  const started = await dependencies.service.beginLinkVerification(
+    dependencies.linkedInOidc,
+    pathId,
+    await readVisitorHash(request),
+    url.searchParams.get('season'),
+  )
+  return json({ authorizationUrl: started.authorizationUrl }, 200, {
+    'Set-Cookie': cookie(linkCookie, started.transactionId, oidcTransactionLifetimeMs),
+  })
+}
+
+/**
+ * Returns the browser to the board page with `?linkedin=verified` or `?linkedin=failed` and nothing else: no session
+ * is made, and the failure's reason stays in the server log.
+ */
+export async function serveLinkVerificationCallback({ request, url, dependencies }: RouteContext): Promise<Response> {
+  const headers = new Headers({ 'Cache-Control': 'no-store' })
+  headers.append('Set-Cookie', cookie(linkCookie, '', 0))
+  try {
+    await dependencies.service.completeLinkVerification(
+      dependencies.linkedInOidc,
+      callbackParameters(request, url, linkCookie),
+      await readVisitorHash(request),
+    )
+    return redirect(linkVerificationResultUrl(dependencies.frontendUrl, 'verified'), headers)
+  } catch (error) {
+    dependencies.logger.warn(
+      `LinkedIn link sign-in failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+    )
+    return redirect(linkVerificationResultUrl(dependencies.frontendUrl, 'failed'), headers)
+  }
+}
+
+/**
+ * A record takes a link only where a visitor can sign in for it: without LinkedIn configured the board says
+ * `linkedInAvailable: false`, and a request that asks for one anyway is refused rather than stored for nothing.
+ */
+export function assertLinkAvailable(body: Record<string, unknown>, dependencies: ApiDependencies): void {
+  const asksForLink = body.linkedIn !== undefined && body.linkedIn !== null
+  if (asksForLink && !dependencies.linkedInOidc) {
+    throw new DomainError('NOT_CONFIGURED', 'LinkedIn OIDC is not configured')
   }
 }
 
@@ -358,9 +396,8 @@ export function issuedRunView(run: GameRun) {
 }
 
 /**
- * The town's statues, each with the place it holds; a place whose record waits for approval is missing. No cookie is
- * read or set and nothing in it belongs to one visitor, so shared caches may keep it for a minute; an approval or a
- * disqualification shows within that.
+ * The town's statues, each with the place it holds. No cookie is read or set and nothing in it belongs to one
+ * visitor, so shared caches may keep it for a minute; a new record or a disqualification shows within that.
  */
 export async function servePodium({ pathId, dependencies }: RouteContext): Promise<Response> {
   const { season, entries } = await dependencies.service.getPodium(pathId)
@@ -373,15 +410,12 @@ export function statueView({ entry, rank }: RankedRecord) {
   return podiumEntry(entry, rank)
 }
 
-/** A finished season's statues, each with its approved link while its owner keeps it on. */
+/** A finished season's statues, each with its verified link while its owner keeps it on. */
 export function hallOfFameSeason({ season, entries }: SeasonStatues) {
   return { id: season, champions: entries.map(statueView) }
 }
 
-/**
- * The first three places are the statues, which alone carry an approved link, and the rest the list below them. Each
- * record says its own place, since a statue's place waiting for approval is left out and stays empty.
- */
+/** The first three places are the statues, which alone carry a verified link, and the rest the list below them. */
 export function leaderboardView({ season, currentSeason, entries, own }: Leaderboard) {
   return {
     season: seasonView(season, currentSeason),
@@ -394,15 +428,20 @@ export function leaderboardView({ season, currentSeason, entries, own }: Leaderb
 /** The server's own result, never the client's totals, with the visitor's record and standing. */
 export function runOutcomeView({ run, entry, rank, standing }: RunOutcome) {
   if (!run.result) throw new Error('A recorded run keeps its result')
-  return { result: publicDerbyResult(run.result), standing, entry: entry && ownEntry(entry, rank) }
+  return { result: publicDerbyResult(run.result), standing, entry: ownEntry(entry, rank) }
 }
 
-export function callbackParameters(request: Request, url: URL): { transactionId: string; state: string; code: string } {
+/** `cookieName` is the cookie of the sign-in the callback belongs to, which holds its transaction's id. */
+export function callbackParameters(
+  request: Request,
+  url: URL,
+  cookieName: string,
+): { transactionId: string; state: string; code: string } {
   const providerError = url.searchParams.get('error')
   if (providerError) {
     throw new DomainError('FORBIDDEN', `LinkedIn returned ${JSON.stringify(providerError.slice(0, 100))}`)
   }
-  const transactionId = readCookie(request, oauthCookie)
+  const transactionId = readCookie(request, cookieName)
   const state = url.searchParams.get('state')
   const code = url.searchParams.get('code')
   if (!transactionId || !state || !code) throw invalidInput('OIDC callback parameters are missing')
@@ -412,6 +451,13 @@ export function callbackParameters(request: Request, url: URL): { transactionId:
 export function loginResultUrl(frontendUrl: string, result: 'success' | 'failed'): URL {
   const target = new URL(frontendUrl)
   target.searchParams.set('login', result)
+  return target
+}
+
+/** Built from the configured frontend's origin only, never from the request, so it cannot redirect anywhere else. */
+export function linkVerificationResultUrl(frontendUrl: string, result: 'verified' | 'failed'): URL {
+  const target = new URL(boardPagePath, new URL(frontendUrl).origin)
+  target.searchParams.set('linkedin', result)
   return target
 }
 

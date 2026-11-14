@@ -13,7 +13,12 @@ export interface VerifiedLinkedInIdentity {
 }
 
 export interface LinkedInOidcAdapter {
-  createAuthorizationUrl(input: { state: string; nonce: string; scopes: readonly ['openid', 'profile', 'email'] }): URL
+  /** `email` only for the admin sign-in, which decides the role by it; a visitor's link sign-in asks for none. */
+  createAuthorizationUrl(input: {
+    state: string
+    nonce: string
+    scopes: ReadonlyArray<'openid' | 'profile' | 'email'>
+  }): URL
   exchangeAndVerify(input: { code: string; expectedNonce: string }): Promise<VerifiedLinkedInIdentity>
 }
 

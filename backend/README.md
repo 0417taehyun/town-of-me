@@ -90,19 +90,21 @@ For local development, copy the root [`.env.example`](../.env.example) to `.env`
 
 Use a maintained OIDC library when wiring the provider; do not hand-roll JWT validation. Provider credentials stay outside the database and are optional at boot. With no adapter, `/v1/auth/linkedin/*` returns `503 NOT_CONFIGURED`.
 
+The same adapter and the same registered callback address also serve a second, separate sign-in: a visitor's, which makes the LinkedIn link on their derby record public (`src/linkVerification.ts`, [Ranked runs](#ranked-runs)). It shares nothing else with the admin sign-in. Its transactions live in their own table (`minigame_link_verifications`) with their own cookie (`__Host-tom_link`), and each is bound to the anonymous visitor cookie's hash, to one record, and to the address that record had. It never calls `upsertLinkedUser`, `assignRoleByEmail`, or `saveSession`, so it cannot create a user, a session, or an admin. It asks LinkedIn for `openid profile` only, and stores of the account nothing but its display name, on that record. The callback tells the two apart by the state: a visitor sign-in's starts with `link.`, which an admin sign-in's base64url state never does. The prefix only picks which flow checks the callback; each then checks the whole state against its own stored transaction, named by its own cookie, so neither can finish the other. The protection is the admin sign-in's: 256-bit state, a ten-minute transaction used up by its first callback whatever the outcome, an `HttpOnly; Secure; SameSite=Lax` cookie, and an allowed `Origin` on the request that starts it.
+
 ## API shell
 
 Create a handler with `createApi({ service, authStore, linkedInOidc, allowedOrigins, frontendUrl })` and mount it in any runtime that supports Fetch requests. Every response is `Cache-Control: no-store`, a body that is not a JSON object returns `400`, and unexpected errors are logged and return a generic `500`. Included routes:
 
-- `GET /v1/auth/linkedin/start` returns `{ authorizationUrl }`; `/callback` always redirects to `FRONTEND_URL` with `?login=success` or `?login=failed` and logs the failure reason server-side
+- `GET /v1/auth/linkedin/start` returns `{ authorizationUrl }`; `/callback` always redirects to `FRONTEND_URL` with `?login=success` or `?login=failed` and logs the failure reason server-side. A callback whose state starts with `link.` belongs to a visitor's link sign-in instead and redirects to `/baseball/ranking` on `FRONTEND_URL`'s origin with `?linkedin=verified` or `?linkedin=failed`; see [Ranked runs](#ranked-runs)
 - `POST /v1/auth/logout` and `GET /v1/me` (`{ user }` with `role`, or `{ user: null }` when not signed in)
 - `GET /v1/guestbook` returns `{ entries, own }`: the newest 100 approved entries, and this browser's latest entry with its `status` and whether it is still `revisable`
 - `POST /v1/guestbook` and `PUT /v1/guestbook/:id` take `{ message, locale, profile }` from anyone and return `{ entry }`; see the guestbook rules below
 - `GET /v1/admin/guestbook` lists the newest 200 entries of every status with `updatedAt`; `POST /v1/admin/guestbook/:id/approval` with `{ updatedAt }` publishes the entry only if it was not revised since that version (`409` otherwise); `DELETE /v1/admin/guestbook/:id` removes it
-- `POST /v1/games/:game/runs` and `POST /v1/games/:game/runs/:id/result` start and record a ranked run, `GET /v1/games/:game/leaderboard`, `GET /v1/games/:game/podium`, and `GET /v1/games/:game/hall-of-fame` read the weekly board, its statues, and every finished season's statues, `PUT` and `DELETE /v1/games/:game/entries/own` change or delete the visitor's records, and `POST /v1/games/:game/entries/:id/report` reports one; see [Ranked runs](#ranked-runs)
+- `POST /v1/games/:game/runs` and `POST /v1/games/:game/runs/:id/result` start and record a ranked run, `GET /v1/games/:game/leaderboard`, `GET /v1/games/:game/podium`, and `GET /v1/games/:game/hall-of-fame` read the weekly board, its statues, and every finished season's statues, `PUT` and `DELETE /v1/games/:game/entries/own` change or delete the visitor's records, `POST /v1/games/:game/entries/own/linkedin-verification` starts the LinkedIn sign-in for a record's link, and `POST /v1/games/:game/entries/:id/report` reports one; see [Ranked runs](#ranked-runs)
 - `POST /v1/visitor/forget` clears this browser's visitor cookie and returns `204`; see [Ranked runs](#ranked-runs)
 - `POST /v1/events` adds one to an anonymous daily total, and `GET /v1/admin/stats?days=` reads the totals for an admin session; see [Usage statistics](#usage-statistics)
-- `GET /v1/admin/games/:game/review`, `GET /v1/admin/games/:game/entries`, `GET /v1/admin/games/:game/runs/:id`, and the `/v1/admin/games/:game/entries/:id/…` and `/v1/admin/games/:game/runs/…` actions review the boards for an admin session; see [Board review](#board-review)
+- `GET /v1/admin/games/:game/plays` lists who played and the `/v1/admin/games/:game/entries/:id/…` actions change a record, for an admin session; see [Board review](#board-review)
 - `GET /v1/town` returns the deployment's one `{ town }` with `revision`, or `404` until it has one
 - `PUT /v1/admin/town` with `{ baseRevision, name, owner, pet, spawn, movement, venues, objects, residents }` replaces the town for an admin session (`401` signed out, `403` otherwise) and returns the saved `{ town }`; `baseRevision` is `0` for the first save
 - `POST /v1/admin/resident-dialogues` with `{ name, role, relationship, reference, owner }` (`owner` is the owner's `{ ko, en }` name) returns a drafted `{ dialogue }` for an admin session without storing it; the admin saves it with the town
@@ -135,11 +137,12 @@ Cloudflare Web Analytics covers visits; these answer what it cannot, what people
 
 The home run derby (`home-run-derby`, the ballpark of the deployment's town) keeps a weekly board.
 Its season is the KST (UTC+9) week from Monday 00:00 to the next Monday, written as its Monday's KST date `YYYY-MM-DD`
-(so season ids sort as text), and a run belongs to the season it was issued in, whenever its result arrives. A place
-among the first three, the statues, is published only once the admin has approved its record; fourth place and below
-show at once (see [Statue approval](#statue-approval)). Any other game id returns `404`. The client never sends a score anyone keeps: the server
-judges the run again with `src/derbyJudge/`, the frontend judge's copy (`test/derbyJudgeVectors.json` holds both to
-the same results).
+(so season ids sort as text), and a run belongs to the season it was issued in, whenever its result arrives. Nothing
+waits for the admin: a result goes onto its board at once, wherever it places, a listed name shows at once, and a
+link shows once its visitor has signed in with LinkedIn. The admin removes afterwards (see
+[Board review](#board-review)). Any other game id returns `404`. The client never sends a score anyone keeps: the
+server judges the run again with `src/derbyJudge/`, the frontend judge's copy (`test/derbyJudgeVectors.json` holds
+both to the same results).
 
 - `POST /v1/games/home-run-derby/runs` (no body) returns `201 { run: { id, season, expiresAt, rules, seed } }` and
   gives the browser the guestbook's `__Host-tom_visitor` cookie if it has none. `rules` are the stored town's
@@ -154,171 +157,169 @@ the same results).
   to `contactMs`, 0–200, and −3 to 3 m or `null`); `clientElapsedMs` is 0–600000; `claimed` is the client's
   `{ homeRuns, totalDistanceDm }`; and `profile` is the character appearance with an optional `name` (NFKC, one line of
   1–24 characters). Every other field, such as pose keypoints, is dropped and never stored; the run keeps only the
-  parsed `side`, `practice`, and `swings`, and the name is kept only on a listed record, or on a held run until it is
-  accepted or its record is taken down.
-- It answers `200 { result, standing, entry }`: the server's own `result` (`homeRuns`, `totalDistanceDm` of the home
-  runs, and per pitch only `pitchType`, `outcome`, and `distanceDm`), the visitor's `standing`, and their record on the
-  run's board (`entry`, or `null`). `standing.kind` is `ranked` (`rank`, `personalBest`), `unlisted` (`wouldBeRank`,
-  `personalBest`), `consentNeeded` (the same; the browser's listed record looked like someone else, so this one is off
-  the board until they agree), `reviewing` (the run is held, or the visitor's listed record waits for approval among the statues), or `excluded`
-  (the record is disqualified).
+  parsed `side`, `practice`, and `swings`, and the name is kept only on a listed record.
+- It answers `200 { result, standing, entry, linkedInAvailable }`: the server's own `result` (`homeRuns`,
+  `totalDistanceDm` of the home runs, and per pitch only `pitchType`, `outcome`, and `distanceDm`), the visitor's
+  `standing`, their record on the run's board (`entry`, never `null`), and whether a link can be asked with the
+  listing (below). `standing.kind` is `ranked` (`rank`, `personalBest`), `unlisted` (`wouldBeRank`, `personalBest`),
+  `consentNeeded` (the same; the browser's listed record looked like someone else, so this one is off the board until
+  they agree), or `excluded` (the admin removed the record from this board).
 - In order, the server checks the run (no visitor cookie, an unknown run, or someone else's is `404`; a run already
   recorded answers again from what was stored; an abandoned, rejected, or expired run is `409`), then the time: a
   result sooner than 85% of the shortest honest run (ready, windup, and a miss's result hold per pitch, 3.2 s) is `409`
   and uses the run up. Then the body: a malformed one is `400` and leaves the run open. The server then scores the run
-  from its own rules and seed and the log, and holds it for review when a check in `src/homeRunDerby.ts`
-  `DERBY_REVIEW_RULES` finds it unusual, starting with claimed totals that differ from its own; when the request did
-  not look like the game page's own `fetch` (`not-from-browser`, below); and when it would be the visitor's best and
-  place among the statues (`podium-place`). A held run is stored with its flags but leaves the visitor's record as it
-  was; any other run becomes the record only if it has more home
-  runs, or as many and a longer total distance, so the earlier of two equal records stays.
+  from its own rules and seed and the log, and the run becomes the visitor's record at once if it has more home runs,
+  or as many and a longer total distance, so the earlier of two equal records stays.
+- What looks unusual is only marked. The run's `flags` hold every check in `src/homeRunDerby.ts` `DERBY_REVIEW_RULES`
+  that found it so, starting with claimed totals that differ from the server's, and `not-from-browser`. They are shown
+  to the admin beside the run and block nothing: a marked run scores, stands, and can be a statue like any other.
 - `not-from-browser` is set when the result request lacks `Sec-Fetch-Site: same-origin` or a `Sec-Fetch-Mode` of `cors`
   or `same-origin`, which every current browser adds to a page's `fetch` to its own origin and a script does not unless
-  told to. Only the flag is stored, never a header's value, an address, or a user agent. A script can send the same
-  headers, so the flag only catches lazy ones; and a browser sends them only to HTTPS or `localhost`, so a town served
-  over plain HTTP on another host has every result held with it. A proxy in front must pass the headers through.
+  told to. Only the mark is stored, never a header's value, an address, or a user agent. A script can send the same
+  headers, so it only catches lazy ones; and a browser sends them only to HTTPS or `localhost`, so a town served over
+  plain HTTP on another host has every result marked with it. A proxy in front must pass the headers through.
 - A first record on a board is listed only if the visitor's latest record of the game was listed and looks like the
   same player (the same appearance, and the same name when it had one); a listed record whose next run looks like
-  someone else's goes off the board and loses its name, so a shared browser never publishes one player's score under
-  another's consent.
+  someone else's goes off the board and loses its name and link, so a shared browser never publishes one player's
+  score under another's consent.
 - `PUT /v1/games/home-run-derby/entries/own` with `{ listed?, profile?, linkedIn? }` (at least one) changes this
   week's record of the visitor cookie (`404` without one): `listed: true` needs `profile`, whose name is stored from
-  then on, and `listed: false` drops the name and the link. A name the record does not have yet is checked (below) and
-  then waits for approval, and a new appearance returns the record to review. It returns `{ entry }`, the visitor's own
-  view (`listed`, `name`, `nameStatus`, `disqualified`, `profile`, `appearancePublic`, `takedown`, `linkedIn`,
-  `homeRuns`, `totalDistanceDm`, `achievedAt`, `rank`, the place it holds or would hold, and `awaitingApproval`,
-  whether that place is among the statues and the record is not approved yet, so nobody else sees it there).
+  then on, and `listed: false` drops the name and the link. A listed record is public at once, at its place, with its
+  name and character. It returns `{ entry }`, the visitor's own view (`id`, `season`, `listed`, `name`, `nameStatus`,
+  `disqualified`, `profile`, `appearancePublic`, `takedown`, `linkedIn`, `homeRuns`, `totalDistanceDm`, `achievedAt`,
+  and `rank`, the place it holds or would hold, `null` once the admin removed the record).
   - `?season=YYYY-MM-DD` names a past season, whose record only takes `{ anonymize: true }` (no name or link from then
-    on; the score keeps its place) or `{ linkedIn: null }`; anything else is `400`. A record whose best run arrived
-    after midnight, or was accepted after the season ended, takes the changes above instead until a week after it
-    ended, when held runs can no longer be accepted either.
-  - A name is NFKC, one line of 1–24 characters (`400` otherwise). It is `rejected`, and the record shows as an
-    anonymous batter while keeping its place, when it has a format or zero-width character or a Hangul filler, stacks
-    combining marks, has no letter, digit, or symbol, looks like a web address, domain, handle, or phone number, or its
-    comparison form (lowercase, no spacing, punctuation, or symbols, lookalike Cyrillic and Greek letters made Latin)
-    contains the town's owner, resident, or house owner names or a reserved word (`admin`, `official`, `관리자`, …), or
-    equals another visitor's approved name on the board. Anything else is `pending`.
-  - `linkedIn: { profileUrl, ownProfile: true }` links a listed record that was not taken down (`409` otherwise) to a
-    LinkedIn profile: an https `linkedin.com/in/<id>` link whose id, decoded once, is 3–100 letters, digits, or
-    hyphens and reads like no contact, stored as `https://www.linkedin.com/in/<id>` percent-encoded. A link the town
-    shows or a takedown blocked is `400`. A new address gets an ownership code, `TOM-` and four Crockford base32
-    characters, for the visitor to put on the profile; the link shows only on statue rows (`podium` here and on past
-    seasons' boards, and `/podium`) once the admin has seen the code there, and stays while the visitor keeps it on.
-    `linkedIn: null` deletes the address, its status, and its code. The own view shows only a hint of the address
-    (`linkedin.com/in/sp•••`), its `status` (`pending`, `approved`, or `reported`), and the `code`; a link is never
-    carried to a new week, and a run that looks like someone else's deletes it with the listing.
+    on; the score keeps its place) or `{ linkedIn: null }`; anything else is `400`. A record whose best run's result
+    arrived after the season ended takes the changes above instead, until a week after the season ended.
+  - A name is NFKC, one line of 1–24 characters (`400` otherwise). Nobody approves it, so it is checked as it is
+    stored: it is `rejected`, and the record shows as an anonymous batter while keeping its place, when it has a
+    format or zero-width character or a Hangul filler, stacks combining marks, has no letter, digit, or symbol, looks
+    like a web address, domain, handle, or phone number, or its comparison form (lowercase, no spacing, punctuation,
+    or symbols, lookalike Cyrillic and Greek letters made Latin) contains the town's owner, resident, or house owner
+    names or a reserved word (`admin`, `official`, `관리자`, …), or equals another visitor's shown name on the board.
+    Anything else is `shown`. The admin can take a shown name off afterwards.
+  - `linkedIn: { profileUrl, ownProfile: true }` asks for a link on a listed record that was not taken down (`409`
+    otherwise), usually in the same request that lists it: an https `linkedin.com/in/<id>` link whose id, decoded
+    once, is 3–100 letters, digits, or hyphens and reads like no contact, stored as
+    `https://www.linkedin.com/in/<id>` percent-encoded. A link the town shows or the admin blocked is `400`. The link
+    is stored `unverified` and shown to nobody until the visitor signs in with LinkedIn (next item). Sending the
+    address the record already has changes nothing; a new address starts `unverified` again. `linkedIn: null`
+    deletes the address. The own view shows only `linkedIn: { profileHint, status }`, a hint of the address
+    (`linkedin.com/in/sp•••`) and `unverified`, `verified`, or `reported`; a link is never carried to a new week, and a
+    run that looks like someone else's deletes it with the listing. When the deployment has no LinkedIn sign-in
+    configured, `linkedInAvailable` is `false` on the board and the result, and a request that asks for a link anyway
+    is `503`; `linkedIn: null` and a listing without a link work as ever.
+- `POST /v1/games/home-run-derby/entries/own/linkedin-verification` (no body; `?season=` for a past season's record)
+  starts the LinkedIn sign-in for the link on the visitor's own record, which the visitor cookie alone names. It
+  returns `{ authorizationUrl }` and sets the `__Host-tom_link` cookie for ten minutes; the page then sends the
+  browser to `authorizationUrl`. `404` without a record, `409` unless its link is `unverified`, `503` without LinkedIn
+  configured. LinkedIn returns the browser to `/v1/auth/linkedin/callback`, which redirects it to `/baseball/ranking`
+  on `FRONTEND_URL`'s origin (never an address from the request) with `?linkedin=verified` or `?linkedin=failed` and
+  nothing else. On `verified` the link is public at once: on the record's statue row while it stands among the first
+  three, and nowhere else. The sign-in counts only with the state it started with, from the browser whose visitor
+  cookie started it, once, within ten minutes, and only while the record still has the same `unverified` address;
+  anything else changes nothing and answers `failed`, with the reason in the server log.
+  - LinkedIn's sign-in says who signed in, not which profile address is theirs, so the address cannot be matched. The
+    server stores the signed-in account's display name on the record (one line, at most 100 characters) and nothing
+    else of it: no subject id, email, or picture, and no user or session. Only the admin reads the name, beside the
+    address, to compare them. No hash of the subject is kept either: it would be a lasting identifier that ties a
+    visitor's records together across weeks and browsers, which the anonymous cookie is there to avoid, and one
+    account verifying several records is something the admin sees by the repeated name and answers by taking the
+    links down.
 - `DELETE /v1/games/home-run-derby/entries/own` deletes every run and record of the visitor cookie in every season at
-  once and returns `204` (also without a cookie); a statue makes way for the next record, once that one is approved.
-  Nothing else is ever deleted on a schedule.
+  once, with the reports on them and any sign-in started for them, and returns `204` (also without a cookie); a
+  statue makes way for the next record at once. Nothing else is ever deleted on a schedule.
 - `POST /v1/games/home-run-derby/entries/:id/report` with `{ target, reason? }` (`target` is `name`, `character`, or
   `link`; `reason` is `other`, or `mine` for a link whose profile is the reporter's) returns `204` whatever it does (a
-  malformed body is `400`), so it reveals nothing. It counts only
-  from a visitor cookie with a run the server scored or held (a run rejected as too fast does not count), about someone
-  else's record, at most five an hour (counted in the process's memory only); a report keeps no reporter. A report
-  only waits in the review queue and changes nothing on the board until the admin resolves it, with one exception: a
-  `mine` report hides the link at once (`reported`) with a new code, which only the admin's check of that code
-  restores.
+  malformed body is `400`), so it reveals nothing. It counts only from a visitor cookie with a run the server scored, or held under the old review (a
+  run rejected as too fast does not count), about someone else's record, at most five an hour (counted in the
+  process's memory only); a report keeps no reporter. A report only waits for the admin and changes nothing on the
+  board until the admin resolves it, with one exception: a `mine` report hides the link at once (`reported`). While
+  that report is open the record takes no link (`409`), so turning the link off and on, sending it again, or signing
+  in again does not bring it back: only the admin does, by keeping it, or ends it by taking it down. The rule binds
+  that record; a link the admin should never see again is one to take down with a block.
 - `GET /v1/games/home-run-derby/leaderboard?season=YYYY-MM-DD` (this week by default; a season that is not the date
   of a Monday is `400`, a season still to come `404`) returns
-  `{ season: { id, startsAt, endsAt, final }, podium, ranks, own }`. The public order is listed, not disqualified
-  records by home runs, then their distance, then the earlier record; `podium` is its first three, the statues, less
-  any whose record is not approved, and `ranks` places 4 to 50. Every row says its own `rank`, so a statue's place that
-  waits for approval is simply missing. A public row has `id`, `rank`, `name`, `nameState`,
-  `profile`, `homeRuns`, `totalDistanceDm`, and `achievedOn`: the name only once approved (`nameState` is `approved`,
-  `reviewing`, or `anonymous`), the default silhouette `{ kind: 'default' }` for an anonymous batter, and only the KST
-  day; never a visitor hash, a review state, or an exact time. `own` is the visitor's own view, or `null`.
+  `{ season: { id, startsAt, endsAt, final }, podium, ranks, own, linkedInAvailable }`. The public order is listed,
+  not disqualified records by home runs, then their distance, then the earlier record; `podium` is its first three,
+  the statues, and `ranks` places 4 to 50. A public row has `id`, `rank`, `name`, `nameState`, `profile`, `homeRuns`,
+  `totalDistanceDm`, and `achievedOn`: the name unless it was refused or taken off (`nameState` is `shown` or
+  `anonymous`), the default silhouette `{ kind: 'default' }` for an anonymous batter or a hidden character, and only
+  the KST day; never a visitor hash, a mark, or an exact time. A statue row also has `linkedInProfileUrl` while its
+  link is `verified`. `own` is the visitor's own view, or `null`.
 - `GET /v1/games/home-run-derby/podium` returns this week's `{ season: { id }, podium }` for the town's statues, the
   board's `podium` rows. It reads and sets no cookie and is `Cache-Control: public, max-age=60` (nginx leaves its
-  `no-store` off this path), so an approval or a disqualification shows within a minute. Reads stay open while the ballpark is hidden; the frontend decides what a
-  hidden venue shows.
+  `no-store` off this path), so a new record or a removal shows within a minute. Reads stay open while the ballpark
+  is hidden; the frontend decides what a hidden venue shows.
 - `GET /v1/games/home-run-derby/hall-of-fame` returns `{ seasons: [{ id, champions }] }`: every finished season with a
-  record of any kind, newest first (a week nobody played has none), and as `champions` the approved of the first three
-  of its public order, as statue rows like `podium`, each with its `rank`. A season with fewer public records has fewer
-  champions, or none. A row is what the board shows now: an approved link only while its visitor keeps it on, no name
-  or character once anonymised, and a later approval, disqualification, or accepted late run moves the places. One
-  read per season, so a year of weeks is fifty-two. It reads and sets no cookie and is `no-store`, so
-  all of that shows at once. It stays open while the ballpark is hidden, like the board.
+  record of any kind, newest first (a week nobody played has none), and as `champions` the first three of its public
+  order, as statue rows like `podium`. A season with fewer public records has fewer champions, or none. A row is what
+  the board shows now: a verified link only while its visitor keeps it on, no name or character once anonymised, and
+  a late result or a removal moves the places. One read per season, so a year of weeks is fifty-two. It reads and
+  sets no cookie and is `no-store`, so all of that shows at once. It stays open while the ballpark is hidden, like the
+  board.
 - `POST /v1/visitor/forget` (no body; an allowed `Origin`, like any write) clears `__Host-tom_visitor` with `Max-Age=0`
   and returns `204`, for the next person on a shared device. Nothing is deleted: the records and guestbook entries stay
   as they are, and since a browser reaches them only through that cookie, no new cookie can change them.
 
-### Statue approval
-
-Nothing stands among the first three before the admin has seen it, and two rules together leave no way around that:
-
-- **At the result.** A run nothing else holds is still held, with the flag `podium-place`, when it would become the
-  visitor's record (their first on the board, or better than the one they have) and place first to third among the
-  board's listed, not disqualified records, the visitor's own aside. Whether the record is or would be listed plays no
-  part, so a result cannot be scored unlisted and listed afterwards. The visitor gets `standing.kind: 'reviewing'`,
-  exactly as for any held run, and no record is made or changed: one who already stands keeps the approved record
-  until the better run is accepted. Accepting the run settles the record `approved`, so it is public at once if it is
-  listed, and as soon as the visitor lists it otherwise. A board starts each week empty, so its first three results
-  always wait. A disqualified visitor's runs are not held for this, since they change nothing anyone sees.
-- **On every read.** `publishedPlaces` (`src/leaderboard.ts`) decides what the board, the podium, the hall of fame,
-  and a run's standing show: a record keeps its place in the public order, but a place among the first three whose
-  record is not `approved` is left out, and stays empty rather than pass to the record below. That covers a record
-  that got there some other way: one that was fourth and moved up when a record above it was deleted, disqualified,
-  unlisted, or anonymised; one listed only after it had moved up; one whose disqualification was undone; one whose
-  visitor changed its appearance, which returns it to review; and two results that arrived at the same moment. The
-  record below does not take the statue, since it would lose it again on approval, and a finished season would have
-  shown a champion it never had. The visitor's own view says `awaitingApproval: true`, and the review queue lists the
-  record first (`statue`); `POST …/entries/:id/approval` publishes it at once.
-
 ## Board review
 
-Every route here needs an admin session (`401` signed out, `403` otherwise, and `403` for a write without an allowed
-`Origin`), and an unknown game is `404`. An action on a record sends the `updatedAt` it read, an ISO time as the queue
-shows it: a record changed since is `409` and stays as it is. Each answers `{ entry }`, the record as the queue shows it.
+The admin approves nothing beforehand. There is one list of who played, and a handful of actions to take something
+off afterwards. Every route here needs an admin session (`401` signed out, `403` otherwise, and `403` for a write
+without an allowed `Origin`), and an unknown game is `404`.
 
-- `GET /v1/admin/games/home-run-derby/review?season=YYYY-MM-DD` (by default this season, the last, and any older one
-  where a record among the first three waits for approval) returns `{ items }`, one per visitor and board, most urgent
-  first: `statue` (a record among the first three that is not approved, whose place stays empty until it is, or a
-  statue whose name waits), `statue-run` (a held run that would stand, of this season or of a past one that can still
-  be accepted), `report` (open reports), `linkedin` (a statue's link waiting for its code), `past-run` (another held
-  run of a past season, until a week after it ended), `run` (other held runs of this season, a
-  visitor with two runs or fewer on the board, `newVisitor`, after the others), and `name` (a waiting name below the
-  statues). An item has the visitor's `entry` (real name, every status, `updatedAt`, the whole link decoded and whether
-  it was percent-encoded), their held `runs` (`flags`, among them `podium-place` and `not-from-browser`, would-be place, the profile they were sent with, and per pitch the
-  server's timing error, power, swing duration and speed, and height error, which visitors never see), run counts,
-  open `reports` per target, `warnings` (a name containing another record's, the town's, or a reserved one, an
-  appearance equal to another record's or a resident's, at most 20 of each, and `town-link` for a link a resident or a
-  house has too, which the town added after the record claimed it), the names three places either side, and
-  `acceptable`, whether the held runs may still be accepted: a past season's only until a week after it ended.
-- `GET /v1/admin/games/home-run-derby/entries?season=YYYY-MM-DD` (this season by default) returns `{ season, entries }`:
-  every record on that board in public order, unlisted and disqualified included, in the queue's `entry` shape, with
-  the place a record off the board would take. The queue lists only what waits, so this is how the admin reaches an
-  approved statue, a disqualified record, or the record a takedown request names by its first eight characters.
-- `GET /v1/admin/games/home-run-derby/entries/warnings?season=YYYY-MM-DD&ids=a,b` (1–20 record ids) returns
-  `{ warnings }`,
-  each listed record's `warnings` by id. They are read apart from the whole board's records because each compares
-  against the whole board, which at 3,000 records takes seconds for all of them and milliseconds for twenty.
-- `GET /v1/admin/games/home-run-derby/runs/:id` returns `{ run }`, any run of the game in the queue's `runs` shape
-  (`wouldBeRank` is `null`), for a record's `bestRunId`: the record's best run has scored, so it is not a held run.
-- `POST …/entries/:id/approval` with `{ updatedAt, name?: 'approve' | 'reject' }` approves the record (`409` while it is
-  disqualified) and decides its name; it never changes the link. A record waiting among the first three is published
-  at once.
-- `POST …/entries/:id/disqualification` with `{ updatedAt }` takes the record off the board, and the next record takes
-  its place, though a place among the statues shows only an approved record; `DELETE` with the same body puts it back,
-  waiting for review, so among the statues its place stays empty until it is approved again.
-- `POST …/entries/:id/linkedin-review` with `{ updatedAt, decision: 'code-verified' | 'reject' }` approves a link whose
-  code the admin saw on the profile, or deletes it.
-- `POST …/entries/:id/report-resolution` with `{ updatedAt, target, resolution: 'kept' | 'removed' }` closes the record's
-  open reports on `target`: a kept name is approved and a removed one rejected, a kept character shows and a
-  removed one gets the default batter, and a removed link is deleted while a kept one stays as it is.
-- `POST …/entries/:id/appearance` with `{ updatedAt, public }` shows or hides the appearance (the default batter).
+- `GET /v1/admin/games/home-run-derby/plays?season=YYYY-MM-DD&limit=N&cursor=…` (this season, `limit` 50, and the
+  newest run by default; `limit` is 1–100, and a malformed `limit` or `cursor` is `400`) returns
+  `{ season, runs, records, reported, nextCursor }`:
+  - `runs`: the board's runs of every status, newest first by `issuedAt`. Each has `id`, `visitor` (the first twelve
+    characters of the visitor hash, the same on all of one visitor's rows and on their record), `status` (`issued`,
+    `abandoned`, `scored`, `rejected`, or `flagged`), `flags` (its marks, or `too-fast` on a rejected run), `best`
+    (whether it is its visitor's record), `issuedAt`, `submittedAt`, `homeRuns`, `totalDistanceDm`, and `result`:
+    `null` without one, otherwise `claimed`, `serverElapsedMs`, `clientElapsedMs`, `calibration`,
+    `practiceMedianMs`, `practiceSpeeds`, and per pitch `pitchType`, `outcome`, `distanceDm`, and the numbers visitors
+    never see, `errorMs`, `power`, `swingDurationMs`, `heightError`, and `swingSpeed`.
+  - `records`: the records of the visitors with a run on this page, one each. Each has `id`, `season`, `visitor`,
+    `rank` (the place it holds, or would hold if listed; `null` once removed), `updatedAt`, `bestRunId`, `listed`,
+    `name` and `nameStatus`, `disqualified`, `profile` (`null` after a takedown), `appearancePublic`, `takedown`,
+    `homeRuns`, `totalDistanceDm`, `achievedAt`, `linkedIn` (`null`, or `profileUrl`, the decoded `profileId`,
+    whether it was percent-`encoded`, `status`, and `verifiedName`, the display name of the LinkedIn account that
+    signed in for it, `null` before that), and `reports`: its open reports, one line per target with `target`,
+    `count`, `mine`, and `lastReportedAt`.
+  - `reported`: on the first page only (no `cursor`), up to 100 of the board's records with an open report, the one
+    reported longest ago first, in the `records` shape, so a report never waits on a page nobody opens.
+  - `nextCursor`: what to send as `cursor` for the next page, or `null` on the last. Pages follow `issuedAt`, so a
+    run that arrives while the admin pages shifts nothing after it.
+
+  A page reads its runs, their visitors' records, those records' reports, and one place per record, so it costs the
+  same however many runs a flood left on the board.
+
+- A `flagged` run is one stored before results stood at once: it was held for review and never accepted, so it never
+  counted and has no record. Migration 010 keeps such runs as they were, with their flags, and nothing gives a run
+  that status any more.
+
+An action on a record sends the `updatedAt` it read, an ISO time as the list shows it: a record changed since is `409`
+and stays as it is. Each answers `{ entry }`, the record in the `records` shape, and what it changes shows at once.
+
+- `POST …/entries/:id/disqualification` with `{ updatedAt }` removes the record from its board: the next record takes
+  its place, the visitor's own view says `disqualified`, and their later runs on that board answer `excluded` and stay
+  off, so replaying does not put them back. `DELETE` with the same body puts the record back at its place, with the
+  best run it has by then (`409` if it is not removed). The removal holds the visitor cookie's record, no more: a
+  visitor who deletes their own records (`DELETE …/entries/own`) deletes the removed record with them, and their next
+  run starts a new one, exactly as it would from a new browser with a new cookie. The admin removes that one too.
+- `POST …/entries/:id/name` with `{ updatedAt, public }` takes the name off (`false`: an anonymous batter on the same
+  place) or shows it again (`true`, a name the check refused too); `409` for a record without a name.
+- `POST …/entries/:id/appearance` with `{ updatedAt, public }` shows or hides the character (the default batter).
+- `POST …/entries/:id/linkedin-removal` with `{ updatedAt, blockLinkedIn? }` deletes the record's link, whatever its
+  state, and closes the open reports on it; `409` without a link. `blockLinkedIn: true` also blocks the profile it
+  linked (by the hash of its id) from every record.
+- `POST …/entries/:id/report-resolution` with `{ updatedAt, target, resolution: 'kept' | 'removed' }` closes the
+  record's open reports on `target`: a kept name shows and a removed one is taken off, a kept character shows and a
+  removed one gets the default batter, and a removed link is deleted. A kept link that a profile's owner had
+  reported shows again as `verified`, the admin vouching for it; any other kept link stays as it is.
 - `POST …/entries/:id/takedown` with `{ updatedAt, blockLinkedIn? }` answers a takedown request by anonymising the
   record: no name, no link, the default batter, and on this board neither ever comes back; the score keeps its place.
-  The visitor's runs on that board lose the profile they were sent with. The record keeps an appearance because the
-  schema needs one, but no route returns it from then on: `entry.profile` is `null` here and the default batter in the
-  visitor's own view. `blockLinkedIn: true` also blocks the profile it linked (by the hash of its id) from every record.
-- `POST …/runs/:id/acceptance` with `{ updatedAt }`, the visitor's record as read (`null` when they had none), scores a
-  held run as if it had scored at once and settles the record, approved and so published at once wherever it places; a
-  past season's run only until a week after
-  the season ended; the run then drops the profile it was sent with, which the record now holds as far as it may.
-  `POST …/runs/:id/rejection` dismisses one; it stays stored. Both answer `{ run }` (acceptance also
-  `entry`), and a run that is not waiting is `409`. `POST …/runs/rejection` with `{ runIds }` (1–1000 ids)
-  dismisses those that are still waiting, in one step, and returns `{ rejected }`, how many that was: only the runs the
-  admin saw listed, since a dismissal cannot be undone and a run may arrive after the list loaded.
+  The record keeps an appearance because the schema needs one, but no route returns it from then on: `entry.profile`
+  is `null` here and the default batter in the visitor's own view. `blockLinkedIn: true` blocks the profile as above.
 
 ## OpenRouter dialogue drafts
 

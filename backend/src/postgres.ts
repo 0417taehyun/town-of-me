@@ -16,12 +16,12 @@ import type {
   LeaderboardEntry,
   LinkedInStatus,
   NameStatus,
-  ReviewStatus,
-  RunProfile,
+  RunCursor,
   RunStatus,
   SettleEntry,
 } from './leaderboard.js'
-import type { EntryReport, ReportResolution, ReportTarget, VisitorRunCounts } from './leaderboardReview.js'
+import type { EntryReport, ReportResolution, ReportTarget } from './leaderboardReview.js'
+import type { LinkVerification } from './linkVerification.js'
 import type { GameWeekCount, GuestbookDayCount, SiteEventCount } from './siteStats.js'
 import type { GuestbookEntryChanges, Store } from './store.js'
 import {
@@ -87,8 +87,6 @@ type GameRunRow = {
   score: number | null
   tiebreak: number | null
   flags: string[]
-  profile: RunProfile | null
-  reviewed_at: Date | null
 }
 
 type LeaderboardEntryRow = {
@@ -106,10 +104,10 @@ type LeaderboardEntryRow = {
   author_appearance: CharacterAppearance
   appearance_public: boolean
   listed: boolean
-  review_status: ReviewStatus
+  disqualified: boolean
   linkedin_profile_url: string | null
   linkedin_status: LinkedInStatus | null
-  linkedin_code: string | null
+  linkedin_verified_name: string | null
   takedown: boolean
   created_at: Date
   updated_at: Date
@@ -125,7 +123,14 @@ type EntryReportRow = {
   resolution: ReportResolution | null
 }
 
-type VisitorRunCountsRow = { visitor_hash: string; runs: number; abandoned: number; flagged: number }
+type LinkVerificationRow = {
+  state: string
+  nonce: string
+  visitor_hash: string
+  entry_id: string
+  profile_url: string
+  expires_at: Date
+}
 
 type TransactionRow = { state: string; nonce: string; expires_at: Date }
 
@@ -470,8 +475,7 @@ export class PostgresStore implements Store {
       // The row lock this takes makes a second result for the same run wait, then find it no longer issued.
       const { rows } = await client.query<GameRunRow>(
         `UPDATE minigame_runs
-         SET status = $3, submitted_at = $4, input_log = $5, result = $6, score = $7, tiebreak = $8, flags = $9,
-           profile = $10
+         SET status = $3, submitted_at = $4, input_log = $5, result = $6, score = $7, tiebreak = $8, flags = $9
          WHERE id = $1 AND visitor_hash = $2 AND status = 'issued' AND expires_at > $4 RETURNING *`,
         [
           id,
@@ -483,7 +487,6 @@ export class PostgresStore implements Store {
           finished.score,
           finished.tiebreak,
           finished.flags,
-          jsonOrNull(finished.profile),
         ],
       )
       const row = rows[0]
@@ -504,7 +507,7 @@ export class PostgresStore implements Store {
   async rankOf(entry: LeaderboardEntry): Promise<number> {
     const { rows } = await this.pool.query<{ ahead: number }>(
       `SELECT count(*)::integer AS ahead FROM minigame_entries
-       WHERE game = $1 AND season = $2 AND listed AND review_status <> 'disqualified'
+       WHERE game = $1 AND season = $2 AND listed AND NOT disqualified
          AND (score > $3 OR (score = $3 AND (tiebreak > $4
            OR (tiebreak = $4 AND (achieved_at, id) < ($5::timestamptz, $6::uuid)))))`,
       [entry.game, entry.season, entry.score, entry.tiebreak, entry.achievedAt, entry.id],
@@ -515,7 +518,7 @@ export class PostgresStore implements Store {
   async listBoard(board: BoardKey, limit: number): Promise<LeaderboardEntry[]> {
     const { rows } = await this.pool.query<LeaderboardEntryRow>(
       `SELECT * FROM minigame_entries
-       WHERE game = $1 AND season = $2 AND listed AND review_status <> 'disqualified'
+       WHERE game = $1 AND season = $2 AND listed AND NOT disqualified
        ORDER BY score DESC, tiebreak DESC, achieved_at, id LIMIT $3`,
       [board.game, board.season, limit],
     )
@@ -524,17 +527,10 @@ export class PostgresStore implements Store {
 
   async updateEntry(id: string, expectedUpdatedAt: string, changes: EntryChanges): Promise<LeaderboardEntry | null> {
     const { rows } = await this.pool.query<LeaderboardEntryRow>(
-      `WITH updated AS (
-         UPDATE minigame_entries SET author_name = $3, name_status = $4, author_appearance = $5,
-           appearance_public = $6, listed = $7, review_status = $8, linkedin_profile_url = $9, linkedin_status = $10,
-           linkedin_code = $11, takedown = $12, updated_at = $13
-         WHERE id = $1 AND updated_at = $2::timestamptz RETURNING *
-       ), forgotten AS (
-         UPDATE minigame_runs AS run SET profile = NULL FROM updated
-         WHERE updated.takedown AND run.game = updated.game AND run.season = updated.season
-           AND run.visitor_hash = updated.visitor_hash AND run.profile IS NOT NULL
-       )
-       SELECT * FROM updated`,
+      `UPDATE minigame_entries SET author_name = $3, name_status = $4, author_appearance = $5,
+         appearance_public = $6, listed = $7, disqualified = $8, linkedin_profile_url = $9, linkedin_status = $10,
+         linkedin_verified_name = $11, takedown = $12, updated_at = $13
+       WHERE id = $1 AND updated_at = $2::timestamptz RETURNING *`,
       [
         id,
         expectedUpdatedAt,
@@ -543,10 +539,10 @@ export class PostgresStore implements Store {
         JSON.stringify(changes.appearance),
         changes.appearancePublic,
         changes.listed,
-        changes.reviewStatus,
+        changes.disqualified,
         changes.linkedIn?.profileUrl ?? null,
         changes.linkedIn?.status ?? null,
-        changes.linkedIn?.code ?? null,
+        changes.linkedIn?.verifiedName ?? null,
         changes.takedown,
         changes.updatedAt,
       ],
@@ -576,29 +572,35 @@ export class PostgresStore implements Store {
     return rows.map(({ season }) => season)
   }
 
-  async listRunsForReview(board: BoardKey): Promise<GameRun[]> {
+  async listRuns(board: BoardKey, before: RunCursor | null, limit: number): Promise<GameRun[]> {
     const { rows } = await this.pool.query<GameRunRow>(
       `SELECT * FROM minigame_runs
-       WHERE game = $1 AND season = $2 AND status = 'flagged' AND reviewed_at IS NULL ORDER BY submitted_at, id`,
-      [board.game, board.season],
+       WHERE game = $1 AND season = $2
+         AND ($3::timestamptz IS NULL OR (issued_at, id) < ($3::timestamptz, $4::uuid))
+       ORDER BY issued_at DESC, id DESC LIMIT $5`,
+      [board.game, board.season, before?.issuedAt ?? null, before?.id ?? null, limit],
     )
     return rows.map(toGameRun)
   }
 
-  async countRunsByVisitor(board: BoardKey): Promise<VisitorRunCounts[]> {
-    const { rows } = await this.pool.query<VisitorRunCountsRow>(
-      `SELECT visitor_hash, count(*)::integer AS runs,
-         count(*) FILTER (WHERE status = 'abandoned')::integer AS abandoned,
-         count(*) FILTER (WHERE status = 'flagged')::integer AS flagged
-       FROM minigame_runs WHERE game = $1 AND season = $2 GROUP BY visitor_hash`,
-      [board.game, board.season],
+  async listEntriesByVisitors(board: BoardKey, visitorHashes: readonly string[]): Promise<LeaderboardEntry[]> {
+    const { rows } = await this.pool.query<LeaderboardEntryRow>(
+      'SELECT * FROM minigame_entries WHERE game = $1 AND season = $2 AND visitor_hash = ANY($3::text[])',
+      [board.game, board.season, visitorHashes],
     )
-    return rows.map((row) => ({
-      visitorHash: row.visitor_hash,
-      runs: row.runs,
-      abandoned: row.abandoned,
-      flagged: row.flagged,
-    }))
+    return rows.map(toLeaderboardEntry)
+  }
+
+  async listReportedEntries(board: BoardKey, limit: number): Promise<LeaderboardEntry[]> {
+    const { rows } = await this.pool.query<LeaderboardEntryRow>(
+      `SELECT entry.* FROM minigame_entries entry
+       JOIN (SELECT entry_id, min(created_at) AS first_reported_at FROM minigame_reports
+             WHERE resolved_at IS NULL GROUP BY entry_id) reported ON reported.entry_id = entry.id
+       WHERE entry.game = $1 AND entry.season = $2
+       ORDER BY reported.first_reported_at, entry.id LIMIT $3`,
+      [board.game, board.season, limit],
+    )
+    return rows.map(toLeaderboardEntry)
   }
 
   async hasJudgedRun(game: string, visitorHash: string): Promise<boolean> {
@@ -610,44 +612,6 @@ export class PostgresStore implements Store {
     return rows.length > 0
   }
 
-  async acceptRun(
-    id: string,
-    reviewedAt: string,
-    settle: SettleEntry,
-  ): Promise<{ run: GameRun; settlement: EntrySettlement } | null> {
-    // A throwing `settle` rolls the acceptance back with the record.
-    return inTransaction(this.pool, async (client) => {
-      await lockRunVisitor(client, id)
-      const { rows } = await client.query<GameRunRow>(
-        `UPDATE minigame_runs SET status = 'scored', reviewed_at = $2, profile = NULL
-         WHERE id = $1 AND status = 'flagged' AND reviewed_at IS NULL RETURNING *`,
-        [id, reviewedAt],
-      )
-      const row = rows[0]
-      if (!row) return null
-      const run = toGameRun(row)
-      return { run, settlement: await settleEntryWithin(client, run, settle) }
-    })
-  }
-
-  async rejectRun(id: string, reviewedAt: string): Promise<GameRun | null> {
-    const { rows } = await this.pool.query<GameRunRow>(
-      `UPDATE minigame_runs SET reviewed_at = $2
-       WHERE id = $1 AND status = 'flagged' AND reviewed_at IS NULL RETURNING *`,
-      [id, reviewedAt],
-    )
-    return mapFirstRow(rows, toGameRun)
-  }
-
-  async rejectRuns(game: string, ids: readonly string[], reviewedAt: string): Promise<number> {
-    const { rowCount } = await this.pool.query(
-      `UPDATE minigame_runs SET reviewed_at = $3
-       WHERE game = $1 AND id = ANY($2::uuid[]) AND status = 'flagged' AND reviewed_at IS NULL`,
-      [game, ids, reviewedAt],
-    )
-    return rowCount ?? 0
-  }
-
   async addReport(report: EntryReport): Promise<void> {
     await this.pool.query(
       `INSERT INTO minigame_reports (id, entry_id, target, reason, created_at, resolved_at, resolution)
@@ -656,11 +620,11 @@ export class PostgresStore implements Store {
     )
   }
 
-  async listReports(board: BoardKey): Promise<EntryReport[]> {
+  async listOpenReports(entryIds: readonly string[]): Promise<EntryReport[]> {
     const { rows } = await this.pool.query<EntryReportRow>(
-      `SELECT r.* FROM minigame_reports r JOIN minigame_entries e ON e.id = r.entry_id
-       WHERE e.game = $1 AND e.season = $2 ORDER BY r.created_at, r.id`,
-      [board.game, board.season],
+      `SELECT * FROM minigame_reports WHERE entry_id = ANY($1::uuid[]) AND resolved_at IS NULL
+       ORDER BY created_at, id`,
+      [entryIds],
     )
     return rows.map(toEntryReport)
   }
@@ -692,12 +656,52 @@ export class PostgresStore implements Store {
 
   async eraseVisitorGameData(game: string, visitorHash: string): Promise<void> {
     await inTransaction(this.pool, async (client) => {
-      // Without it, a run finished or accepted meanwhile could settle a record after the records below are deleted.
+      // Without it, a run finished meanwhile could settle a record after the records below are deleted.
       await lockVisitorGame(client, game, visitorHash)
-      // Records first, which takes their reports with them, so no record points at a run being deleted.
+      // Records first, which takes their reports and started sign-ins with them, so no record points at a run being
+      // deleted.
       await client.query('DELETE FROM minigame_entries WHERE game = $1 AND visitor_hash = $2', [game, visitorHash])
       await client.query('DELETE FROM minigame_runs WHERE game = $1 AND visitor_hash = $2', [game, visitorHash])
     })
+  }
+
+  async saveLinkVerification(verification: LinkVerification): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO minigame_link_verifications
+       (id_hash, state, nonce, visitor_hash, entry_id, profile_url, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        await hashToken(verification.id),
+        verification.state,
+        verification.nonce,
+        verification.visitorHash,
+        verification.entryId,
+        verification.profileUrl,
+        new Date(verification.expiresAt),
+      ],
+    )
+  }
+
+  async consumeLinkVerification(id: string): Promise<LinkVerification | null> {
+    const { rows } = await this.pool.query<LinkVerificationRow>(
+      `DELETE FROM minigame_link_verifications WHERE id_hash = $1
+       RETURNING state, nonce, visitor_hash, entry_id, profile_url, expires_at`,
+      [await hashToken(id)],
+    )
+    const row = rows[0]
+    if (!row) return null
+    return {
+      id,
+      state: row.state,
+      nonce: row.nonce,
+      visitorHash: row.visitor_hash,
+      entryId: row.entry_id,
+      profileUrl: row.profile_url,
+      expiresAt: row.expires_at.getTime(),
+    }
+  }
+
+  async deleteExpiredLinkVerifications(now: number): Promise<void> {
+    await this.pool.query('DELETE FROM minigame_link_verifications WHERE expires_at < $1', [new Date(now)])
   }
 
   async addSiteEvent(day: string, event: string, subject: string): Promise<void> {
@@ -762,8 +766,8 @@ export async function settleEntryWithin(
 }
 
 /**
- * Serializes the transactions that create or delete one visitor's runs and records of a game: issuing, finishing, and
- * accepting a run, and erasing them all. Each takes it first, before any row lock, so they never deadlock.
+ * Serializes the transactions that create or delete one visitor's runs and records of a game: issuing and finishing a
+ * run, and erasing them all. Each takes it first, before any row lock, so they never deadlock.
  */
 export async function lockVisitorGame(client: PoolClient, game: string, visitorHash: string): Promise<void> {
   await client.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [visitorGameLockSpace, `${game}:${visitorHash}`])
@@ -791,16 +795,17 @@ export async function writeEntry(client: PoolClient, entry: LeaderboardEntry): P
   await client.query(
     `INSERT INTO minigame_entries
      (id, game, season, visitor_hash, best_run_id, score, tiebreak, result, achieved_at, author_name, name_status,
-      author_appearance, listed, review_status, created_at, updated_at, appearance_public, linkedin_profile_url,
-      linkedin_status, linkedin_code, takedown)
+      author_appearance, listed, disqualified, created_at, updated_at, appearance_public, linkedin_profile_url,
+      linkedin_status, linkedin_verified_name, takedown)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
      ON CONFLICT (id) DO UPDATE SET
        best_run_id = EXCLUDED.best_run_id, score = EXCLUDED.score, tiebreak = EXCLUDED.tiebreak,
        result = EXCLUDED.result, achieved_at = EXCLUDED.achieved_at, author_name = EXCLUDED.author_name,
        name_status = EXCLUDED.name_status, author_appearance = EXCLUDED.author_appearance, listed = EXCLUDED.listed,
-       review_status = EXCLUDED.review_status, updated_at = EXCLUDED.updated_at,
+       disqualified = EXCLUDED.disqualified, updated_at = EXCLUDED.updated_at,
        appearance_public = EXCLUDED.appearance_public, linkedin_profile_url = EXCLUDED.linkedin_profile_url,
-       linkedin_status = EXCLUDED.linkedin_status, linkedin_code = EXCLUDED.linkedin_code, takedown = EXCLUDED.takedown`,
+       linkedin_status = EXCLUDED.linkedin_status, linkedin_verified_name = EXCLUDED.linkedin_verified_name,
+       takedown = EXCLUDED.takedown`,
     [
       entry.id,
       entry.game,
@@ -815,13 +820,13 @@ export async function writeEntry(client: PoolClient, entry: LeaderboardEntry): P
       entry.nameStatus,
       JSON.stringify(entry.appearance),
       entry.listed,
-      entry.reviewStatus,
+      entry.disqualified,
       entry.createdAt,
       entry.updatedAt,
       entry.appearancePublic,
       entry.linkedIn?.profileUrl ?? null,
       entry.linkedIn?.status ?? null,
-      entry.linkedIn?.code ?? null,
+      entry.linkedIn?.verifiedName ?? null,
       entry.takedown,
     ],
   )
@@ -849,8 +854,6 @@ export function toGameRun(row: GameRunRow): GameRun {
     score: row.score,
     tiebreak: row.tiebreak,
     flags: row.flags,
-    profile: row.profile,
-    reviewedAt: row.reviewed_at?.toISOString() ?? null,
   }
 }
 
@@ -870,7 +873,7 @@ export function toLeaderboardEntry(row: LeaderboardEntryRow): LeaderboardEntry {
     appearance: row.author_appearance,
     appearancePublic: row.appearance_public,
     listed: row.listed,
-    reviewStatus: row.review_status,
+    disqualified: row.disqualified,
     linkedIn: toEntryLinkedIn(row),
     takedown: row.takedown,
     createdAt: row.created_at.toISOString(),
@@ -878,10 +881,14 @@ export function toLeaderboardEntry(row: LeaderboardEntryRow): LeaderboardEntry {
   }
 }
 
-/** The three columns are all set or all null (a table check). */
+/** The address and its status are both set or both null (a table check). */
 export function toEntryLinkedIn(row: LeaderboardEntryRow): LeaderboardEntry['linkedIn'] {
-  if (row.linkedin_profile_url === null || row.linkedin_status === null || row.linkedin_code === null) return null
-  return { profileUrl: row.linkedin_profile_url, status: row.linkedin_status, code: row.linkedin_code }
+  if (row.linkedin_profile_url === null || row.linkedin_status === null) return null
+  return {
+    profileUrl: row.linkedin_profile_url,
+    status: row.linkedin_status,
+    verifiedName: row.linkedin_verified_name,
+  }
 }
 
 export function toEntryReport(row: EntryReportRow): EntryReport {

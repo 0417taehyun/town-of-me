@@ -1,12 +1,12 @@
-import { randomInt } from 'node:crypto'
 import { hashToken } from './auth.js'
 import { linkedInProfileUrl } from './character.js'
 import type { LeaderboardEntry, NameStatus } from './leaderboard.js'
 import type { TownLayout } from './town.js'
 import { decodeComponent, inputRecord, invalidInput } from './validation.js'
 
-// What a record shows of its player on the public board, checked before anyone reads it: the name (a stricter check
-// than the guestbook's, since a board invites impersonation and advertising) and the optional LinkedIn link.
+// What a record shows of its player on the public board, checked as it is stored, since nobody approves it first: the
+// name (a stricter check than the guestbook's, since a board invites impersonation and advertising) and the optional
+// LinkedIn link.
 
 /** Names a record cannot take, besides the town's own: they would pass for the owner or the site. */
 export const reservedNames = ['관리자', '운영자', 'admin', 'official', '공식', '마을 주인'] as const
@@ -44,13 +44,12 @@ const confusables: Readonly<Record<string, string>> = Object.fromEntries(
   ),
 )
 const profileIdPattern = /^[\p{L}\p{N}-]{3,100}$/u
-const crockfordBase32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 
-/** What a new name is compared with: the town's names and the site's, and the names already approved on the board. */
+/** What a new name is compared with: the town's names and the site's, and the names already shown on the board. */
 export interface NameContext {
   /** Comparison forms a name may not contain. */
   reserved: readonly string[]
-  /** Comparison forms of other visitors' approved names on the same board, which a name may not equal. */
+  /** Comparison forms of other visitors' shown names on the same board, which a name may not equal. */
   taken: readonly string[]
 }
 
@@ -73,12 +72,12 @@ export function comparisonForm(text: string): string {
 }
 
 /**
- * A name the board can show after approval is `pending`; one that draws nothing, stacks marks, looks like a web address
- * or contact, passes for the town or the site, or is another visitor's approved name is `rejected`. The record is kept
+ * A name the board can show is `shown`, at once; one that draws nothing, stacks marks, looks like a web address or
+ * contact, passes for the town or the site, or is another visitor's shown name is `rejected`. The record is kept
  * either way: a rejected name shows as an anonymous batter, and its owner may choose another. `name` is already
  * NFKC-normalized one-line text (`parseRunProfile`).
  */
-export function leaderboardNameStatus(name: string, context: NameContext): Extract<NameStatus, 'pending' | 'rejected'> {
+export function leaderboardNameStatus(name: string, context: NameContext): NameStatus {
   const form = comparisonForm(name)
   const unusable =
     drawsSomethingHidden(name) ||
@@ -86,7 +85,7 @@ export function leaderboardNameStatus(name: string, context: NameContext): Extra
     looksLikeContact(name) ||
     context.reserved.some((reserved) => form.includes(reserved)) ||
     context.taken.includes(form)
-  return unusable ? 'rejected' : 'pending'
+  return unusable ? 'rejected' : 'shown'
 }
 
 /** Invisible characters, or combining marks stacked three deep or more than four in all. */
@@ -112,14 +111,14 @@ export function townNames(town: TownIdentity | null): string[] {
   return [town.owner.name.ko, town.owner.name.en, ...town.residents.map((resident) => resident.name), ...houseOwners]
 }
 
-/** Other visitors' approved names on a board, as comparison forms; a visitor may keep reusing their own. */
+/** Other visitors' shown names on a board, as comparison forms; a visitor may keep reusing their own. */
 export function takenNameForms(entries: readonly LeaderboardEntry[], visitorHash: string): string[] {
   return entries
-    .filter((entry) => entry.visitorHash !== visitorHash && entry.nameStatus === 'approved')
+    .filter((entry) => entry.visitorHash !== visitorHash && entry.nameStatus === 'shown')
     .flatMap((entry) => (entry.authorName === null ? [] : [comparisonForm(entry.authorName)]))
 }
 
-/** `{ profileUrl, ownProfile: true }`: the visitor says the profile is theirs before anyone checks the code. */
+/** `{ profileUrl, ownProfile: true }`: the visitor says the profile is theirs before signing in with LinkedIn. */
 export function parseLinkedInRequest(value: unknown): LinkedInLink {
   const input = inputRecord(value, 'linkedIn')
   if (input.ownProfile !== true) throw invalidInput('linkedIn.ownProfile must be true: link only your own profile')
@@ -168,11 +167,6 @@ export function isTownProfile(town: TownIdentity | null, profileId: string): boo
 /** How a blocked profile is kept: the hash of its id, never the id. */
 export function linkBlockHash(profileId: string): Promise<string> {
   return hashToken(`linkedin:${profileId.toLowerCase()}`)
-}
-
-/** `TOM-` and four Crockford base32 characters: short to copy, since the admin reads it, not a secret. */
-export function ownershipCode(): string {
-  return `TOM-${Array.from({ length: 4 }, () => crockfordBase32[randomInt(crockfordBase32.length)]).join('')}`
 }
 
 /** Enough of the address for its owner to recognize, and too little for the next person on a shared device to use. */

@@ -8,7 +8,6 @@ import {
   nextRankingWeek,
   parseTownLayout,
   parseTownVenues,
-  previousRankingWeek,
   rankingWeek,
   rankingWeekStart,
 } from '../src/index.js'
@@ -437,10 +436,8 @@ function checkRankingWeeks(assert: Assert): void {
     'a week that crosses the new year keeps the name of its Monday in the old year, through its Sunday',
   )
   assert(
-    nextRankingWeek('2025-12-29') === '2026-01-05' &&
-      previousRankingWeek('2026-01-05') === '2025-12-29' &&
-      rankingWeekStart('2025-12-29') === mondayMidnight,
-    'the weeks either side of a week are seven days away across a year boundary, and a week starts at its midnight KST',
+    nextRankingWeek('2025-12-29') === '2026-01-05' && rankingWeekStart('2025-12-29') === mondayMidnight,
+    'the week after a week is seven days away across a year boundary, and a week starts at its midnight KST',
   )
 }
 

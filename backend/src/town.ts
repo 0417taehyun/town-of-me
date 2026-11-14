@@ -353,10 +353,6 @@ export function nextRankingWeek(week: string): string {
   return rankingWeek(rankingWeekStart(week) + weekMs)
 }
 
-export function previousRankingWeek(week: string): string {
-  return rankingWeek(rankingWeekStart(week) - weekMs)
-}
-
 /**
  * A ranking week as a client writes it: the `YYYY-MM-DD` of a real Monday, since any other day would name a board no
  * run can be on. Whether that week has come is up to the caller.

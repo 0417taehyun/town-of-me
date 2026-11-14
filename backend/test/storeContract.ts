@@ -16,7 +16,6 @@ import {
   seedMissingTown,
   seedTown,
   type EntrySettlement,
-  type FinishedRun,
   type GameRun,
   type LeaderboardEntry,
   type SettleEntry,
@@ -451,8 +450,6 @@ function issuedRun(visitorHash: string, season = '2026-10-19'): GameRun {
     score: null,
     tiebreak: null,
     flags: [],
-    profile: null,
-    reviewedAt: null,
   }
 }
 
@@ -468,7 +465,6 @@ const scoredRun = {
   score: 2,
   tiebreak: 2114,
   flags: [],
-  profile: null,
 }
 
 function entryFor(run: GameRun, fields: Partial<LeaderboardEntry> = {}): LeaderboardEntry {
@@ -492,7 +488,7 @@ function entryFor(run: GameRun, fields: Partial<LeaderboardEntry> = {}): Leaderb
     appearance: runAppearance,
     appearancePublic: true,
     listed: false,
-    reviewStatus: 'pending',
+    disqualified: false,
     linkedIn: null,
     takedown: false,
     createdAt: time,
@@ -567,12 +563,12 @@ async function checkEntryStore(store: Store, assert: Assert): Promise<void> {
   const lastSeason = await recordEntry(store, 'entry-visitor', '2026-09-14', {
     listed: true,
     authorName: 'Sprout',
-    nameStatus: 'approved',
+    nameStatus: 'shown',
   })
   const run = issuedRun('entry-visitor')
   await store.issueRun(run)
   const seen: Array<[LeaderboardEntry | null, LeaderboardEntry | null]> = []
-  const first = entryFor(run, { listed: true, authorName: 'Sprout', nameStatus: 'pending' })
+  const first = entryFor(run, { listed: true, authorName: 'Sprout', nameStatus: 'rejected' })
   const settled = await store.finishRun(run.id, 'entry-visitor', scoredRun, (current, latest) => {
     seen.push([current, latest])
     return { entry: first, changed: true, consentNeeded: false }
@@ -602,7 +598,7 @@ async function checkEntryStore(store: Store, assert: Assert): Promise<void> {
   const season = '2026-08-10'
   const tied = new Date(runIssuedAt).toISOString()
   const later = new Date(runIssuedAt + 1).toISOString()
-  const listed = { listed: true, authorName: 'Batter', nameStatus: 'pending' as const }
+  const listed = { listed: true, authorName: 'Batter', nameStatus: 'shown' as const }
   const leader = await recordEntry(store, 'rank-leader', season, {
     ...listed,
     score: 4,
@@ -610,7 +606,7 @@ async function checkEntryStore(store: Store, assert: Assert): Promise<void> {
     achievedAt: tied,
   })
   await recordEntry(store, 'rank-hidden', season, { score: 5, tiebreak: 9000 })
-  await recordEntry(store, 'rank-out', season, { ...listed, score: 5, tiebreak: 9000, reviewStatus: 'disqualified' })
+  await recordEntry(store, 'rank-out', season, { ...listed, score: 5, tiebreak: 9000, disqualified: true })
   const [lowId = '', highId = ''] = [crypto.randomUUID(), crypto.randomUUID()].sort()
   const earlier = await recordEntry(store, 'rank-early', season, {
     ...listed,
@@ -662,7 +658,7 @@ async function checkEntryStore(store: Store, assert: Assert): Promise<void> {
     appearance: { ...runAppearance, hat: 'cap' },
     appearancePublic: false,
     listed: false,
-    reviewStatus: 'disqualified' as const,
+    disqualified: true,
     linkedIn: null,
     takedown: true,
     updatedAt: new Date(runIssuedAt + 5 * 60_000).toISOString(),
@@ -676,217 +672,166 @@ async function checkEntryStore(store: Store, assert: Assert): Promise<void> {
   assert(
     isDeepStrictEqual(updated, { ...leader, ...changes }) &&
       isDeepStrictEqual(await store.getBoardEntryByVisitor(leader, 'rank-leader'), updated),
-    'an update from the current version replaces the name, its status, the appearance and its showing, listing, review, and takedown',
+    'an update from the current version replaces the name, its status, the appearance and its showing, listing, removal, and takedown',
   )
 }
 
-/** A held run is reviewed once, reports and blocks are kept, and a visitor's deletion takes every season with it. */
+/**
+ * What the admin's list reads, a record's link, reports, blocks, and a visitor's LinkedIn sign-in are kept, and a
+ * visitor's deletion takes every season with it.
+ */
 async function checkModerationStore(store: Store, assert: Assert): Promise<void> {
   const season = '2026-07-13'
   const board = { game: runGame, season }
-  const reviewedAt = new Date(runIssuedAt + 3 * 60_000).toISOString()
-  const heldProfile = { name: 'Sprout', appearance: runAppearance }
-  const flagged = { ...scoredRun, status: 'flagged' as const, flags: ['claimed-mismatch'], profile: heldProfile }
-  const held = issuedRun('moderation-held', season)
-  await store.issueRun(held)
-  await store.finishRun(held.id, 'moderation-held', flagged, null)
-  const waiting = await store.listRunsForReview(board)
-  assert(
-    waiting.length === 1 && isDeepStrictEqual(waiting[0]?.profile, heldProfile) && waiting[0]?.reviewedAt === null,
-    'a held run waits for review with the profile it was sent with',
-  )
-  const refused = await rejection(() =>
-    store.acceptRun(held.id, reviewedAt, () => {
-      throw new DomainError('CONFLICT', 'The record changed')
-    }),
-  )
-  assert(
-    refused instanceof DomainError &&
-      (await store.getRun(held.id))?.reviewedAt === null &&
-      (await store.getBoardEntryByVisitor(board, 'moderation-held')) === null,
-    'an acceptance its settlement refuses changes neither the run nor the record',
-  )
-  const linkedIn = {
-    profileUrl: 'https://www.linkedin.com/in/sprout-sample',
-    status: 'pending' as const,
-    code: 'TOM-7KQ2',
+  const later = new Date(runIssuedAt + 3 * 60_000).toISOString()
+  const issuedAfter = async (visitorHash: string, minutes: number, week = season, id: string = crypto.randomUUID()) => {
+    const issuedAt = new Date(runIssuedAt + minutes * 60_000).toISOString()
+    const run = { ...issuedRun(visitorHash, week), id, issuedAt }
+    await store.issueRun(run)
+    return run
   }
-  const entry = entryFor(held, { listed: true, authorName: 'Sprout', nameStatus: 'pending', linkedIn })
-  const settled = () => ({ entry, changed: true, consentNeeded: false })
-  const accepted = await store.acceptRun(held.id, reviewedAt, settled)
-  assert(
-    accepted?.run.status === 'scored' &&
-      accepted.run.reviewedAt === reviewedAt &&
-      isDeepStrictEqual(await store.getEntry(entry.id), entry),
-    'an accepted run scores and settles its record in one step, link and all',
+  const oldest = await issuedAfter('moderation-linked', 0)
+  const refused = await issuedAfter('moderation-refused', 1)
+  await store.finishRun(
+    refused.id,
+    'moderation-refused',
+    { ...scoredRun, status: 'rejected', flags: ['too-fast'] },
+    null,
   )
+  const [lowId = '', highId = ''] = [crypto.randomUUID(), crypto.randomUUID()].sort()
+  const tiedLow = await issuedAfter('moderation-tied-low', 2, season, lowId)
+  const tiedHigh = await issuedAfter('moderation-tied-high', 2, season, highId)
+  await issuedAfter('moderation-elsewhere', 9, '2026-06-15')
+  const newestFirst = [tiedHigh.id, tiedLow.id, refused.id, oldest.id]
+  const allRuns = await store.listRuns(board, null, 10)
   assert(
-    accepted?.run.profile === null && (await store.getRun(held.id))?.profile === null,
-    'an accepted run no longer keeps the name and look it was sent with',
+    allRuns.map(({ id }) => id).join() === newestFirst.join() &&
+      allRuns.map(({ status }) => status).join() === 'issued,issued,rejected,issued',
+    "a board's runs of every status are listed newest first, then by id, and no other board's",
   )
+  const firstPage = await store.listRuns(board, null, 1)
+  const secondPage = await store.listRuns(board, firstPage[0] ?? null, 2)
+  const lastPage = await store.listRuns(board, secondPage[1] ?? null, 2)
   assert(
-    (await store.acceptRun(held.id, reviewedAt, settled)) === null &&
-      (await store.listRunsForReview(board)).length === 0,
-    'a held run is accepted once and leaves the queue',
-  )
-  const approvedLink = { ...entry, linkedIn: { ...linkedIn, status: 'approved' as const }, updatedAt: reviewedAt }
-  assert(
-    isDeepStrictEqual(await store.updateEntry(entry.id, entry.updatedAt, approvedLink), approvedLink),
-    "an update replaces the record's link",
+    [...firstPage, ...secondPage, ...lastPage].map(({ id }) => id).join() === newestFirst.join(),
+    'runs after a cursor follow it without a gap or a repeat, through runs issued at the same moment',
   )
 
-  const abandoned = issuedRun('moderation-dismissed', season)
-  const dismissed = issuedRun('moderation-dismissed', season)
-  await store.issueRun(abandoned)
-  await store.issueRun(dismissed)
-  await store.finishRun(dismissed.id, 'moderation-dismissed', flagged, null)
+  const linkedIn = {
+    profileUrl: 'https://www.linkedin.com/in/sprout-sample',
+    status: 'unverified' as const,
+    verifiedName: null,
+  }
+  const entry = entryFor(oldest, { listed: true, authorName: 'Sprout', nameStatus: 'shown', linkedIn })
+  await store.finishRun(oldest.id, 'moderation-linked', scoredRun, () => ({
+    entry,
+    changed: true,
+    consentNeeded: false,
+  }))
   assert(
-    (await store.rejectRun(dismissed.id, reviewedAt))?.status === 'flagged' &&
-      (await store.rejectRun(dismissed.id, reviewedAt)) === null &&
-      (await store.listRunsForReview(board)).length === 0,
-    'a dismissed run stays held as evidence and leaves the queue once',
+    isDeepStrictEqual(await store.getEntry(entry.id), entry),
+    'a record is settled with its link, not yet verified',
   )
-  await checkListedDismissal(store, flagged, reviewedAt, assert)
-  await checkTakenDownProfiles(store, flagged, reviewedAt, assert)
-  const counts = await store.countRunsByVisitor(board)
+  const verifiedLink = {
+    ...entry,
+    linkedIn: { ...linkedIn, status: 'verified' as const, verifiedName: 'Sprout Sample' },
+    updatedAt: later,
+  }
   assert(
-    isDeepStrictEqual(
-      counts.find(({ visitorHash }) => visitorHash === 'moderation-dismissed'),
-      { visitorHash: 'moderation-dismissed', runs: 2, abandoned: 1, flagged: 1 },
-    ) && counts.length === 2,
-    "a board counts each visitor's runs, abandoned runs, and held runs",
+    isDeepStrictEqual(await store.updateEntry(entry.id, entry.updatedAt, verifiedLink), verifiedLink),
+    "an update replaces the record's link and the display name it was verified with",
   )
-  const tooFast = issuedRun('moderation-refused', season)
-  await store.issueRun(tooFast)
-  await store.finishRun(tooFast.id, 'moderation-refused', { ...flagged, status: 'rejected' }, null)
   assert(
-    (await store.hasJudgedRun(runGame, 'moderation-dismissed')) &&
+    (await store.hasJudgedRun(runGame, 'moderation-linked')) &&
       !(await store.hasJudgedRun(runGame, 'moderation-refused')),
-    'a held run counts as judged, and a run refused as too fast does not',
+    'a scored run counts as judged, and a run refused as too fast does not',
   )
 
   const unlisted = await recordEntry(store, 'moderation-unlisted', season, { score: 9 })
+  const elsewhere = await recordEntry(store, 'moderation-unlisted', '2026-06-15', {})
   assert(
     (await store.listEntries(board)).map(({ id }) => id).join() === [unlisted.id, entry.id].join(),
     'every record on the board is listed, unlisted ones too, in public order',
   )
+  const ofVisitors = await store.listEntriesByVisitors(board, ['moderation-unlisted', 'moderation-nobody'])
+  assert(
+    ofVisitors.map(({ id }) => id).join() === unlisted.id &&
+      (await store.listEntriesByVisitors(board, [])).length === 0,
+    "the records of the named visitors are read from that board only, and no one else's",
+  )
 
-  const report = (target: 'name' | 'link', reason: 'mine' | 'other', minutes: number) => ({
+  const report = (entryId: string, target: 'name' | 'link', reason: 'mine' | 'other', minutes: number) => ({
     id: crypto.randomUUID(),
-    entryId: entry.id,
+    entryId,
     target,
     reason,
     createdAt: new Date(runIssuedAt + minutes * 60_000).toISOString(),
     resolvedAt: null,
     resolution: null,
   })
-  const nameReport = report('name', 'other', 4)
-  const linkReport = report('link', 'mine', 5)
-  await store.addReport(nameReport)
-  await store.addReport(linkReport)
-  await store.resolveReports(entry.id, 'name', 'kept', reviewedAt)
+  const nameReport = report(entry.id, 'name', 'other', 4)
+  const linkReport = report(entry.id, 'link', 'mine', 5)
+  const earlierReport = report(unlisted.id, 'name', 'other', 2)
+  const otherBoardReport = report(elsewhere.id, 'name', 'other', 1)
+  for (const added of [nameReport, linkReport, earlierReport, otherBoardReport]) await store.addReport(added)
+  const reportedIds = async (limit: number) => (await store.listReportedEntries(board, limit)).map(({ id }) => id)
   assert(
-    isDeepStrictEqual(await store.listReports(board), [
-      { ...nameReport, resolvedAt: reviewedAt, resolution: 'kept' },
-      linkReport,
-    ]) && (await store.listReports({ game: runGame, season: '2026-06-15' })).length === 0,
-    "resolving closes the record's open reports on one target only, and reports are listed by board",
+    (await reportedIds(5)).join() === [unlisted.id, entry.id].join() && (await reportedIds(1)).join() === unlisted.id,
+    "a board's records with an open report are listed once each, the one reported longest ago first, up to the limit",
+  )
+  await store.resolveReports(entry.id, 'name', 'kept', later)
+  await store.resolveReports(unlisted.id, 'name', 'removed', later)
+  assert(
+    isDeepStrictEqual(await store.listOpenReports([entry.id, unlisted.id]), [linkReport]) &&
+      (await store.listOpenReports([])).length === 0 &&
+      (await reportedIds(5)).join() === entry.id,
+    "resolving closes the record's open reports on one target only, and only open reports are listed",
   )
 
-  await store.blockLink('blocked-profile-hash', reviewedAt)
-  await store.blockLink('blocked-profile-hash', reviewedAt)
+  await store.blockLink('blocked-profile-hash', later)
+  await store.blockLink('blocked-profile-hash', later)
   assert(
     (await store.isLinkBlocked('blocked-profile-hash')) && !(await store.isLinkBlocked('other-profile-hash')),
     'a blocked link stays blocked, however often it is blocked',
   )
 
-  const earlier = await recordEntry(store, 'moderation-held', '2026-06-15', {})
-  await store.eraseVisitorGameData(runGame, 'moderation-held')
+  const now = Date.now()
+  const verification = (id: string, entryId: string, expiresAt: number) => ({
+    id,
+    state: `link.state-${id}`,
+    nonce: `nonce-${id}`,
+    visitorHash: 'moderation-linked',
+    entryId,
+    profileUrl: linkedIn.profileUrl,
+    expiresAt,
+  })
+  const live = verification('live-verification', entry.id, now + 60_000)
+  await store.saveLinkVerification(live)
+  await store.saveLinkVerification(verification('expired-verification', entry.id, now - 1))
+  await store.saveLinkVerification(verification('erased-verification', entry.id, now + 60_000))
+  await store.saveLinkVerification(verification('kept-verification', unlisted.id, now + 60_000))
+  await store.deleteExpiredLinkVerifications(now)
+  assert(
+    isDeepStrictEqual(await store.consumeLinkVerification(live.id), live) &&
+      (await store.consumeLinkVerification(live.id)) === null &&
+      (await store.consumeLinkVerification('expired-verification')) === null,
+    "a visitor's started sign-in is read back whole and once, and an expired one is deleted",
+  )
+
+  const earlier = await recordEntry(store, 'moderation-linked', '2026-06-15', {})
+  await store.eraseVisitorGameData(runGame, 'moderation-linked')
   assert(
     (await store.getEntry(entry.id)) === null &&
       (await store.getEntry(earlier.id)) === null &&
-      (await store.getRun(held.id)) === null &&
-      (await store.listReports(board)).length === 0 &&
-      (await store.getEntry(unlisted.id)) !== null,
-    "a visitor's deletion removes their runs, records, and the reports on them in every season, and no one else's",
-  )
-}
-
-/** A record taken down takes the name and look off its visitor's runs on that board, and off nothing else. */
-async function checkTakenDownProfiles(
-  store: Store,
-  flagged: FinishedRun,
-  reviewedAt: string,
-  assert: Assert,
-): Promise<void> {
-  const season = '2026-03-16'
-  const held = async (visitorHash: string, week = season) => {
-    const run = issuedRun(visitorHash, week)
-    await store.issueRun(run)
-    await store.finishRun(run.id, visitorHash, flagged, null)
-    return run
-  }
-  const entry = await recordEntry(store, 'takedown-visitor', season, {})
-  const waiting = await held('takedown-visitor')
-  const dismissed = await held('takedown-visitor')
-  await store.rejectRun(dismissed.id, reviewedAt)
-  const otherVisitor = await held('takedown-other')
-  const otherSeason = await held('takedown-visitor', '2026-02-16')
-  const profileOf = async (run: GameRun) => (await store.getRun(run.id))?.profile ?? null
-
-  const takenDown = { ...entry, takedown: true, appearancePublic: false, updatedAt: reviewedAt }
-  assert(
-    (await store.updateEntry(entry.id, '2000-01-01T00:00:00.000Z', takenDown)) === null &&
-      (await profileOf(waiting)) !== null,
-    'a takedown refused as stale leaves the runs as they are',
-  )
-  const relisted = { ...entry, listed: true, updatedAt: reviewedAt }
-  await store.updateEntry(entry.id, entry.updatedAt, relisted)
-  assert((await profileOf(waiting)) !== null, 'any other change to a record leaves its runs as they are')
-
-  const applied = await store.updateEntry(entry.id, reviewedAt, { ...takenDown, updatedAt: runAfter(reviewedAt) })
-  assert(
-    applied?.takedown === true && (await profileOf(waiting)) === null && (await profileOf(dismissed)) === null,
-    "a takedown takes the name and look off the visitor's runs on that board, waiting or dismissed",
+      (await store.getRun(oldest.id)) === null &&
+      (await store.listOpenReports([entry.id])).length === 0 &&
+      (await store.consumeLinkVerification('erased-verification')) === null,
+    "a visitor's deletion removes their runs, records, the reports on them, and a sign-in started for them, in every season",
   )
   assert(
-    (await profileOf(otherVisitor)) !== null && (await profileOf(otherSeason)) !== null,
-    "a takedown leaves another visitor's runs and the visitor's other seasons as they are",
+    (await store.getEntry(unlisted.id)) !== null && (await store.consumeLinkVerification('kept-verification')) !== null,
+    "a visitor's deletion leaves everyone else's records and sign-ins",
   )
-}
-
-/** Dismissing a list takes only what is listed, still waiting, and of the game, and says how many that was. */
-async function checkListedDismissal(
-  store: Store,
-  flagged: FinishedRun,
-  reviewedAt: string,
-  assert: Assert,
-): Promise<void> {
-  const season = '2026-04-13'
-  const finished = async (visitorHash: string, outcome: FinishedRun, game = runGame) => {
-    const run = { ...issuedRun(visitorHash, season), game }
-    await store.issueRun(run)
-    await store.finishRun(run.id, visitorHash, outcome, null)
-    return run
-  }
-  const listed = await finished('dismissal-listed', flagged)
-  const late = await finished('dismissal-late', flagged)
-  const scored = await finished('dismissal-scored', scoredRun)
-  const otherGame = await finished('dismissal-other', flagged, 'another-game')
-  const named = [listed.id, scored.id, otherGame.id, crypto.randomUUID()]
-  assert(
-    (await store.rejectRuns(runGame, named, reviewedAt)) === 1 &&
-      (await store.getRun(listed.id))?.reviewedAt === reviewedAt &&
-      (await store.getRun(late.id))?.reviewedAt === null &&
-      (await store.getRun(scored.id))?.reviewedAt === null &&
-      (await store.getRun(otherGame.id))?.reviewedAt === null,
-    'a listed dismissal takes only the listed runs that wait, of that game, and leaves a run it did not name',
-  )
-  assert((await store.rejectRuns(runGame, [listed.id], reviewedAt)) === 0, 'a run is dismissed only once')
-}
-
-function runAfter(time: string): string {
-  return new Date(Date.parse(time) + 1).toISOString()
 }
 
 /** The visitor's record as it stands, or `entry` when there is none yet. */
@@ -895,26 +840,21 @@ function settleOnto(entry: LeaderboardEntry): SettleEntry {
     current ? { entry: current, changed: false, consentNeeded: false } : { entry, changed: true, consentNeeded: false }
 }
 
-/** A held run accepted, the visitor's next run finished, and all their data erased, at the same moment. */
+/** A visitor's run finished and all their data erased, at the same moment. */
 async function raceVisitor(store: Store, visitorHash: string) {
   const season = '2026-05-11'
-  const flagged = { ...scoredRun, status: 'flagged' as const, flags: ['claimed-mismatch'] }
-  const held = issuedRun(visitorHash, season)
-  await store.issueRun(held)
-  await store.finishRun(held.id, visitorHash, flagged, null)
-  const next = issuedRun(visitorHash, season)
-  await store.issueRun(next)
+  const run = issuedRun(visitorHash, season)
+  await store.issueRun(run)
   const results = await Promise.allSettled([
-    store.acceptRun(held.id, new Date(runIssuedAt + 2 * 60_000).toISOString(), settleOnto(entryFor(held))),
-    store.finishRun(next.id, visitorHash, scoredRun, settleOnto(entryFor(next))),
+    store.finishRun(run.id, visitorHash, scoredRun, settleOnto(entryFor(run))),
     store.eraseVisitorGameData(runGame, visitorHash),
   ])
   return { results, left: await store.getBoardEntryByVisitor({ game: runGame, season }, visitorHash) }
 }
 
 /**
- * What creates or deletes one visitor's records happens one at a time: two runs settling at once never both insert a
- * first record, and an erasure at the same moment leaves none. PostgreSQL shows it; MemoryStore runs each step whole.
+ * What creates or deletes one visitor's records happens one at a time: an erasure at the same moment as a run's
+ * settling leaves no record without its run. PostgreSQL shows it; MemoryStore runs each step whole.
  */
 async function checkVisitorRace(store: Store, assert: Assert): Promise<void> {
   const raced = await Promise.all(
