@@ -29,11 +29,9 @@ export function recordText(homeRuns: number, totalDistanceDm: number, language: 
   return languageCopy[language].baseball.board.record(homeRuns, homeRunDistanceText(totalDistanceDm, language, 1))
 }
 
-/** A record's name as the board shows it: approved, under review, or an anonymous batter. */
+/** A record's name as the board shows it: its own, or an anonymous batter. */
 export function rowName(row: BoardRow, language: AppLanguage) {
-  const copy = languageCopy[language].baseball.leaderboard
-  if (row.nameState === 'approved' && row.name) return row.name
-  return row.nameState === 'reviewing' ? copy.nameReviewing : copy.nameAnonymous
+  return row.name ?? languageCopy[language].baseball.leaderboard.nameAnonymous
 }
 
 /** A statue's chip reads `in/<id>` beside the LinkedIn mark, decoded when it can be, so it says where it leads. */

@@ -153,6 +153,22 @@ html[lang='ko'] .board-page {
   color: var(--board-muted);
   font-size: 0.9rem;
 }
+/* How a LinkedIn sign-in for the visitor's link ended, said once as the page returns from it. */
+.board-notice {
+  margin: 16px 0 0;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(111, 152, 124, 0.2);
+  font-weight: 700;
+}
+.board-notice[data-outcome='failed'] {
+  background: rgba(202, 119, 101, 0.2);
+}
+.board-own .derby-listing-link {
+  margin-top: 6px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+}
 .board-state {
   display: grid;
   justify-items: center;

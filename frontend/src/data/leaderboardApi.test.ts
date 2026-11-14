@@ -8,6 +8,7 @@ import {
   fetchPodium,
   forgetVisitor,
   rankedRunBody,
+  startLinkedInVerification,
   submitRankedRun,
   updateOwnRecord,
 } from './leaderboardApi'
@@ -28,20 +29,21 @@ const log = {
   practice: [{ errorMs: 96.4, speed: 8.1, keypoints: [[0.4, 0.5]] }],
   swings: [{ ...swing, keypoints: [[0.4, 0.5]], trace: [1, 2, 3] }, null],
 } as unknown as DerbyInputLog
-const outcome = {
-  result: { homeRuns: 1, totalDistanceDm: 1232, pitches: [] },
-  standing: { kind: 'unlisted', wouldBeRank: 4, personalBest: true },
-  entry: null,
-}
 const ownEntry = {
   listed: true,
   name: 'Pip',
-  nameStatus: 'pending',
+  nameStatus: 'shown',
   takedown: false,
   linkedIn: null,
   homeRuns: 1,
   totalDistanceDm: 1232,
   rank: 4,
+}
+const outcome = {
+  result: { homeRuns: 1, totalDistanceDm: 1232, pitches: [] },
+  standing: { kind: 'unlisted', wouldBeRank: 4, personalBest: true },
+  entry: { ...ownEntry, listed: false, name: null, nameStatus: null },
+  linkedInAvailable: true,
 }
 
 function statueRow(rank: number, fields: Record<string, unknown> = {}) {
@@ -105,12 +107,12 @@ describe('leaderboard API boundary', () => {
     expect(unlisted).toEqual({ listed: false })
   })
 
-  it('reads a board row by row: looks normalized, names only once approved, links only on statues, bad rows dropped', async () => {
+  it('reads a board row by row: looks normalized, names only while shown, links only on statues, bad rows dropped', async () => {
     const row = (rank: number, fields: Record<string, unknown> = {}) => ({
       id: `entry-${rank}`,
       rank,
       name: null,
-      nameState: 'reviewing',
+      nameState: 'anonymous',
       profile: { hair: 'crop', colors: { top: '#6f987c' } },
       homeRuns: 4,
       totalDistanceDm: 5117,
@@ -127,7 +129,7 @@ describe('leaderboard API boundary', () => {
       podium: [
         row(1, {
           name: 'Momo',
-          nameState: 'approved',
+          nameState: 'shown',
           profile: { hair: 'bob', colors: { top: '#CA7765', hair: 'red' } },
           linkedInProfileUrl: 'https://www.linkedin.com/in/example-momo',
         }),
@@ -166,10 +168,10 @@ describe('leaderboard API boundary', () => {
     const podium = [
       statueRow(1, {
         name: 'Momo',
-        nameState: 'approved',
+        nameState: 'shown',
         linkedInProfileUrl: 'https://www.linkedin.com/in/example-momo',
       }),
-      statueRow(1, { id: 'entry-again', name: 'Twice', nameState: 'approved' }),
+      statueRow(1, { id: 'entry-again', name: 'Twice', nameState: 'shown' }),
       statueRow(2, { linkedInProfileUrl: 'https://www.linkedin.com.example/in/example-pip' }),
       statueRow(3, { profile: null }),
       statueRow(4),
@@ -226,8 +228,6 @@ describe('leaderboard API boundary', () => {
       '2026-10-19': { ...ownEntry, listed: false, rank: 1 },
       '2026-10-12': { ...ownEntry, listed: true, rank: null },
       '2026-10-05': null,
-      // A place among the first three that waits for approval is empty for everyone, so it is no statue yet.
-      '2026-09-21': { ...ownEntry, listed: true, rank: 2, awaitingApproval: true },
     }
     const seasons = [...Object.keys(ownOn).map(standing), { id: '2026-09-28', champions: [] }]
     const request = vi.fn<typeof fetch>(async (input) => {
@@ -247,6 +247,19 @@ describe('leaderboard API boundary', () => {
       String(input).includes('2026-10-26') ? new Response(null, { status: 500 }) : request(input),
     )
     await expect(fetchOwnStatues(failing)).rejects.toThrow()
+  })
+
+  it('starts a link’s LinkedIn sign-in for the named record, and leaves only for an https address', async () => {
+    const answer = (authorizationUrl: string) => vi.fn<typeof fetch>(async () => Response.json({ authorizationUrl }))
+    const linkedIn = answer('https://www.linkedin.com/oauth/v2/authorization?state=link.abc')
+    expect(await startLinkedInVerification('2026-11-02', linkedIn)).toContain('state=link.abc')
+    expect(linkedIn.mock.calls[0][0]).toBe(
+      '/v1/games/home-run-derby/entries/own/linkedin-verification?season=2026-11-02',
+    )
+    expect(linkedIn.mock.calls[0][1]).toMatchObject({ method: 'POST', credentials: 'same-origin' })
+    await expect(startLinkedInVerification(null, answer('javascript:alert(1)'))).rejects.toThrow()
+    const unverifiable = vi.fn<typeof fetch>(async () => new Response(null, { status: 409 }))
+    await expect(startLinkedInVerification(null, unverifiable)).rejects.toThrow()
   })
 
   it('takes down the named season’s statue, and a failed hand-over does not pass for one', async () => {

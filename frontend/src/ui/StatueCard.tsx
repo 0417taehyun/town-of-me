@@ -16,7 +16,7 @@ type StatueCardProps = {
 
 /**
  * The card beside a statue in the podium garden, open while the visitor stands near it (town-statues §0-4): who holds
- * the place this week and their record, their LinkedIn link only when they opted in and the admin approved it (never
+ * the place this week and their record, their LinkedIn link only when they opted in and signed in with LinkedIn for it (never
  * on the statue itself) with a menu to report it, and the way to the board; an empty place invites a swing instead.
  * It reads the same weekly statues as the garden, so the card never names someone the pedestal does not show.
  */
@@ -72,7 +72,7 @@ export function StandingCard({
         <span className="statue-card-place">{copy.baseball.leaderboard.plaqueLive(row.rank)}</span>
         {week}
       </p>
-      <h2 id="statue-card-title" data-placeholder={row.nameState !== 'approved' || undefined}>
+      <h2 id="statue-card-title" data-placeholder={row.nameState !== 'shown' || undefined}>
         {name}
       </h2>
       <p className="statue-card-record">{recordText(row.homeRuns, row.totalDistanceDm, language)}</p>

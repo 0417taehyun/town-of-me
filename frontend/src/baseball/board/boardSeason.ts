@@ -32,6 +32,15 @@ export function daysUntilSeasonEnds(endsAt: number, now: number) {
   return Math.max(0, kstDay(endsAt) - kstDay(now))
 }
 
+/**
+ * How a LinkedIn sign-in for a record's link ended, which the server says in the address it returns the browser to
+ * (`?linkedin=verified` or `?linkedin=failed`), or `null` for any other visit.
+ */
+export function linkedInReturn(search: string): 'verified' | 'failed' | null {
+  const outcome = new URLSearchParams(search).get('linkedin')
+  return outcome === 'verified' || outcome === 'failed' ? outcome : null
+}
+
 /** The board's address for `season`, or for this week's board. */
 export function seasonSearch(season: string | null) {
   return season ? `?season=${season}` : ''

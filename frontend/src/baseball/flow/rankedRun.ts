@@ -9,6 +9,7 @@ import {
   type RankedRunBody,
   type RunOutcome,
   type RunStanding,
+  startLinkedInVerification,
   submitRankedRun,
 } from '../../data/leaderboardApi'
 import { normalizeLinkedInProfileUrl } from '../../data/linkedInProfile'
@@ -17,8 +18,9 @@ import type { BaseballPreview } from '../baseballRoute'
 import { findsUsualTiming, type PracticeSample } from '../game/calibration'
 
 // A run and the weekly board. A run asks the server for its rules and seed as it starts (useRankedRuns.ts); without
-// an answer it plays all the same, unranked, and its result says so in a line. Its result goes to the board once the
-// run is over, and nothing about the board ever holds up the next swing.
+// an answer it plays all the same, unranked, and its result says so in a line. Its result goes to the server once the
+// run is over and stands at once; whether others see it is the visitor's choice, asked right after the run
+// (ui/ListingView.tsx). Nothing about the board ever holds up the next swing.
 
 /** The board's first places, which stand as statues. */
 export const STATUE_COUNT = 3
@@ -48,7 +50,7 @@ export type BoardRun =
 
 /** What the result card says of the board. */
 export type BoardLine =
-  | { kind: 'saving' | 'reviewing' | 'excluded' | 'deleted' }
+  | { kind: 'saving' | 'excluded' | 'deleted' }
   | { kind: 'unranked'; reason: Exclude<UnrankedReason, 'preview'> }
   | { kind: 'unsaved'; reason: UnsavedReason }
   | { kind: 'statue' | 'newBest'; rank: number }
@@ -137,66 +139,102 @@ export function boardLine(boardRun: BoardRun | null, entry: OwnBoardEntry | null
 
 /**
  * The run's standing as the visitor's record now shows it (`entry`, which a listing changes after the run's answer): a
- * new best on the board is its place, or its statue; a run that did not beat the record says the record stands; a
- * record off the board says where it would be; and a posted record waiting among the statues for the admin's approval
- * reads like a held run, since nobody else sees it there yet.
+ * new best on the board is its place, or its statue; a run that did not beat the record says the record stands; and a
+ * record off the board says it is not posted, and where it would be.
  */
 export function standingLine(standing: RunStanding, entry: OwnBoardEntry | null): BoardLine {
-  if (standing.kind === 'reviewing' || standing.kind === 'excluded') return { kind: standing.kind }
-  if (entry === null || entry.rank === null) return { kind: 'excluded' }
+  if (standing.kind === 'excluded' || entry === null || entry.rank === null) return { kind: 'excluded' }
   const { rank } = entry
   if (!entry.listed)
     return { kind: standing.kind === 'consentNeeded' ? 'consentNeeded' : 'offBoard', wouldBeRank: rank }
-  if (entry.awaitingApproval) return { kind: 'reviewing' }
   if (!standing.personalBest) {
     return { kind: 'bestStands', rank, homeRuns: entry.homeRuns, totalDistanceDm: entry.totalDistanceDm }
   }
   return { kind: rank <= STATUE_COUNT ? 'statue' : 'newBest', rank }
 }
 
-/** A statue whose character has a LinkedIn link it does not show yet asks whether it should. */
-export function offersLinkedIn(entry: OwnBoardEntry | null, profileUrl: string) {
-  const statue = entry !== null && entry.listed && entry.rank !== null && entry.rank <= STATUE_COUNT
-  return statue && entry.linkedIn === null && normalizeLinkedInProfileUrl(profileUrl) !== null
+/**
+ * Whether a run's answer asks the visitor to post: it made a record that is off the board, or the board took the
+ * browser's listed record off because this run looked like someone else's. A run that did not beat an unposted record
+ * asks nothing again; its result line still says the record is not posted.
+ */
+export function asksToPost(standing: RunStanding) {
+  return standing.kind === 'consentNeeded' || (standing.kind === 'unlisted' && standing.personalBest)
+}
+
+/** A record the visitor could post and has not: off the board, and not one the admin removed or anonymised. */
+export function isUnposted(entry: OwnBoardEntry | null) {
+  return entry !== null && !entry.listed && entry.rank !== null && !entry.takedown
 }
 
 /** What the listing form found wrong, before anything is sent. */
-export type ListingProblem = 'listedNeeded' | 'nameInvalid' | 'ownershipNeeded'
-/** What went wrong with the listing card: the form, or the board's answer. */
-export type ListingFailure = ListingProblem | 'saveFailed' | 'linkedInRefused'
+export type ListingProblem = 'nameInvalid' | 'linkedInInvalid' | 'ownershipNeeded'
+/**
+ * What went wrong with the listing card: the form, the board's answer, or (`signInFailed`) a record that was posted
+ * but whose LinkedIn sign-in could not start, so its link is not shown.
+ */
+export type ListingFailure = ListingProblem | 'saveFailed' | 'linkedInRefused' | 'signInFailed'
 
 /** The listing form as the visitor left it. */
-export type ListingForm = { listed: boolean; name: string; linkedInOn: boolean; ownProfile: boolean }
+export type ListingForm = { name: string; linkedInOn: boolean; linkedInAddress: string; ownProfile: boolean }
 
-/**
- * A record off the board goes on only with its box ticked (nothing is ever posted unasked); a name must be one the
- * board takes, and a link must be the visitor's own.
- */
-export function listingProblem(form: ListingForm, wasListed: boolean): ListingProblem | null {
-  if (!form.listed) return wasListed ? null : 'listedNeeded'
+/** A name must be one the board takes, and a link a LinkedIn profile address the visitor says is their own. */
+export function listingProblem(form: ListingForm): ListingProblem | null {
   if (form.name.trim() !== '' && boardName(form.name) === null) return 'nameInvalid'
-  return form.linkedInOn && !form.ownProfile ? 'ownershipNeeded' : null
+  if (!form.linkedInOn) return null
+  if (normalizeLinkedInProfileUrl(form.linkedInAddress) === null) return 'linkedInInvalid'
+  return form.ownProfile ? null : 'ownershipNeeded'
 }
 
 /**
- * The change the form asks for: an empty name posts an anonymous batter, and the link is sent when turned on (the
- * profile's address), turned off when the record has one, and otherwise left alone.
+ * The posting the form asks for: an empty name posts an anonymous batter, and a link is sent only when turned on, as
+ * the profile's plain address. A record's link is otherwise left as it is; taking one off is its own request.
  */
-export function listingChoice(
-  form: ListingForm,
-  profile: PlayerProfile,
-  linkedInAddress: string | null,
-  hasLinkedIn: boolean,
-): ListingChoice {
-  if (!form.listed) return { listed: false }
+export function listingChoice(form: ListingForm, profile: PlayerProfile): ListingChoice & { listed: true } {
   const name = form.name.trim() === '' ? null : form.name
-  const turnedOff = hasLinkedIn ? null : undefined
-  const linkedIn = form.linkedInOn ? (linkedInAddress ?? undefined) : turnedOff
+  const linkedIn = form.linkedInOn ? (normalizeLinkedInProfileUrl(form.linkedInAddress) ?? undefined) : undefined
   return { listed: true, profile, name, linkedIn }
 }
 
-/** The board refuses a link it will not show (400) apart from any other failure, which another try may fix. */
+/**
+ * The board refuses a link apart from any other failure: one it will not show (400), one whose profile's owner
+ * reported it (409), or no LinkedIn sign-in on this deployment (503). Anything else another try may fix.
+ */
 export function saveFailure(error: unknown, choice: ListingChoice): ListingFailure {
-  const refused = error instanceof LeaderboardRequestError && error.status === 400
+  const status = error instanceof LeaderboardRequestError ? error.status : null
+  const refused = status === 400 || status === 409 || status === 503
   return refused && choice.listed && choice.linkedIn ? 'linkedInRefused' : 'saveFailed'
+}
+
+/**
+ * Takes the visitor to LinkedIn to sign in for the unverified link on their record (this week's, or a past `season`'s).
+ * A top-level navigation, which the derby's CSP leaves alone (it limits fetches and form posts to this origin);
+ * LinkedIn returns the browser to the board page (board/boardSeason.ts linkedInReturn).
+ */
+export async function signInForLinkedIn(
+  season: string | null,
+  leaveFor = (address: string) => window.location.assign(address),
+) {
+  leaveFor(await startLinkedInVerification(season))
+}
+
+/**
+ * Posts the record, and with a new link then leaves for LinkedIn's sign-in (`signingIn`). A listing the board did not
+ * take never goes on to sign in; one it took stays posted when the sign-in cannot start (`signInFailed`).
+ */
+export async function postListing(
+  choice: ListingChoice & { listed: true },
+  save: (choice: ListingChoice) => Promise<void>,
+  signIn: () => Promise<void> = () => signInForLinkedIn(null),
+): Promise<ListingFailure | 'posted' | 'signingIn'> {
+  try {
+    await save(choice)
+  } catch (error) {
+    return saveFailure(error, choice)
+  }
+  if (!choice.linkedIn) return 'posted'
+  return signIn().then(
+    () => 'signingIn' as const,
+    () => 'signInFailed' as const,
+  )
 }

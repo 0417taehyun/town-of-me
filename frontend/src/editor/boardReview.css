@@ -1,36 +1,30 @@
-/* The board review dialog widens the guestbook review's: it carries a table per run. Lives in the dialog's own chunk. */
+/* The derby plays dialog widens the guestbook review's: it holds a run and its visitor's record side by side. Lives in
+   the dialog's own chunk. */
 .guestbook-review.board-review {
-  width: min(960px, 100%);
+  width: min(1040px, 100%);
 }
 .board-review h3 {
   margin: 0;
   font-size: 0.95rem;
 }
-.board-review-group,
-.board-review-find {
+.board-review-group {
   display: grid;
   gap: 8px;
   min-width: 0;
 }
-.board-review-find {
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-}
-.board-review-find-fields {
+.board-review-week {
   display: flex;
   flex-wrap: wrap;
+  align-items: end;
   gap: 10px;
 }
-.board-review-find-fields label {
+.board-review-week label {
   display: grid;
-  flex: 1 1 200px;
   gap: 4px;
   font-size: 0.75rem;
   font-weight: 700;
 }
-.board-review-find-fields input {
-  width: 100%;
+.board-review-week input {
   min-height: 34px;
   padding: 4px 8px;
   border: 1px solid var(--border);
@@ -43,12 +37,51 @@
   color: var(--muted);
   font-weight: 500;
 }
-.board-review-item {
+.board-review-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* A run on the left, its visitor's record on the right; stacked on a narrow screen. */
+.board-review-play {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px 16px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  font-size: 0.8rem;
+}
+.board-review-play p {
+  margin: 0;
+}
+.board-review-run,
+.board-review-record-text {
+  display: grid;
+  gap: 6px;
+  align-content: start;
   min-width: 0;
 }
-.board-review-item time {
+.board-review-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.board-review-play time {
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: 0.72rem;
+}
+.board-review-run details summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.board-review-run details[open] {
+  grid-column: 1 / -1;
 }
 .board-review-marks {
   display: flex;
@@ -67,80 +100,50 @@
   background: #f8e4b9;
   color: #6f4a06;
 }
-.board-review-label {
-  display: block;
-  color: var(--muted);
-  font-size: 0.68rem;
-}
-.board-review-public {
+.board-review-record {
   display: flex;
   gap: 12px;
   align-items: flex-start;
-}
-.board-review-public-text {
-  display: grid;
-  flex: 1;
-  gap: 4px;
   min-width: 0;
+}
+.board-review-record-text {
+  flex: 1;
 }
 .board-review-portrait {
   display: block;
   flex: none;
-  width: 72px;
-  height: 72px;
+  width: 56px;
+  height: 56px;
   border-radius: 12px;
   background: rgba(67, 80, 73, 0.09);
 }
 .board-review-name {
-  font-size: 1.05rem;
+  font-size: 1rem;
   overflow-wrap: anywhere;
 }
 .board-review-link {
   display: grid;
   gap: 4px;
   justify-items: start;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(67, 80, 73, 0.06);
 }
-.board-review-link-id {
-  font-size: 1.2rem;
+.board-review-link-id,
+.board-review-verified {
+  font-size: 0.95rem;
   overflow-wrap: anywhere;
-}
-.board-review-link a {
-  font-size: 0.74rem;
 }
 .board-review-raw {
   color: var(--muted);
   font-size: 0.68rem;
   overflow-wrap: anywhere;
 }
-.board-review-warnings {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: #fbf0d8;
-  color: #6f4a06;
-  font-size: 0.78rem;
-  list-style: none;
-}
-.board-review-neighbours {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 12px;
-  margin: 0;
-  padding: 0;
-  font-size: 0.78rem;
-  list-style: none;
-}
-.board-review-neighbours .is-self {
-  font-weight: 700;
-}
 .board-review-reports {
   display: grid;
   gap: 6px;
   margin: 0;
   padding: 0;
-  font-size: 0.8rem;
   list-style: none;
 }
 .board-review-reports li {
@@ -149,24 +152,11 @@
   gap: 4px 10px;
   align-items: center;
 }
-.board-review-run,
-.board-review-best {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-  font-size: 0.8rem;
-}
-.board-review-best summary {
-  cursor: pointer;
-  font-weight: 700;
-}
 .board-review-facts {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 6px 12px;
-  margin: 0;
+  margin: 8px 0;
 }
 .board-review-facts dt {
   color: var(--muted);
@@ -199,12 +189,34 @@
 .board-review-actions {
   display: grid;
   gap: 4px;
-  padding-top: 8px;
+  justify-items: start;
+  padding-top: 6px;
   border-top: 1px solid var(--border);
+}
+/* The one action that takes a record off the board, so it reads as a button and not as one more link. */
+.board-review-remove {
+  min-height: 34px;
+  padding: 4px 14px;
+  border: 1px solid #b2533f;
+  border-radius: 999px;
+  background: #b2533f;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.board-review-remove:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 .board-review-check {
   display: inline-flex;
   gap: 6px;
   align-items: center;
   font-size: 0.74rem;
+}
+@media (max-width: 720px) {
+  .board-review-play {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

@@ -1,18 +1,29 @@
 import { describe, expect, it, vi } from 'vitest'
 import { LeaderboardRequestError, type OwnBoardEntry, type RankedRunBody } from '../../data/leaderboardApi'
-import { postedBoardName, retryPauseMs, standingLine, unrankedBeforeIssue, unsavedRun } from './rankedRun'
+import { DEFAULT_PLAYER_PROFILE } from '../../data/playerProfile'
+import {
+  asksToPost,
+  isUnposted,
+  listingChoice,
+  listingProblem,
+  postedBoardName,
+  postListing,
+  retryPauseMs,
+  standingLine,
+  unrankedBeforeIssue,
+  unsavedRun,
+} from './rankedRun'
 
 const timed = [100, 120, 110].map((errorMs) => ({ errorMs, speed: 8 }))
 const entry: OwnBoardEntry = {
   listed: true,
   name: 'Pip',
-  nameStatus: 'approved',
+  nameStatus: 'shown',
   takedown: false,
   linkedIn: null,
   homeRuns: 3,
   totalDistanceDm: 3434,
   rank: 2,
-  awaitingApproval: false,
 }
 const run = { id: 'run-7', expiresAt: 600_000, rules: { pitchCount: 5, difficulty: 'normal' as const }, seed: 7 }
 const body = {} as RankedRunBody
@@ -51,10 +62,43 @@ describe('ranked runs', () => {
     })
     const anotherPlayer = { kind: 'consentNeeded' as const, wouldBeRank: 2, personalBest: true }
     expect(standingLine(anotherPlayer, unlisted).kind).toBe('consentNeeded')
-    // Once the visitor posts it, the record they just set stands as a statue, unless it still waits for approval.
+    // Once the visitor posts it, the record they just set stands as a statue at once.
     expect(standingLine(anotherPlayer, entry)).toEqual({ kind: 'statue', rank: 2 })
-    expect(standingLine(anotherPlayer, { ...entry, awaitingApproval: true })).toEqual({ kind: 'reviewing' })
-    expect(standingLine(anotherPlayer, { ...unlisted, awaitingApproval: true }).kind).toBe('consentNeeded')
+  })
+
+  it('asks to post only a run that made an unposted record, and warns on leaving only while one stays unposted', () => {
+    expect(asksToPost({ kind: 'unlisted', wouldBeRank: 2, personalBest: true })).toBe(true)
+    expect(asksToPost({ kind: 'unlisted', wouldBeRank: 2, personalBest: false })).toBe(false)
+    expect(asksToPost({ kind: 'consentNeeded', wouldBeRank: 2, personalBest: false })).toBe(true)
+    expect(asksToPost({ kind: 'ranked', rank: 2, personalBest: true })).toBe(false)
+    expect(asksToPost({ kind: 'excluded' })).toBe(false)
+    expect(isUnposted({ ...entry, listed: false })).toBe(true)
+    expect(isUnposted(entry)).toBe(false)
+    expect(isUnposted({ ...entry, listed: false, rank: null })).toBe(false)
+    expect(isUnposted(null)).toBe(false)
+  })
+
+  it('signs in with LinkedIn only for a link the board took, and keeps the record posted when sign-in cannot start', async () => {
+    const form = { name: ' ', linkedInOn: true, linkedInAddress: 'linkedin.com/in/example-pip', ownProfile: true }
+    expect(listingProblem(form)).toBe('linkedInInvalid')
+    const address = 'https://www.linkedin.com/in/example-pip'
+    expect(listingProblem({ ...form, linkedInAddress: address, ownProfile: false })).toBe('ownershipNeeded')
+    const choice = listingChoice({ ...form, linkedInAddress: `${address}/` }, DEFAULT_PLAYER_PROFILE)
+    expect(choice).toMatchObject({ listed: true, name: null, linkedIn: address })
+    const plain = listingChoice({ ...form, linkedInOn: false }, DEFAULT_PLAYER_PROFILE)
+    expect(plain.linkedIn).toBe(undefined)
+
+    const save = vi.fn(async () => undefined)
+    const signIn = vi.fn(async () => undefined)
+    expect(await postListing(plain, save, signIn)).toBe('posted')
+    expect(signIn).not.toHaveBeenCalled()
+    expect(await postListing(choice, save, signIn)).toBe('signingIn')
+    const noSignIn = vi.fn(async () => Promise.reject(new LeaderboardRequestError(503)))
+    expect(await postListing(choice, save, noSignIn)).toBe('signInFailed')
+    const refuse = vi.fn(async () => Promise.reject(new LeaderboardRequestError(409)))
+    expect(await postListing(choice, refuse, signIn)).toBe('linkedInRefused')
+    expect(await postListing(plain, refuse, signIn)).toBe('saveFailed')
+    expect(signIn).toHaveBeenCalledTimes(1)
   })
 
   it('sends the next runs under the name the record was posted with, even once the page loads again', async () => {

@@ -57,7 +57,8 @@ import {
   startedFlow,
   startsRun,
 } from './flow/derbyFlow'
-import { boardLine, offersLinkedIn } from './flow/rankedRun'
+import { leaveClick, useLeaveGuard } from './flow/leaveGuard'
+import { boardLine } from './flow/rankedRun'
 import { keepScreenOn, requestFullscreen } from './flow/screenRequests'
 import type { StanceWatch } from './flow/stanceHold'
 import { findsUsualTiming } from './game/calibration'
@@ -91,6 +92,7 @@ import {
   stanceTicked,
 } from './ui/derbyCues'
 import { DeviceBlocked } from './ui/DeviceBlocked'
+import { LeaveView } from './ui/LeaveView'
 import { ListingView } from './ui/ListingView'
 import { PracticeDoneView, PracticeView } from './ui/PracticeView'
 import { ResultView } from './ui/ResultView'
@@ -173,24 +175,26 @@ export function BaseballApp({ town: loadedTown }: { town: TownSnapshot }) {
 
 /**
  * The way back (to the town, or from a preview to the editor) and the language choice on every screen of the page,
- * beside any note in `children`.
+ * beside any note in `children`. With `onLeave` the way back asks it instead of leaving at once.
  */
 export function BaseballLinks({
   className,
   exit,
   language,
   onLanguageChange,
+  onLeave,
   children,
 }: {
   className: string
   exit: BaseballExit
   language: AppLanguage
   onLanguageChange: (language: AppLanguage) => void
+  onLeave?: (path: string) => void
   children?: ReactNode
 }) {
   return (
     <header className={className}>
-      <a className="baseball-back" href={EXIT_PATHS[exit]}>
+      <a className="baseball-back" href={EXIT_PATHS[exit]} onClick={leaveClick(EXIT_PATHS[exit], onLeave)}>
         <span aria-hidden="true">←</span> {languageCopy[language].baseball.back[exit]}
       </a>
       <LanguageSelect language={language} className="baseball-language-select" onChange={onLanguageChange} />
@@ -243,9 +247,12 @@ const DerbyDiagnostics = import.meta.env.DEV ? DiagnosticsPanel : null
  * its object detector rests from each windup until the pitch's ball is down (derbyCues.ts pitchInPlay). A computer that
  * tracks too slowly is blocked for the visit. Every run reads the KST week when it starts, never when
  * the page loaded. A run asks the weekly board for its rules and seed as it starts and plays those, ranked
- * (useRankedRuns.ts); without an answer in time it plays unranked, and its result says so. The result card says where
- * the run left the visitor on the board, and its listing card (ui/ListingView.tsx), opened from there, puts the record
- * on the board or changes it; while that card is open the stance waits, and Escape closes it. A `preview` is the
+ * (useRankedRuns.ts); without an answer in time it plays unranked, and its result says so. A run that made a record
+ * the visitor has not posted asks first whether to post it (ui/ListingView.tsx), which puts it on the board and the
+ * statues at once; the result card then says where the run left the visitor on the board, and opens that card again
+ * to post or change the record. While the card is open the stance waits, and Escape closes it. Leaving with such a
+ * record still not posted (the back links, Escape) says so first and offers to post it (ui/LeaveView.tsx), and the
+ * browser asks before the tab closes or reloads; another run is no leaving and asks nothing. A `preview` is the
  * admin's try: of next week's rules, which plays those scheduled (or this week's when none are), or of the hidden
  * ballpark, which plays this week's; it says so on every screen and never asks the board. V (or the camera view button)
  * resizes or hides the camera panel beside the play, the result screen can turn the camera off, and Escape leaves from
@@ -300,7 +307,28 @@ export function DerbyScreen({
   const exit = baseballExit(preview !== null)
   const board = useRankedRuns(preview, batter)
   const [listing, setListing] = useState(false)
+  // Where the visitor was going when the page asked about a record not posted, or null.
+  const [leavingFor, setLeavingFor] = useState<string | null>(null)
+  const disarmLeaveGuard = useLeaveGuard(board.unposted)
   const starting = useRef(false)
+  const listingOpen = board.entry !== null && (listing || board.asking)
+  const overlaid = listingOpen || leavingFor !== null
+  const { answer: answerPosting } = board
+  const closeListing = useCallback(() => {
+    setListing(false)
+    answerPosting()
+  }, [answerPosting])
+  const leave = useCallback(
+    (path: string) => {
+      if (board.unposted) return setLeavingFor(path)
+      window.location.assign(path)
+    },
+    [board.unposted],
+  )
+  const leaveAnyway = (path: string) => {
+    disarmLeaveGuard()
+    window.location.assign(path)
+  }
 
   const begin = (next: SetStateAction<DerbyFlow>) => {
     swings.current = []
@@ -321,7 +349,7 @@ export function DerbyScreen({
   const startRun = () => {
     if (starting.current) return
     starting.current = true
-    setListing(false)
+    closeListing()
     void board.issue(flow.practice).then((issued) => {
       starting.current = false
       begin((current) => runFlow(current, performance.now(), plays(issued)))
@@ -360,7 +388,7 @@ export function DerbyScreen({
   }, [heldWord])
   // The listing card is read and filled in at the computer, so the stance waits until it closes.
   const stance: StanceWatch = {
-    wait: listing ? null : stanceWait(flow),
+    wait: overlaid ? null : stanceWait(flow),
     onProgress: onStanceProgress,
     onHeld: onStanceHeld,
   }
@@ -379,7 +407,8 @@ export function DerbyScreen({
   const cameraOn = isCameraOn(status)
   const screen = cameraScreen(cameraOn, step)
   const pitchCount = run?.plan.schedule.length ?? 0
-  const paused = pausedForAway(step, camera.present, betweenPitches(hud, pitchCount))
+  // A card over the play holds the next pitch like a visitor out of view, since they are reading it.
+  const paused = pausedForAway(step, camera.present && !overlaid, betweenPitches(hud, pitchCount))
   const searching = cameraOn && !camera.seen
   // A step that waits for the stance says so in a screen reader's ear, as practice and the run do in their captions.
   const waitsForStance = status.kind === 'ready' && step === flow.step && stanceWait(flow) !== null
@@ -422,19 +451,23 @@ export function DerbyScreen({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const action = derbyKeyAction(event, screen)
-      if (action === 'leave' && listing) {
-        setListing(false)
+      if (action === 'leave' && leavingFor !== null) {
+        setLeavingFor(null)
+        return
+      }
+      if (action === 'leave' && listingOpen) {
+        closeListing()
         return
       }
       if (action === 'leave') {
-        window.location.assign(EXIT_PATHS[exit])
+        leave(EXIT_PATHS[exit])
         return
       }
       if (action === 'cameraPanel') cyclePanelSize()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [screen, cyclePanelSize, exit, listing])
+  }, [screen, cyclePanelSize, exit, listingOpen, leavingFor, closeListing, leave])
 
   const { finish: finishRankedRun } = board
   const onStageEvent = useCallback(
@@ -458,7 +491,7 @@ export function DerbyScreen({
     sounds.unlock()
     requestFullscreen()
     board.abandon()
-    setListing(false)
+    closeListing()
     begin(setupFlow(performance.now()))
     camera.turnOn()
   }
@@ -561,7 +594,7 @@ export function DerbyScreen({
           onTurnOff={camera.turnOff}
         />
       )}
-      {step === 'rules' && (
+      {step === 'rules' && !listingOpen && (
         <section className="baseball-card derby-start" aria-labelledby="baseball-title">
           <p className="eyebrow">{venueCopy.themes[ballpark.theme]}</p>
           <h1 id="baseball-title">{copy.baseball.title}</h1>
@@ -591,7 +624,7 @@ export function DerbyScreen({
             <li>{cameraCopy.swingTip}</li>
           </ul>
           {!preview && (
-            <a className="derby-board-link" href={BOARD_PATH}>
+            <a className="derby-board-link" href={BOARD_PATH} onClick={disarmLeaveGuard}>
               {copy.baseball.leaderboard.viewBoard} <span aria-hidden="true">›</span>
             </a>
           )}
@@ -621,35 +654,47 @@ export function DerbyScreen({
           </div>
         </section>
       )}
-      {step === 'result' && flow.result && !(listing && board.entry) && (
+      {step === 'result' && flow.result && !listingOpen && (
         <ResultView
           result={flow.result}
           board={{
             line: boardLine(board.boardRun, board.entry),
-            offerLinkedIn: offersLinkedIn(board.entry, batter.linkedInProfileUrl),
             onOpen: () => setListing(true),
             onRetry: board.retry,
+            onBoard: disarmLeaveGuard,
           }}
           exit={exit}
           gauge={gauge}
           stanceNeed={stanceNeed}
           language={language}
           onPlayAgain={start}
+          onLeave={leave}
         />
       )}
-      {step === 'result' && listing && board.entry && (
+      {listingOpen && board.entry && (
         <ListingView
-          key={board.entry.listed ? 'listed' : 'unlisted'}
           entry={board.entry}
           batter={batter}
           name={board.name}
+          linkedInAvailable={board.linkedInAvailable}
           language={language}
           onSave={board.saveListing}
+          onLinkedInOff={board.removeLinkedIn}
           onDelete={async () => {
             await board.deleteRecords()
-            setListing(false)
+            closeListing()
           }}
-          onClose={() => setListing(false)}
+          onClose={closeListing}
+        />
+      )}
+      {leavingFor !== null && (
+        <LeaveView
+          language={language}
+          onPost={() => {
+            setLeavingFor(null)
+            setListing(true)
+          }}
+          onLeave={() => leaveAnyway(leavingFor)}
         />
       )}
       <BaseballLinks
@@ -657,6 +702,7 @@ export function DerbyScreen({
         exit={exit}
         language={language}
         onLanguageChange={onLanguageChange}
+        onLeave={leave}
       >
         {screen === 'play' && (
           <button

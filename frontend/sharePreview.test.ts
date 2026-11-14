@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SHARE_TEXT, sharePreviewTags } from './sharePreview'
+import { DEFAULT_SHARE_TEXT, DERBY_SHARE_PAGE, sharePreviewTags } from './sharePreview'
 
 describe('link preview tags', () => {
   it("names the deployment's town, points crawlers at an absolute image, and keeps settings inside attributes", () => {
@@ -13,5 +13,8 @@ describe('link preview tags', () => {
     expect(tags).toContain('<meta property="og:image" content="https://town.example/og-image.jpg" />')
     expect(tags).toContain(`<meta property="og:description" content="${DEFAULT_SHARE_TEXT.description}" />`)
     expect(sharePreviewTags({})).toContain('<meta property="og:image" content="/og-image.jpg" />')
+    const derby = sharePreviewTags({ origin: 'https://town.example' }, DERBY_SHARE_PAGE)
+    expect(derby).toContain('<meta property="og:url" content="https://town.example/baseball" />')
+    expect(derby).toContain('<meta property="og:image" content="https://town.example/og-baseball.jpg" />')
   })
 })

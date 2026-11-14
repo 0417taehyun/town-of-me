@@ -45,9 +45,9 @@ npm run build
 - **Houses:** approaching one shows its owner's name, linked to their LinkedIn profile when the town has one.
 - **The ballpark:** once the admin shows it, the hedge opens at the end of the north road onto the garden ballpark's
   gate, and `E` there opens `/baseball`; coming back starts you at the gate. A branch of the road leads to a podium
-  garden where this week's home-run leaders stand as statues once the admin approved their records; walking up to one
-  opens a card with their record, their LinkedIn link once the admin approved it (with a menu to report it), and the
-  board, and an empty pedestal invites you to swing. While it is hidden the hedge stays closed and none of it shows.
+  garden where this week's home-run leaders stand as statues as soon as they post their records; walking up to one
+  opens a card with their record, their LinkedIn link once they signed in with LinkedIn (with a menu to report it),
+  and the board, and an empty pedestal invites you to swing. While it is hidden the hedge stays closed and none of it shows.
 - **Guestbook:** anyone may write one note a day per browser and edit it that day. Notes appear after an admin approves
   them, and only the character's name and look are sent with a note.
 - **Time and seasons:** lighting, sky, lamps, music, birds, and clouds follow local time; the season follows the
@@ -102,13 +102,18 @@ north road.
   three more practice pitches, as often as you like; `Play ball anyway` plays on, unranked and on the standard timing.
 - **Away:** practice and a run pause between pitches while you are out of the camera's view.
 - **Weekly board:** a season is one week, Monday 00:00 KST to the next Monday. Each run after practice is ranked when
-  the board answers; the result says your place, and `Show me on the board` posts it, with your name once the admin
-  checks it, or as an anonymous batter. The top three stand as statues only after the admin has checked their records:
-  such a result says it is being checked, your own card says the place it takes once checked, and until then the
-  pedestal stays empty for everyone while places from fourth on show at once. A statue may show your LinkedIn link
-  after you put the given code on your profile. A preview, or a
+  the board answers. A run that made a record you have not posted asks right away whether to put it on the board, with
+  the place it would take: `Post it` shows it at once, with your character's name and look (or as an anonymous batter),
+  and the top three stand as statues at once; `Not now` keeps it off, and the result then says it is not posted. Once
+  you post, your next bests update by themselves and the result just says your new place. Leaving with a record still
+  not posted (the back links, `Escape`, closing the tab) says so first and offers to post it; another run does not ask.
+  A statue may show your LinkedIn link: tick the box, give your profile's address, and after posting you are taken to
+  LinkedIn to sign in; the link shows once you have, and only your LinkedIn name is kept, for the admin. Without
+  LinkedIn configured on the server the option is not offered. Nothing waits for the admin, who can remove a record,
+  name, character, or link afterwards. A preview, or a
   run the board cannot be reached for, is not ranked. `See the board` (on the rules card and the result) opens
-  `/baseball/ranking`: the statues, places 4 to 50, your own record, and the last twelve weeks' final boards.
+  `/baseball/ranking`: the statues, places 4 to 50, your own record (post it, take it off, or add, verify, or remove
+  its LinkedIn link; the sign-in returns here and says how it went), and the last twelve weeks' final boards.
   `Past seasons · Hall of fame` shows every finished season's statues; your own card can take a past statue down or
   turn its link off, and `It’s someone else’s turn` leaves this browser a new visitor on a shared device.
 
@@ -159,13 +164,15 @@ the role again on every save.
   saved, `Try next week's rules` plays them at `/baseball?rules=next`. Both previews open in the same tab and are never
   ranked.
 - **Guestbook review:** approve or delete notes, waiting ones first.
-- **Derby review:** the home-run derby's queue, most urgent first: approve or reject names and records, disqualify and
-  undo, check a link's code, settle reports, hide a character, take a record down, and accept or dismiss held runs.
-  Places 1–3 stay empty until you approve their records, and every result that would take one is held for you
-  (`Would take a statue`); approving or accepting publishes at once. A run may also be held as `Not sent like the game
-page`, which a script can fake.
-  `Find a record` reaches any record by season and record number or name, which is how a takedown email gets handled.
-  It loads in its own chunk when opened, and with the ballpark hidden the queue is simply empty.
+- **Derby plays:** everyone who played the home-run derby in a week, newest first, fifty runs at a time (`Load more`),
+  with a week picker. Nothing waits for approval. Each run shows its time, score, status, and the server's marks (such
+  as `Not sent like the game page`, which a script can fake; marks block nothing), with its pitch numbers on demand;
+  beside it stands its visitor's record: place, posted or not, name, character, and its LinkedIn link with the name of
+  the LinkedIn account that signed in for it, so a mismatch shows. Records someone reported come first. On a record
+  you can `Remove from the board` (after a confirm; the next record moves up at once) or put it back, take a name off
+  or show it, hide or show a character, delete a link (and block its profile), settle reports, and anonymise it for a
+  takedown request. A record that changed since the list loaded is refused, and the list says so and reloads. It loads
+  in its own chunk when opened.
 - **Admins:** add an email (it gets the editor at its next sign-in) or remove one (its sessions end at once). Your own
   email and the last one cannot be removed.
 - **Keys:** `Delete`/`Backspace` removes the selection (several objects ask first), `⌘/Ctrl+Z` undoes, and `Escape`

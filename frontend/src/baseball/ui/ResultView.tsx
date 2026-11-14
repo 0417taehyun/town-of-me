@@ -1,6 +1,7 @@
 import type { CSSProperties, Ref } from 'react'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import { type BaseballExit, BOARD_PATH, EXIT_PATHS } from '../baseballRoute'
+import { leaveClick } from '../flow/leaveGuard'
 import type { BoardLine } from '../flow/rankedRun'
 import type { DerbyResult } from '../game/derbyScore'
 import { homeRunDistanceText } from '../../data/boardRecord'
@@ -8,10 +9,10 @@ import { boardLineText, resultRow } from './derbyCues'
 import { StanceGauge } from './StanceGauge'
 
 /**
- * What the result card says and offers of the weekly board: its `line` (null for a preview), whether a statue's
- * record could show the visitor's LinkedIn link, and the listing card to open or the result to send again.
+ * What the result card says and offers of the weekly board: its `line` (null for a preview), the listing card to open
+ * or the result to send again, and `onBoard`, which hears the visitor leave for the board's page.
  */
-export type ResultBoard = { line: BoardLine | null; offerLinkedIn: boolean; onOpen: () => void; onRetry: () => void }
+export type ResultBoard = { line: BoardLine | null; onOpen: () => void; onRetry: () => void; onBoard: () => void }
 
 /**
  * A finished run as `replayDerby` scored it from its plan and input log, so these are the numbers a server recomputing
@@ -21,6 +22,7 @@ export type ResultBoard = { line: BoardLine | null; offerLinkedIn: boolean; onOp
  * totals that rank apart never read the same; the live HUD rounds to meters. No timing, power, or pitch type is shown.
  * Holding the batting stance fills `gauge` and plays again, as the button does, while `stanceNeed` says what the hold
  * waits for. Beside it is the way to the listing card, or to send a result that failed again, and to the board.
+ * The way back asks `onLeave` rather than leaving at once.
  */
 export function ResultView({
   result,
@@ -30,6 +32,7 @@ export function ResultView({
   stanceNeed,
   language,
   onPlayAgain,
+  onLeave,
 }: {
   result: DerbyResult
   board: ResultBoard
@@ -38,6 +41,7 @@ export function ResultView({
   stanceNeed: string | null
   language: AppLanguage
   onPlayAgain: () => void
+  onLeave: (path: string) => void
 }) {
   const copy = languageCopy[language].baseball
   return (
@@ -81,11 +85,11 @@ export function ResultView({
         </button>
         <BoardAction board={board} language={language} />
         {board.line && (
-          <a className="derby-secondary" href={BOARD_PATH}>
+          <a className="derby-secondary" href={BOARD_PATH} onClick={board.onBoard}>
             {copy.leaderboard.viewBoard}
           </a>
         )}
-        <a className="baseball-back" href={EXIT_PATHS[exit]}>
+        <a className="baseball-back" href={EXIT_PATHS[exit]} onClick={leaveClick(EXIT_PATHS[exit], onLeave)}>
           {copy.back[exit]}
         </a>
         {board.line && board.line.kind !== 'unranked' && <p className="derby-data-notice">{copy.board.dataNotice}</p>}
@@ -95,8 +99,8 @@ export function ResultView({
 }
 
 /**
- * The result card's one way to the board: a record off it can go on, one on it opens the listing card (asking first
- * whether a statue should show the visitor's LinkedIn), and a result that could not be saved tries again.
+ * The result card's one way to the board: a record off it can be posted, one on it opens the listing card to change
+ * it, and a result that could not be saved tries again.
  */
 export function BoardAction({ board, language }: { board: ResultBoard; language: AppLanguage }) {
   const copy = languageCopy[language].baseball.board
@@ -110,10 +114,9 @@ export function BoardAction({ board, language }: { board: ResultBoard; language:
   const offBoard = line?.kind === 'offBoard' || line?.kind === 'consentNeeded'
   const onBoard = line?.kind === 'statue' || line?.kind === 'newBest' || line?.kind === 'bestStands'
   if (!offBoard && !onBoard) return null
-  const ownLabel = board.offerLinkedIn ? copy.offerLinkedIn : copy.own
   return (
     <button className="derby-secondary" type="button" onClick={board.onOpen}>
-      {offBoard ? copy.list : ownLabel}
+      {offBoard ? copy.list : copy.own}
     </button>
   )
 }

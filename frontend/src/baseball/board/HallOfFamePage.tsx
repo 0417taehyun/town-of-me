@@ -23,7 +23,7 @@ import './board.css'
 
 /**
  * Every finished season at /baseball/ranking?view=hall-of-fame, newest first, each with its three statues small: a
- * name, a record, an approved link only as the server sends it, and the menu to report one or ask for its removal.
+ * name, a record, a verified link only as the server sends it, and the menu to report one or ask for its removal.
  * Like the board it opens only behind the ballpark's gate.
  */
 export function HallOfFamePage({ town }: { town: TownSnapshot }) {
@@ -178,7 +178,7 @@ export function HallOfFameStatue({
   return (
     <li className="board-hall-statue" data-rank={rank}>
       <HallOfFameFigure rank={rank} row={row} />
-      <p className="board-hall-name" data-placeholder={row.nameState !== 'approved' || undefined}>
+      <p className="board-hall-name" data-placeholder={row.nameState !== 'shown' || undefined}>
         {name}
       </p>
       <p className="board-hall-record">{recordText(row.homeRuns, row.totalDistanceDm, language)}</p>

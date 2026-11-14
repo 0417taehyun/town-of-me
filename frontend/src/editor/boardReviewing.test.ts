@@ -1,330 +1,160 @@
 import { describe, expect, it } from 'vitest'
-import {
-  DISMISSED_RUNS_LIMIT,
-  type BoardReviewData,
-  type ReviewedEntry,
-  type ReviewedLink,
-  type ReviewItem,
-} from '../data/boardReviewApi'
+import type { PlayedLink, PlayedRecord, PlayedRun, PlaysPage } from '../data/boardReviewApi'
 import { LeaderboardRequestError } from '../data/leaderboardApi'
-import { DEFAULT_PLAYER_PROFILE } from '../data/playerProfile'
 import { boardReviewCopy } from './boardReviewCopy'
 import {
   actionQuestion,
-  boardNeighbours,
-  findRecords,
-  FOUND_RECORDS_SHOWN,
-  foundItem,
-  holdsEmptyPlace,
   isStaleBoardReview,
   linkView,
-  neighbourLines,
-  noHistoryRuns,
   pickedSeason,
+  placeText,
+  playRows,
+  recordButtons,
   recordChoices,
-  withEntry,
-  withoutRun,
+  withLinkBlock,
+  withNextPage,
+  withRecord,
 } from './boardReviewing'
 
-function entry(id: string, name: string | null, changes: Partial<ReviewedEntry> = {}): ReviewedEntry {
+const copy = boardReviewCopy.en
+
+function record(id: string, visitor: string, changes: Partial<PlayedRecord> = {}): PlayedRecord {
   return {
     id,
     season: '2026-11-09',
+    visitor,
     rank: 1,
-    updatedAt: '2026-11-01T00:00:00.000Z',
+    updatedAt: '2026-11-10T00:00:00.000Z',
     bestRunId: null,
     listed: true,
-    name,
-    nameStatus: name === null ? null : 'approved',
-    reviewStatus: 'approved',
-    profile: DEFAULT_PLAYER_PROFILE,
+    name: 'Sprout',
+    nameStatus: 'shown',
+    disqualified: false,
+    profile: null,
     appearancePublic: true,
     takedown: false,
-    homeRuns: 1,
-    totalDistanceDm: 1000,
-    achievedAt: '2026-11-01T00:00:00.000Z',
-    pitches: [],
+    homeRuns: 3,
+    totalDistanceDm: 3120,
+    achievedAt: '2026-11-10T00:00:00.000Z',
     linkedIn: null,
-    ...changes,
-  }
-}
-
-function item(changes: Partial<ReviewItem>): ReviewItem {
-  return {
-    kind: 'run',
-    season: '2026-11-09',
-    acceptable: true,
-    newVisitor: false,
-    visitor: { runs: 5, abandoned: 0, flagged: 1 },
-    entry: null,
-    runs: [],
     reports: [],
-    warnings: [],
-    neighbours: [],
     ...changes,
   }
 }
 
-const heldRun = (id: string) =>
-  ({
+function run(id: string, visitor: string): PlayedRun {
+  return {
     id,
     season: '2026-11-09',
+    visitor,
+    status: 'scored',
     flags: [],
-    wouldBeRank: 1,
-    issuedAt: '2026-11-01T00:00:00.000Z',
+    best: false,
+    issuedAt: '2026-11-10T00:00:00.000Z',
     submittedAt: null,
-    name: null,
-    profile: null,
+    homeRuns: 1,
+    totalDistanceDm: 1100,
     result: null,
-  }) as ReviewItem['runs'][number]
+  }
+}
 
-describe('finding a record', () => {
-  const records = [
-    entry('a1b2c3d4-0000-4000-8000-000000000001', 'Sprout'),
-    entry('e5f60718-0000-4000-8000-000000000002', null, { takedown: true }),
-    entry('90aa11bb-0000-4000-8000-000000000003', 'ＰＥＢＢＬＥ stone'),
-  ]
+function page(changes: Partial<PlaysPage>): PlaysPage {
+  return { season: '2026-11-09', runs: [], records: [], reported: [], nextCursor: null, unreadable: 0, ...changes }
+}
 
-  it('finds by a takedown email’s record number, however it was pasted, even with no name left', () => {
-    expect(findRecords(records, '  E5F60718 ').shown.map(({ id }) => id)).toEqual([records[1].id])
-  })
+function link(profileUrl: string, profileId: string, encoded = false): PlayedLink {
+  return { profileUrl, profileId, encoded, status: 'verified', verifiedName: null }
+}
 
-  it('finds a name anywhere within it, ignoring case and full-width forms, and nothing for an empty search', () => {
-    expect(findRecords(records, 'pebble').shown).toEqual([records[2]])
-    expect(findRecords(records, 'prou').shown).toEqual([records[0]])
-    expect(findRecords(records, 'null').total).toBe(0)
-    expect(findRecords(records, '   ').total).toBe(0)
-  })
-
-  it('shows only the record itself when a visitor names themselves its number', () => {
-    const real = entry('a1b2c3d4-0000-4000-8000-000000000001', 'Sprout')
-    const impostor = entry('77777777-0000-4000-8000-000000000002', 'a1b2c3d4')
-    const namedLike = entry('88888888-0000-4000-8000-000000000003', 'x a1b2c3d4 y')
-    const found = findRecords([impostor, namedLike, real], 'A1B2C3D4')
-    expect(found.shown).toEqual([real])
-    expect(found).toMatchObject({ total: 1, byNumber: true })
-    expect(findRecords([impostor, namedLike], 'a1b2c3d4')).toMatchObject({ total: 2, byNumber: false })
-  })
-
-  it('caps what it shows on a big board and still says how many matched', () => {
-    const many = Array.from({ length: FOUND_RECORDS_SHOWN + 5 }, (_, index) => entry(`id-${index}`, `Clover ${index}`))
-    const found = findRecords(many, 'clover')
-    expect(found.total).toBe(FOUND_RECORDS_SHOWN + 5)
-    expect(found.shown).toHaveLength(FOUND_RECORDS_SHOWN)
-    expect(found.shown[0].id).toBe('id-0')
-  })
-
-  it('gives a found record its queue item, so its reports stay in reach, or the record alone', () => {
-    const queued = entry('queued', 'Maple')
-    const reported = item({
-      kind: 'report',
-      entry: queued,
-      reports: [{ target: 'name', count: 2, mine: false, lastReportedAt: '2026-11-01T00:00:00.000Z' }],
+describe('the list of plays', () => {
+  it('puts each run beside its visitor’s record, in full only at their newest run', () => {
+    const rows = playRows({
+      runs: [run('r3', 'ann'), run('r2', 'bob'), run('r1', 'ann'), run('r0', 'cat')],
+      records: [record('a', 'ann'), record('b', 'bob')],
     })
-    const quiet = entry('quiet', 'Juniper')
-    const data: BoardReviewData = {
-      queue: [],
-      season: '2026-11-09',
-      records: [queued, quiet],
-      seasonQueue: [reported],
-      unreadable: 0,
-    }
-    expect(foundItem(queued, data, {})).toBe(reported)
-    expect(foundItem(queued, { ...data, seasonQueue: [], queue: [reported] }, {})).toBe(reported)
-    expect(foundItem(quiet, data, undefined)).toMatchObject({ kind: null, visitor: null, entry: quiet, reports: [] })
-    expect(foundItem(quiet, data, undefined).warnings).toBeNull()
-    expect(foundItem(quiet, data, { quiet: [{ kind: 'town-link' }] }).warnings).toEqual([{ kind: 'town-link' }])
-  })
-})
-
-describe('the names around a record', () => {
-  const off = { listed: false }
-  const records = [
-    entry('one', 'One'),
-    entry('hidden', 'Hidden', off),
-    entry('two', 'Two'),
-    entry('three', 'Three'),
-    entry('gone', 'Gone', { reviewStatus: 'disqualified' }),
-    entry('four', 'Four'),
-    entry('five', 'Five'),
-    entry('six', 'Six'),
-    entry('seven', 'Seven'),
-    entry('eight', 'Eight'),
-  ]
-
-  it('takes three places either side in the public order, skipping records off the board', () => {
-    expect(boardNeighbours(records, records[6])).toEqual([
-      { rank: 2, name: 'Two' },
-      { rank: 3, name: 'Three' },
-      { rank: 4, name: 'Four' },
-      { rank: 6, name: 'Six' },
-      { rank: 7, name: 'Seven' },
-      { rank: 8, name: 'Eight' },
-    ])
-    expect(boardNeighbours(records, records[0]).map(({ rank }) => rank)).toEqual([2, 3, 4])
-    expect(boardNeighbours(records, records[1])).toEqual([])
-  })
-
-  it('reads with the record’s own name in place', () => {
-    const lines = neighbourLines(
-      item({
-        entry: entry('two', 'Two', { rank: 2 }),
-        neighbours: [
-          { rank: 1, name: 'One' },
-          { rank: 3, name: null },
-        ],
-      }),
-    )
-    expect(lines.map(({ rank, self }) => [rank, self])).toEqual([
-      [1, false],
-      [2, true],
-      [3, false],
+    expect(rows.map(({ record: joined, newest }) => [joined?.id ?? null, newest])).toEqual([
+      ['a', true],
+      ['b', true],
+      ['a', false],
+      [null, true],
     ])
   })
-})
 
-describe('what a record offers', () => {
-  it('offers no approval while disqualified, since the server refuses it, only the undo', () => {
-    const choices = recordChoices(entry('gone', 'Gone', { reviewStatus: 'disqualified', nameStatus: 'pending' }))
-    expect(choices).toMatchObject({
-      approveName: false,
-      rejectName: false,
-      approveRecord: false,
-      disqualify: false,
-      restore: true,
+  it('adds a page after the last without repeating a visitor’s record, and drops one from another week', () => {
+    const reported = [record('z', 'zed', { reports: [{ target: 'name', count: 1, mine: false, lastReportedAt: '' }] })]
+    const shown = page({ runs: [run('r2', 'ann')], records: [record('a', 'ann')], reported, nextCursor: 'next' })
+    const next = page({ runs: [run('r1', 'ann'), run('r0', 'bob')], records: [record('a', 'ann'), record('b', 'bob')] })
+    const both = withNextPage(shown, next)
+    expect(both.runs.map(({ id }) => id)).toEqual(['r2', 'r1', 'r0'])
+    expect(both.records.map(({ id }) => id)).toEqual(['a', 'b'])
+    expect([both.reported.length, both.nextCursor]).toEqual([1, null])
+    expect(withNextPage(shown, { ...next, season: '2026-11-02' })).toBe(shown)
+  })
+
+  it('leaves an action’s answer wherever the record shows, and a record with no report left out of the reports', () => {
+    const open = [{ target: 'name' as const, count: 1, mine: false, lastReportedAt: '2026-11-10T00:00:00.000Z' }]
+    const shown = page({
+      records: [record('a', 'ann', { reports: open })],
+      reported: [record('a', 'ann', { reports: open })],
     })
-  })
-
-  it('never approves a waiting record without deciding its waiting name', () => {
-    const waitingName = recordChoices(entry('a', 'Name', { reviewStatus: 'pending', nameStatus: 'pending' }))
-    expect(waitingName).toMatchObject({ approveName: true, rejectName: true, approveRecord: false })
-    const nameless = recordChoices(entry('b', null, { reviewStatus: 'pending' }))
-    expect(nameless).toMatchObject({ approveName: false, rejectName: false, approveRecord: true })
-  })
-
-  it('never shows a taken-down record’s character again or takes it down twice', () => {
-    const taken = recordChoices(entry('a', null, { takedown: true, appearancePublic: false }))
-    expect(taken).toMatchObject({ showAppearance: false, hideAppearance: false, takedown: false })
-    expect(recordChoices(entry('b', 'Name', { appearancePublic: false })).showAppearance).toBe(true)
+    const kept = withRecord(shown, record('a', 'ann', { reports: open, updatedAt: '2026-11-11T00:00:00.000Z' }))
+    expect([kept.records[0].updatedAt, kept.reported[0].updatedAt]).toEqual(Array(2).fill('2026-11-11T00:00:00.000Z'))
+    const resolved = withRecord(shown, record('a', 'ann', { nameStatus: 'rejected' }))
+    expect([resolved.records[0].nameStatus, resolved.reported.length]).toEqual(['rejected', 0])
   })
 })
 
-describe('what an action asks first', () => {
-  const copy = boardReviewCopy.en
-  const record = entry('a1b2c3d4-0000-4000-8000-000000000001', 'Sprout')
-
-  it('names the record by number before anything that cannot be seen undone', () => {
-    expect(actionQuestion(record, { kind: 'disqualification' }, copy)).toContain('a1b2c3d4')
-    expect(actionQuestion(record, { kind: 'takedown' }, copy)).toContain('a1b2c3d4')
-    expect(actionQuestion(record, { kind: 'linkedin-review', decision: 'reject' }, copy)).toContain('a1b2c3d4')
+describe('a record’s actions', () => {
+  it('offers only what the server takes: a removed record goes back, a taken-down one keeps its character hidden', () => {
+    expect(recordChoices(record('a', 'ann'))).toMatchObject({ remove: true, restore: false, hideName: true })
+    const removed = record('a', 'ann', { disqualified: true, rank: null })
+    expect(recordChoices(removed)).toMatchObject({ remove: false, restore: true })
+    expect(placeText(removed, copy)).toBe(copy.removed)
+    const takenDown = record('a', 'ann', { takedown: true, name: null, nameStatus: null, appearancePublic: false })
+    expect(recordChoices(takenDown)).toMatchObject({ showAppearance: false, takedown: false, hideName: false })
+    const refused = record('a', 'ann', { nameStatus: 'rejected' })
+    expect(recordButtons(refused, copy).map(({ action }) => action)).toContainEqual({ kind: 'name', public: true })
   })
 
-  it('asks before deleting a link, however it goes, and before publishing a refused name, and nothing else', () => {
-    const removed = { kind: 'report-resolution', target: 'link', resolution: 'removed' } as const
-    expect(actionQuestion(record, removed, copy)).not.toBeNull()
-    const refused = entry('b', 'Robin Official', { nameStatus: 'rejected' })
-    expect(actionQuestion(refused, { kind: 'approval', name: 'approve' }, copy)).toContain('Robin Official')
-    expect(actionQuestion(record, { kind: 'approval', name: 'approve' }, copy)).toBeNull()
-    expect(actionQuestion(record, { kind: 'linkedin-review', decision: 'code-verified' }, copy)).toBeNull()
-    expect(actionQuestion(record, { ...removed, resolution: 'kept' }, copy)).toBeNull()
-    expect(actionQuestion(record, { ...removed, target: 'name' }, copy)).toBeNull()
+  it('asks before removing a record, deleting a link however it goes, or showing a refused name, and nothing else', () => {
+    const linked = record('7c1f3a90-1111', 'ann', { linkedIn: link('https://www.linkedin.com/in/sprout', 'sprout') })
+    expect(actionQuestion(linked, { kind: 'disqualification' }, copy)).toContain('record 7c1f3a90')
+    expect(actionQuestion(linked, { kind: 'linkedin-removal' }, copy)).not.toBe(null)
+    const removedLink = { kind: 'report-resolution', target: 'link', resolution: 'removed' } as const
+    expect(actionQuestion(linked, removedLink, copy)).not.toBe(null)
+    expect(actionQuestion(linked, { ...removedLink, resolution: 'kept' }, copy)).toBe(null)
+    expect(actionQuestion(linked, { kind: 'name', public: true }, copy)).not.toBe(null)
+    expect(actionQuestion(linked, { kind: 'name', public: false }, copy)).toBe(null)
+    expect(actionQuestion(linked, { kind: 'restoration' }, copy)).toBe(null)
   })
-})
 
-describe('a refused action', () => {
+  it('blocks a profile only with a link’s removal or a takedown, and only when asked', () => {
+    expect(withLinkBlock({ kind: 'takedown' }, true)).toEqual({ kind: 'takedown', blockLinkedIn: true })
+    expect(withLinkBlock({ kind: 'linkedin-removal' }, false)).toEqual({ kind: 'linkedin-removal' })
+    expect(withLinkBlock({ kind: 'name', public: false }, true)).toEqual({ kind: 'name', public: false })
+  })
+
   it('reloads when the record changed or its visitor deleted it, and not for any other failure', () => {
     expect(isStaleBoardReview(new LeaderboardRequestError(409))).toBe(true)
     expect(isStaleBoardReview(new LeaderboardRequestError(404))).toBe(true)
     expect(isStaleBoardReview(new LeaderboardRequestError(500))).toBe(false)
-    expect(isStaleBoardReview(new Error('offline'))).toBe(false)
+    expect(isStaleBoardReview(new TypeError('offline'))).toBe(false)
   })
 })
 
-describe('how a link reads', () => {
-  const link = (profileUrl: string, profileId: string, encoded = false): ReviewedLink => ({
-    profileUrl,
-    profileId,
-    encoded,
-    status: 'pending',
-    code: 'TOM-7KQ2',
-  })
-
+describe('a record’s link', () => {
   it('opens only a plain LinkedIn profile, whatever the server sent', () => {
     expect(linkView(link('https://www.linkedin.com/in/sprout-sample', 'sprout-sample')).href).toBe(
       'https://www.linkedin.com/in/sprout-sample',
     )
-    for (const unsafe of [
+    const unsafe = [
       'javascript:alert(1)',
       'https://linkedin.com.example/in/sprout',
       'http://www.linkedin.com/in/sprout',
-      'https://www.linkedin.com/company/sprout',
-    ]) {
-      expect(linkView(link(unsafe, 'sprout'))).toMatchObject({ href: null, text: unsafe })
-    }
-  })
-
-  it('shows the decoded id and keeps a percent-encoded address openable', () => {
-    const view = linkView(link('https://www.linkedin.com/in/%EC%83%88%EC%8B%B9-sample', '새싹-sample', true))
-    expect(view).toEqual({
-      text: '새싹-sample',
-      encoded: true,
-      href: 'https://www.linkedin.com/in/%EC%83%88%EC%8B%B9-sample',
-    })
-  })
-})
-
-describe('the bulk dismissal', () => {
-  it('names per season the held runs of visitors with no history, and no one else', () => {
-    const items = [
-      item({ season: '2026-11-09', newVisitor: true, runs: [heldRun('a'), heldRun('b')], entry: entry('rec-a', 'A') }),
-      item({ season: '2026-11-09', newVisitor: false, runs: [heldRun('c')] }),
-      item({ season: '2026-11-09', newVisitor: true, runs: [], entry: entry('rec-b', 'B') }),
-      item({ season: '2026-11-02', newVisitor: true, runs: [heldRun('d')] }),
     ]
-    expect(noHistoryRuns(items)).toEqual([
-      { season: '2026-11-09', runIds: ['a', 'b'], keys: ['rec-a'] },
-      { season: '2026-11-02', runIds: ['d'], keys: ['d'] },
-    ])
-  })
-
-  it('names no more than one request may carry', () => {
-    const runs = Array.from({ length: DISMISSED_RUNS_LIMIT + 3 }, (_, index) => heldRun(`run-${index}`))
-    expect(noHistoryRuns([item({ newVisitor: true, runs })])[0].runIds).toHaveLength(DISMISSED_RUNS_LIMIT)
-  })
-})
-
-describe('an answered action', () => {
-  const data: BoardReviewData = {
-    queue: [
-      item({ entry: entry('rec', 'Maple'), runs: [heldRun('kept'), heldRun('settled')] }),
-      item({ entry: null, runs: [heldRun('only')] }),
-    ],
-    season: '2026-11-09',
-    records: [entry('rec', 'Maple')],
-    seasonQueue: [],
-    unreadable: 0,
-  }
-
-  it('leaves the new version everywhere the record shows, so the next action is not refused as stale', () => {
-    const changed = entry('rec', 'Maple', { updatedAt: '2026-11-02T00:00:00.000Z' })
-    const next = withEntry(data, changed)
-    expect(next.queue[0].entry?.updatedAt).toBe(changed.updatedAt)
-    expect(next.records[0].updatedAt).toBe(changed.updatedAt)
-    expect(next.queue[1].entry).toBeNull()
-  })
-
-  it('takes a settled run off, and the item with it when nothing is left to act on', () => {
-    expect(withoutRun(data, 'settled').queue[0].runs.map(({ id }) => id)).toEqual(['kept'])
-    expect(withoutRun(data, 'only').queue).toHaveLength(1)
-  })
-})
-
-describe('a statue’s place', () => {
-  it('is empty only for a listed record among the first three that is not approved', () => {
-    const waiting = entry('rec', 'Maple', { rank: 3, reviewStatus: 'pending' })
-    const others = [{ rank: 4 }, { listed: false }, { reviewStatus: 'approved' as const }, { rank: null }]
-    expect(holdsEmptyPlace(waiting)).toBe(true)
-    expect(others.map((changes) => holdsEmptyPlace({ ...waiting, ...changes }))).toEqual([false, false, false, false])
+    expect(unsafe.map((address) => linkView(link(address, 'sprout')))).toEqual(
+      unsafe.map((address) => ({ href: null, text: address, encoded: false })),
+    )
   })
 })
 

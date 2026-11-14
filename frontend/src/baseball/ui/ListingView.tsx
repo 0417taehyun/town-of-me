@@ -1,115 +1,107 @@
 import { type FormEvent, useState } from 'react'
 import type { ListingChoice, OwnBoardEntry } from '../../data/leaderboardApi'
-import { linkedInAddressText, normalizeLinkedInProfileUrl } from '../../data/linkedInProfile'
 import type { PlayerProfile } from '../../data/playerProfile'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
-import { copyText } from '../../scene/webglSupport'
 import { PrivacyLink } from '../../ui/PrivacyLink'
-import { type ListingFailure, listingChoice, type ListingForm, listingProblem, saveFailure } from '../flow/rankedRun'
+import {
+  type ListingFailure,
+  listingChoice,
+  type ListingForm,
+  listingProblem,
+  postListing,
+  signInForLinkedIn,
+} from '../flow/rankedRun'
 import { recordText } from '../../data/boardRecord'
-import { linkedInStatusText } from './derbyCues'
+import { submitLabel } from './derbyCues'
 
 /**
- * The visitor's own record on this week's board, read at the computer rather than from the plate: off the board, it
- * asks first (nothing ticked beforehand), with what posting shows, where, and for how long; on it, the same form changes
- * the name, takes the record off, or turns the statue's LinkedIn link on or off. The name is the board's own, at first
- * the character's; left empty, the record shows as an anonymous batter without the character. The link offered is the
- * one the visitor's character already has, and only with the box saying it is theirs; once saved, the code the admin
- * looks for on the profile shows here. The record can also be deleted, every season of it (DeleteOwnRecords).
+ * The visitor's own record on this week's board, read at the computer rather than from the plate. Off the board, it is
+ * the question a run's result asks first: post it or not now, with the place it would take and what posting shows. On
+ * the board, the same form changes the name, takes the record off, or handles its LinkedIn link. The name is the
+ * board's own, at first the character's; left empty, the record shows as an anonymous batter without the character.
+ * A link is offered only where the deployment can verify one (`linkedInAvailable`): the visitor gives their profile's
+ * address and says it is theirs, the record is posted, and the page then leaves for LinkedIn's sign-in, which the card
+ * says before they go. A sign-in that cannot start leaves the record posted and says the link was not added. The
+ * record can also be deleted, every season of it (DeleteOwnRecords).
  */
 export function ListingView({
   entry,
   batter,
   name,
+  linkedInAvailable,
   language,
   onSave,
+  onLinkedInOff,
   onDelete,
   onClose,
 }: {
   entry: OwnBoardEntry
   batter: PlayerProfile
   name: string | null
+  linkedInAvailable: boolean
   language: AppLanguage
   onSave: (choice: ListingChoice) => Promise<void>
+  onLinkedInOff: () => Promise<void>
   onDelete: () => Promise<void>
   onClose: () => void
 }) {
   const copy = languageCopy[language].baseball.board
-  const linkedInAddress = normalizeLinkedInProfileUrl(batter.linkedInProfileUrl)
-  const linkedInOffered = !entry.takedown && (linkedInAddress !== null || entry.linkedIn !== null)
   const [form, setForm] = useState<ListingForm>(() => ({
-    listed: entry.listed,
     name: (entry.listed ? entry.name : name) ?? '',
-    linkedInOn: entry.linkedIn !== null,
-    ownProfile: entry.linkedIn !== null,
+    linkedInOn: false,
+    linkedInAddress: batter.linkedInProfileUrl,
+    ownProfile: false,
   }))
   const [failure, setFailure] = useState<ListingFailure | null>(null)
   const [busy, setBusy] = useState(false)
-  const [copied, setCopied] = useState(false)
   const change = (patch: Partial<ListingForm>) => {
     setForm((current) => ({ ...current, ...patch }))
     setFailure(null)
   }
   const record = recordText(entry.homeRuns, entry.totalDistanceDm, language)
   const rank = entry.rank ?? 0
-  // A posted record among the first three shows to others only once the admin has approved it.
-  const onBoard = entry.awaitingApproval ? copy.onBoardAwaiting : copy.onBoard
+  const linkOffered = linkedInAvailable && !entry.takedown && entry.linkedIn === null
+  // A link the record already has is handled by its own buttons, never sent again with the form.
+  const asked = { ...form, linkedInOn: form.linkedInOn && linkOffered }
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    const problem = listingProblem(form, entry.listed)
+    const problem = listingProblem(asked)
     setFailure(problem)
     if (problem) return
     setBusy(true)
-    const choice = listingChoice(form, batter, linkedInAddress, entry.linkedIn !== null)
-    await onSave(choice).catch((error: unknown) => setFailure(saveFailure(error, choice)))
+    const outcome = await postListing(listingChoice(asked, batter), onSave)
+    if (outcome === 'posted') return onClose()
+    // On the way to LinkedIn the card stays as it is until the page leaves.
+    if (outcome === 'signingIn') return
+    setFailure(outcome)
     setBusy(false)
   }
-  const copyCode = async (code: string) => setCopied(await copyText(code, navigator.clipboard))
+  const unlist = async () => {
+    setBusy(true)
+    setFailure(null)
+    await onSave({ listed: false }).then(onClose, () => setFailure('saveFailed'))
+    setBusy(false)
+  }
 
   return (
     <section className="baseball-card derby-listing" aria-labelledby="derby-listing-title">
       <h1 id="derby-listing-title">{entry.listed ? copy.ownTitle : copy.consentTitle}</h1>
-      <p className="derby-listing-record">{entry.listed ? onBoard(record, rank) : copy.wouldBe(record, rank)}</p>
-      {entry.listed && entry.nameStatus && entry.nameStatus !== 'approved' && (
-        <p className="baseball-note">{copy.nameStatus[entry.nameStatus]}</p>
-      )}
-      {entry.linkedIn && (
-        <div className="derby-listing-code">
-          <p>{linkedInStatusText(entry.linkedIn.status, language)}</p>
-          {entry.linkedIn.status !== 'approved' && (
-            <p>
-              <code>{entry.linkedIn.code}</code>
-              <button className="text-button" type="button" onClick={() => copyCode(entry.linkedIn?.code ?? '')}>
-                {copied ? copy.copied : copy.copyCode}
-              </button>
-            </p>
-          )}
-        </div>
+      <p className="derby-listing-record">{entry.listed ? copy.onBoard(record, rank) : copy.wouldBe(record, rank)}</p>
+      {entry.listed && entry.nameStatus === 'rejected' && <p className="baseball-note">{copy.nameRejected}</p>}
+      {!entry.listed && (
+        <ul className="derby-listing-terms">
+          {copy.consentTerms.map((term) => (
+            <li key={term}>{term}</li>
+          ))}
+        </ul>
       )}
       <form onSubmit={submit} noValidate>
-        <label className="derby-check">
-          <input
-            type="checkbox"
-            autoFocus
-            checked={form.listed}
-            onChange={(event) => change({ listed: event.target.checked })}
-          />
-          {copy.consentListed}
-        </label>
-        {!entry.listed && (
-          <ul className="derby-listing-terms">
-            {copy.consentTerms.map((term) => (
-              <li key={term}>{term}</li>
-            ))}
-          </ul>
-        )}
         <label className="derby-field">
           <span>{copy.nameLabel}</span>
           <input
             type="text"
             value={form.name}
-            disabled={!form.listed}
             autoComplete="off"
             aria-describedby="derby-listing-name-hint"
             onChange={(event) => change({ name: event.target.value })}
@@ -118,8 +110,17 @@ export function ListingView({
         <p id="derby-listing-name-hint" className="derby-field-hint">
           {copy.nameHint}
         </p>
-        {linkedInOffered && (
-          <fieldset className="derby-listing-linkedin" disabled={!form.listed}>
+        {entry.linkedIn && (
+          <OwnLinkedIn
+            linkedIn={entry.linkedIn}
+            available={linkedInAvailable}
+            season={null}
+            language={language}
+            onRemove={onLinkedInOff}
+          />
+        )}
+        {linkOffered && (
+          <fieldset className="derby-listing-linkedin">
             <label className="derby-check">
               <input
                 type="checkbox"
@@ -128,13 +129,21 @@ export function ListingView({
               />
               {copy.consentLinkedIn}
             </label>
-            {form.linkedInOn && entry.linkedIn === null && (
+            {form.linkedInOn && (
               <>
-                <ul className="derby-listing-terms">
-                  {copy.linkedInTerms(linkedInAddressText(linkedInAddress ?? '')).map((term) => (
-                    <li key={term}>{term}</li>
-                  ))}
-                </ul>
+                <label className="derby-field">
+                  <span>{copy.linkedInAddressLabel}</span>
+                  <input
+                    type="url"
+                    value={form.linkedInAddress}
+                    autoComplete="off"
+                    aria-describedby="derby-listing-link-hint"
+                    onChange={(event) => change({ linkedInAddress: event.target.value })}
+                  />
+                </label>
+                <p id="derby-listing-link-hint" className="derby-field-hint">
+                  {copy.linkedInAddressHint}
+                </p>
                 <label className="derby-check">
                   <input
                     type="checkbox"
@@ -143,6 +152,7 @@ export function ListingView({
                   />
                   {copy.consentOwnership}
                 </label>
+                <p className="derby-field-hint">{copy.linkedInSignInNote}</p>
               </>
             )}
           </fieldset>
@@ -151,12 +161,17 @@ export function ListingView({
           {failure && copy.problems[failure]}
         </p>
         <div className="derby-actions">
-          <button className="primary-button" type="submit" disabled={busy}>
-            {entry.listed ? copy.save : copy.post}
+          <button className="primary-button" type="submit" autoFocus disabled={busy}>
+            {submitLabel(entry.listed, asked.linkedInOn, language)}
           </button>
           <button className="derby-secondary" type="button" onClick={onClose}>
             {entry.listed ? copy.done : copy.skip}
           </button>
+          {entry.listed && (
+            <button className="derby-secondary" type="button" disabled={busy} onClick={unlist}>
+              {copy.unlist}
+            </button>
+          )}
         </div>
       </form>
       <details className="derby-listing-details">
@@ -171,6 +186,64 @@ export function ListingView({
       </details>
       <DeleteOwnRecords language={language} onDelete={onDelete} />
     </section>
+  )
+}
+
+/**
+ * The LinkedIn link on the visitor's own record: a hint of its address, where it stands, and what they can do about
+ * it. An unverified link shows to nobody until they sign in with LinkedIn, which leaves this page for a moment; any
+ * link can be removed. `season` names a past season's record, `null` this week's.
+ */
+export function OwnLinkedIn({
+  linkedIn,
+  available,
+  season,
+  language,
+  onRemove,
+}: {
+  linkedIn: NonNullable<OwnBoardEntry['linkedIn']>
+  available: boolean
+  season: string | null
+  language: AppLanguage
+  onRemove: () => Promise<void>
+}) {
+  const copy = languageCopy[language].baseball.board
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const run = async (action: () => Promise<void>, staysBusy: boolean) => {
+    setBusy(true)
+    setFailed(false)
+    const done = await action().then(
+      () => true,
+      () => false,
+    )
+    setFailed(!done)
+    // A sign-in that started is leaving the page, so its buttons stay off.
+    setBusy(done && staysBusy)
+  }
+  return (
+    <div className="derby-listing-link">
+      <p>
+        <b>{linkedIn.profileHint}</b> · {copy.linkedInStatus[linkedIn.status]}
+      </p>
+      {linkedIn.status === 'unverified' && available && <p>{copy.linkedInSignInLeaves}</p>}
+      <div className="derby-listing-link-actions">
+        {linkedIn.status === 'unverified' && available && (
+          <button
+            className="derby-secondary"
+            type="button"
+            disabled={busy}
+            onClick={() => run(() => signInForLinkedIn(season), true)}
+          >
+            {copy.linkedInSignIn}
+          </button>
+        )}
+        <button className="text-button" type="button" disabled={busy} onClick={() => run(onRemove, false)}>
+          {copy.linkedInRemove}
+        </button>
+      </div>
+      {failed && <p role="alert">{copy.linkedInFailed}</p>}
+    </div>
   )
 }
 

@@ -8,7 +8,7 @@ import { isPitchCount } from './townApi'
 
 // The wire format of the home run derby's weekly board (backend/README.md "Ranked runs"). The client sends no score
 // the server keeps: a run's result is its input log, the totals the client worked out (which only decide whether the
-// server holds the run for review), and who played it, the character's look and the board name when there is one.
+// server marks the run for the admin), and who played it, the character's look and the board name when there is one.
 // The run's id in the path and the visitor cookie are the session; the cookie is HttpOnly, so this page never sees it.
 
 const boardPath = '/v1/games/home-run-derby'
@@ -28,48 +28,47 @@ export class LeaderboardRequestError extends Error {
 export type IssuedRun = { id: string; expiresAt: number; rules: BallparkRules; seed: number }
 
 /**
- * Where a run left the visitor's record on this week's board, as the server worked it out. `reviewing` is a held run,
- * which every run that would place among the statues is, or a listed record waiting there for the admin's approval.
+ * Where a run left the visitor's record on this week's board, as the server worked it out. A result stands at once:
+ * `excluded` is a board the admin removed the visitor's record from.
  */
 export type RunStanding =
-  | { kind: 'reviewing' }
   | { kind: 'excluded' }
   | { kind: 'ranked'; rank: number; personalBest: boolean }
   | { kind: 'unlisted' | 'consentNeeded'; wouldBeRank: number; personalBest: boolean }
 
-const nameStatuses = ['pending', 'approved', 'rejected'] as const
-const linkedInStatuses = ['pending', 'approved', 'reported'] as const
-export type NameStatus = (typeof nameStatuses)[number]
-export type LinkedInStatus = (typeof linkedInStatuses)[number]
+export const NAME_STATUSES = ['shown', 'rejected'] as const
+export const LINKED_IN_STATUSES = ['unverified', 'verified', 'reported'] as const
+/** A name shows at once unless the server's automatic check refused it, or the admin took it off. */
+export type NameStatus = (typeof NAME_STATUSES)[number]
+/** A link shows once its visitor signed in with LinkedIn, and hides again while its profile's owner reports it. */
+export type LinkedInStatus = (typeof LINKED_IN_STATUSES)[number]
 
 /**
  * The visitor's own record on this week's board. Its LinkedIn link shows only as a hint, since the next person on a
- * shared computer sees this too; `code` is what the visitor puts on the profile for the admin to see.
+ * shared computer sees this too.
  */
 export type OwnBoardEntry = {
   listed: boolean
   name: string | null
   nameStatus: NameStatus | null
   takedown: boolean
-  linkedIn: { profileHint: string; status: LinkedInStatus; code: string } | null
+  linkedIn: { profileHint: string; status: LinkedInStatus } | null
   homeRuns: number
   totalDistanceDm: number
-  /** The place it holds, or would hold if listed; `null` while disqualified. */
+  /** The place it holds, or would hold if listed; `null` once the admin removed it from the board. */
   rank: number | null
-  /** Its place is among the statues and the admin has not approved it yet, so nobody else sees it there. */
-  awaitingApproval: boolean
 }
 
 /** The visitor's own record as a season's board shows it, with the character it was posted with. */
 export type BoardOwnEntry = OwnBoardEntry & { profile: PlayerProfile }
 
-const nameStates = ['approved', 'reviewing', 'anonymous'] as const
-/** How anyone reads a record's name: shown once the admin approved it, still under review, or an anonymous batter. */
+const nameStates = ['shown', 'anonymous'] as const
+/** How anyone reads a record's name: shown, or an anonymous batter. */
 export type NameState = (typeof nameStates)[number]
 
 /**
- * A public record on a season's board. `name` is there only once approved; `profile` is `null` for the default batter
- * an anonymous record shows; `linkedInProfileUrl` is a statue's link the admin approved, and never on a list row.
+ * A public record on a season's board. `name` is there only while shown; `profile` is `null` for the default batter
+ * an anonymous record shows; `linkedInProfileUrl` is a statue's link its visitor signed in for, and never on a list row.
  */
 export type BoardRow = {
   id: string
@@ -87,11 +86,20 @@ export type BoardRow = {
 /** A KST week's board: its bounds, and whether it is over, so its order is final. */
 export type BoardSeason = { id: string; startsAt: number; endsAt: number; final: boolean }
 
-/** A season's statues (places 1–3), its list (4–50), and the visitor's own record on it. */
-export type Board = { season: BoardSeason; podium: BoardRow[]; ranks: BoardRow[]; own: BoardOwnEntry | null }
+/**
+ * A season's statues (places 1–3), its list (4–50), the visitor's own record on it, and whether this deployment can
+ * verify a LinkedIn link at all (`linkedInAvailable`): without it the page offers none.
+ */
+export type Board = {
+  season: BoardSeason
+  podium: BoardRow[]
+  ranks: BoardRow[]
+  own: BoardOwnEntry | null
+  linkedInAvailable: boolean
+}
 
 /** The server's answer to a run's result: the visitor's standing and their record on the run's board. */
-export type RunOutcome = { standing: RunStanding; entry: OwnBoardEntry | null }
+export type RunOutcome = { standing: RunStanding; entry: OwnBoardEntry; linkedInAvailable: boolean }
 
 /**
  * What the visitor asks of this week's record: off the board, or on it with this character, this name (`null` for an
@@ -129,7 +137,7 @@ export function parseIssuedRun(value: unknown): IssuedRun {
 export function parseStanding(value: unknown): RunStanding {
   const input = requireRecord(value, 'standing')
   const { kind } = input
-  if (kind === 'reviewing' || kind === 'excluded') return { kind }
+  if (kind === 'excluded') return { kind }
   const personalBest = input.personalBest === true
   if (kind === 'ranked') return { kind, rank: wholeNumber(input.rank, 'standing.rank'), personalBest }
   if (kind !== 'unlisted' && kind !== 'consentNeeded') throw new Error('standing.kind is unknown')
@@ -146,8 +154,7 @@ export function parseOwnLinkedIn(value: unknown): OwnBoardEntry['linkedIn'] {
   const input = requireRecord(value, 'entry.linkedIn')
   return {
     profileHint: requireText(input.profileHint, 'entry.linkedIn.profileHint'),
-    status: oneOf(input.status, linkedInStatuses, 'entry.linkedIn.status'),
-    code: requireText(input.code, 'entry.linkedIn.code'),
+    status: oneOf(input.status, LINKED_IN_STATUSES, 'entry.linkedIn.status'),
   }
 }
 
@@ -157,13 +164,12 @@ export function parseOwnEntry(value: unknown): OwnBoardEntry {
   return {
     listed: input.listed === true,
     name: named ? (input.name as string) : null,
-    nameStatus: named ? oneOf(input.nameStatus, nameStatuses, 'entry.nameStatus') : null,
+    nameStatus: named ? oneOf(input.nameStatus, NAME_STATUSES, 'entry.nameStatus') : null,
     takedown: input.takedown === true,
     linkedIn: parseOwnLinkedIn(input.linkedIn),
     homeRuns: wholeNumber(input.homeRuns, 'entry.homeRuns'),
     totalDistanceDm: wholeNumber(input.totalDistanceDm, 'entry.totalDistanceDm'),
     rank: input.rank === null ? null : wholeNumber(input.rank, 'entry.rank'),
-    awaitingApproval: input.awaitingApproval === true,
   }
 }
 
@@ -184,7 +190,7 @@ export function parseBoardRow(value: unknown, onStatue: boolean): BoardRow {
   return {
     id: requireText(input.id, 'row.id'),
     rank,
-    name: nameState === 'approved' ? requireText(input.name, 'row.name') : null,
+    name: nameState === 'shown' ? requireText(input.name, 'row.name') : null,
     nameState,
     profile: look.kind === 'default' ? null : normalizePlayerProfile(look),
     homeRuns: wholeNumber(input.homeRuns, 'row.homeRuns'),
@@ -239,13 +245,11 @@ export function parseBoard(value: unknown): Board {
     podium: boardRows(input.podium, STATUE_PLACES, true),
     ranks: boardRows(input.ranks, LIST_PLACES, false),
     own: input.own ? readableOwnEntry(input.own) : null,
+    linkedInAvailable: input.linkedInAvailable === true,
   }
 }
 
-/**
- * This week's statues as the town stands them: the KST week they belong to, and one row for each place held. A place
- * whose record waits for the admin's approval is not among them, and the row below never moves up into it.
- */
+/** This week's statues as the town stands them: the KST week they belong to, and one row for each place held. */
 export type Podium = { season: string; rows: BoardRow[] }
 
 /** Statues read like a board's rows, and a place the server sent twice keeps its first: one statue to a pedestal. */
@@ -285,13 +289,10 @@ export async function fetchHallOfFame(request: typeof fetch = fetch): Promise<Ha
 /** A past season's board whose statues include the visitor's own record. */
 export type OwnStatueBoard = Board & { own: BoardOwnEntry & { rank: number } }
 
-/**
- * Whether the visitor's record stands as a statue here: a place it only would hold if listed does not count, nor one
- * still waiting for the admin's approval, which the board leaves empty.
- */
+/** Whether the visitor's record stands as a statue here: a place it only would hold if listed does not count. */
 export function holdsOwnStatue(board: Board): board is OwnStatueBoard {
   const own = board.own
-  return own !== null && own.listed && !own.awaitingApproval && own.rank !== null && own.rank <= STATUE_PLACES.last
+  return own !== null && own.listed && own.rank !== null && own.rank <= STATUE_PLACES.last
 }
 
 /**
@@ -393,7 +394,11 @@ export async function submitRankedRun(
 ): Promise<RunOutcome> {
   const path = `/runs/${encodeURIComponent(runId)}/result`
   const payload = await responseRecord(await sendToBoard(path, { method: 'POST', body: JSON.stringify(body) }, request))
-  return { standing: parseStanding(payload.standing), entry: payload.entry ? parseOwnEntry(payload.entry) : null }
+  return {
+    standing: parseStanding(payload.standing),
+    entry: parseOwnEntry(payload.entry),
+    linkedInAvailable: payload.linkedInAvailable === true,
+  }
 }
 
 /** Lists or unlists this week's record, or changes the name or link it shows. */
@@ -402,10 +407,26 @@ export async function updateOwnRecord(choice: ListingChoice, request: typeof fet
   return parseOwnEntry((await responseRecord(await sendToBoard('/entries/own', init, request))).entry)
 }
 
-/** Turns off the LinkedIn link of the visitor's record on `season` (a Monday's `YYYY-MM-DD`), whose statue keeps it until then. */
-export async function turnOffLinkedIn(season: string, request: typeof fetch = fetch): Promise<void> {
-  const path = `/entries/own?season=${encodeURIComponent(season)}`
-  await sendToBoard(path, { method: 'PUT', body: JSON.stringify({ linkedIn: null }) }, request)
+/**
+ * Where the visitor signs in with LinkedIn for the unverified link on their record (this week's, or a past `season`'s).
+ * The address comes from the server and the page then leaves for it, so only an https address is taken.
+ */
+export async function startLinkedInVerification(season: string | null, request: typeof fetch = fetch): Promise<string> {
+  const query = season ? `?season=${encodeURIComponent(season)}` : ''
+  const response = await sendToBoard(`/entries/own/linkedin-verification${query}`, { method: 'POST' }, request)
+  const address = requireText((await responseRecord(response)).authorizationUrl, 'authorizationUrl')
+  if (new URL(address).protocol !== 'https:') throw new Error('authorizationUrl must be an https address')
+  return address
+}
+
+/**
+ * Deletes the LinkedIn link of the visitor's record, this week's or a past `season`'s (a Monday's `YYYY-MM-DD`), whose
+ * statue shows it until then, and answers the record without it.
+ */
+export async function turnOffLinkedIn(season: string | null, request: typeof fetch = fetch): Promise<OwnBoardEntry> {
+  const query = season ? `?season=${encodeURIComponent(season)}` : ''
+  const init = { method: 'PUT', body: JSON.stringify({ linkedIn: null }) }
+  return parseOwnEntry((await responseRecord(await sendToBoard(`/entries/own${query}`, init, request))).entry)
 }
 
 /** Makes the visitor's statue on past `season` (a Monday's `YYYY-MM-DD`) an anonymous batter; this week's record stays as it is. */

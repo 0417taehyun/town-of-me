@@ -76,8 +76,9 @@ export function seasonResetText(endsAt: number, language: AppLanguage) {
 }
 
 /**
- * The character a listing posts from the board: the look the record already has, so posting does not send it back to
- * review, and the LinkedIn link of the character this tab plays as, which is the only link the visitor can offer.
+ * The character a listing posts from the board: the look the record already has, so the next run still looks like the
+ * same player to the board, and the LinkedIn address of the character this tab plays as, which the link field starts
+ * with.
  */
 export function listingBatter(own: BoardOwnEntry, sessionProfile: PlayerProfile | null): PlayerProfile {
   return normalizePlayerProfile({
@@ -87,15 +88,11 @@ export function listingBatter(own: BoardOwnEntry, sessionProfile: PlayerProfile 
   })
 }
 
-/**
- * What the visitor's record says first: its statue or place, where it would stand if posted, or that it is off. A
- * posted record among the first three that the admin has not approved says so, since nobody else sees it there yet.
- */
+/** What the visitor's record says first: its statue or place, where it would stand if posted, or that it is off. */
 export function ownHeadline(own: BoardOwnEntry, final: boolean, week: string, language: AppLanguage) {
   const copy = languageCopy[language].baseball
   if (own.rank === null) return copy.board.excluded
-  if (!own.listed) return copy.board.offBoard(own.rank)
-  if (own.awaitingApproval) return copy.board.awaitingApproval(own.rank)
+  if (!own.listed) return final ? copy.leaderboard.ownFinalUnposted(week) : copy.board.offBoard(own.rank)
   if (final) return copy.leaderboard.ownFinalRank(week, own.rank)
   return own.rank <= STATUE_RANKS.length ? copy.board.statue(own.rank) : copy.leaderboard.ownRank(own.rank)
 }

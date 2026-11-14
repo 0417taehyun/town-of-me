@@ -1,6 +1,5 @@
 import type { DerbySound } from '../../audio/derbySounds'
 import { distanceText, recordText } from '../../data/boardRecord'
-import type { LinkedInStatus } from '../../data/leaderboardApi'
 import { type AppLanguage, languageCopy } from '../../i18n/language'
 import type { CameraStateId } from '../cameraTracking'
 import { type DerbyFlow, offersMorePractice, type PracticeFeedback } from '../flow/derbyFlow'
@@ -192,11 +191,11 @@ export function boardLineText(line: BoardLine, language: AppLanguage) {
   return copy[line.kind]
 }
 
-/** Where the visitor's LinkedIn link stands on their statue (backend/README.md "Ranked runs"). */
-export function linkedInStatusText(status: LinkedInStatus, language: AppLanguage) {
+/** What the listing card's first button does: with a new link, it says the sign-in that follows. */
+export function submitLabel(listed: boolean, withLink: boolean, language: AppLanguage) {
   const copy = languageCopy[language].baseball.board
-  if (status === 'approved') return copy.linkedInShown
-  return status === 'reported' ? copy.linkedInHidden : copy.linkedInCode
+  if (withLink) return copy.postAndSignIn
+  return listed ? copy.save : copy.post
 }
 
 /**

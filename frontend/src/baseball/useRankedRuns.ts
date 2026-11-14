@@ -7,13 +7,16 @@ import {
   type OwnBoardEntry,
   rankedRunBody,
   type RankedRunBody,
+  turnOffLinkedIn,
   updateOwnRecord,
 } from '../data/leaderboardApi'
 import type { PlayerProfile } from '../data/playerProfile'
 import type { BaseballPreview } from './baseballRoute'
 import {
+  asksToPost,
   type BoardRun,
   ISSUE_TIMEOUT_MS,
+  isUnposted,
   pause,
   postedBoardName,
   RESULT_GRACE_MS,
@@ -28,15 +31,20 @@ import type { DerbyInputLog, DerbyResult } from './game/derbyScore'
  * The page's runs and the weekly board (flow/rankedRun.ts). `issue` asks for a ranked run as one starts and resolves
  * to the run to play, or to `null` to play it unranked: always for a `preview`, which never asks, and whenever the
  * board does not answer in time. `finish` sends the ranked run's result, again while the network fails, and `retry`
- * sends it again at once. `entry` is the visitor's record on this week's board, which `saveListing` and
- * `deleteRecords` change. The runs' results go with the board name of the visitor's listed record, read as the page
+ * sends it again at once. `entry` is the visitor's record on this week's board, which `saveListing`,
+ * `removeLinkedIn`, and `deleteRecords` change. The runs' results go with the board name of the visitor's listed record, read as the page
  * loads (postedBoardName) and changed by `saveListing`, so they still look like the same player to the board. `abandon`
- * forgets a run the camera stopped, so no later finish is taken for it.
+ * forgets a run the camera stopped, so no later finish is taken for it. `asking` is on from a run's answer that asks
+ * the visitor to post (asksToPost) until `answer`, or the next run; `unposted` says a record this page's runs made is
+ * still off the board, which is what leaving the page warns about.
  */
 export function useRankedRuns(preview: BaseballPreview | null, batter: PlayerProfile) {
   const [boardRun, setBoardRun] = useState<BoardRun | null>(null)
   const [entry, setEntry] = useState<OwnBoardEntry | null>(null)
   const [name, setName] = useState<string | null>(batter.name)
+  const [linkedInAvailable, setLinkedInAvailable] = useState(false)
+  const [asking, setAsking] = useState(false)
+  const [madeRecord, setMadeRecord] = useState(false)
   const playing = useRef<{ run: IssuedRun; startedAt: number } | null>(null)
   const sending = useRef<{ done: Promise<void>; stop: AbortController } | null>(null)
 
@@ -63,7 +71,12 @@ export function useRankedRuns(preview: BaseballPreview | null, batter: PlayerPro
     const done = sendRankedResult(run, body, stop.signal, retrying).then(
       (outcome) => {
         setEntry(outcome.entry)
-        if (!stop.signal.aborted) setBoardRun({ kind: 'saved', standing: outcome.standing })
+        setLinkedInAvailable(outcome.linkedInAvailable)
+        const asks = asksToPost(outcome.standing)
+        setMadeRecord((made) => made || asks)
+        if (stop.signal.aborted) return
+        setBoardRun({ kind: 'saved', standing: outcome.standing })
+        setAsking(asks)
       },
       (error: unknown) => {
         if (!stop.signal.aborted) setBoardRun(unsavedRun(run, body, error, Date.now()))
@@ -75,6 +88,7 @@ export function useRankedRuns(preview: BaseballPreview | null, batter: PlayerPro
   const issue = useCallback(
     async (practice: PracticeSample[]) => {
       playing.current = null
+      setAsking(false)
       const unranked = unrankedBeforeIssue(preview, practice)
       if (unranked) {
         setBoardRun({ kind: 'unranked', reason: unranked })
@@ -114,11 +128,30 @@ export function useRankedRuns(preview: BaseballPreview | null, batter: PlayerPro
     if (choice.listed) setName(choice.name)
   }, [])
 
+  const removeLinkedIn = useCallback(async () => setEntry(await turnOffLinkedIn(null)), [])
+
   const deleteRecords = useCallback(async () => {
     await deleteOwnRecords()
     setEntry(null)
     setBoardRun({ kind: 'deleted' })
   }, [])
 
-  return { boardRun, entry, name, issue, finish, retry, abandon, saveListing, deleteRecords }
+  const answer = useCallback(() => setAsking(false), [])
+
+  return {
+    boardRun,
+    entry,
+    name,
+    linkedInAvailable,
+    asking,
+    unposted: madeRecord && isUnposted(entry),
+    issue,
+    finish,
+    retry,
+    abandon,
+    answer,
+    saveListing,
+    removeLinkedIn,
+    deleteRecords,
+  }
 }

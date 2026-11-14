@@ -12,6 +12,7 @@ import {
   type Board,
   type BoardOwnEntry,
   type BoardRow,
+  type BoardSeason,
   deleteOwnRecords,
   forgetVisitor,
   type ListingChoice,
@@ -32,10 +33,9 @@ import { STATUE_RANKS, type StatueRank } from '../../scene/statues/statueFinishe
 import { LanguageSelect } from '../../ui/LanguageSelect'
 import { PrivacyLink } from '../../ui/PrivacyLink'
 import { BASEBALL_PATH, BOARD_PATH, HALL_OF_FAME_PATH } from '../baseballRoute'
-import { linkedInStatusText } from '../ui/derbyCues'
-import { ConfirmedAction, DeleteOwnRecords, ListingView } from '../ui/ListingView'
+import { ConfirmedAction, DeleteOwnRecords, ListingView, OwnLinkedIn } from '../ui/ListingView'
 import { BoardPodium } from './BoardPodium'
-import { daysUntilSeasonEnds, oldestShownSeason, requestedSeason, seasonSearch } from './boardSeason'
+import { daysUntilSeasonEnds, linkedInReturn, oldestShownSeason, requestedSeason, seasonSearch } from './boardSeason'
 import {
   hasSeenReveal,
   isOwnRow,
@@ -56,8 +56,10 @@ import './board.css'
 /**
  * The weekly board at /baseball/ranking (`?season=YYYY-MM-DD` for a past week's final board): the top three as painted
  * statues over their name plates, places 4 to 50 as a list, and the visitor's own record between them, which they
- * can post, hide, or change here. The statues rise third to first the first time this browser sees a week's board.
- * Names show once the admin approved them, and a LinkedIn link only on a statue. Phones may read it too.
+ * can post, take off, or change here, with its LinkedIn link. The statues rise third to first the first time this
+ * browser sees a week's board. A LinkedIn link shows only on a statue, once its visitor signed in with LinkedIn; that
+ * sign-in returns the browser here with `?linkedin=verified` or `?linkedin=failed`, which the page says in a line and
+ * takes out of the address. Phones may read it too.
  */
 export function BoardPage({ town }: { town: TownSnapshot }) {
   const [language, setLanguage] = usePageLanguage()
@@ -66,6 +68,12 @@ export function BoardPage({ town }: { town: TownSnapshot }) {
   const [season, setSeason] = useState(() => requestedSeason(window.location.search, currentSeason))
   const { load, reload } = useBoard(season)
   const contactEmail = town.owner.contactEmail
+  // Read once as the page loads, which is also when the board is read, so the record already shows the outcome.
+  const [signedIn] = useState(() => linkedInReturn(window.location.search))
+
+  useEffect(() => {
+    if (signedIn) window.history.replaceState(null, '', `${BOARD_PATH}${seasonSearch(season)}`)
+  }, [signedIn, season])
 
   useEffect(() => {
     document.title = copy.documentTitle
@@ -96,6 +104,11 @@ export function BoardPage({ town }: { town: TownSnapshot }) {
           language={language}
           onSeason={(next) => goTo(next === currentSeason ? null : next)}
         />
+        {signedIn && (
+          <p className="board-notice" role="status" data-outcome={signedIn}>
+            {copy.linkedInReturn[signedIn]}
+          </p>
+        )}
         {!contactEmail && <p className="board-state">{copy.notRunning}</p>}
         {contactEmail && load.status === 'loading' && <BoardLoading />}
         {contactEmail && load.status === 'failed' && <BoardLoadFailed language={language} onRetry={reload} />}
@@ -260,7 +273,7 @@ export function BoardSections({
 }) {
   const copy = languageCopy[language].baseball.leaderboard
   const reducedMotion = useReducedMotion()
-  const { season, podium, ranks, own } = board
+  const { season, podium, ranks, own, linkedInAvailable } = board
   const week = weekName(season.id, currentSeason, language)
   const emptyWeek = !season.final && podium.length === 0
   const [revealing, setRevealing] = useState(() => !season.final && podium.length > 0 && !hasSeenReveal(season.id))
@@ -342,8 +355,9 @@ export function BoardSections({
       </section>
       <OwnRecordCard
         own={own}
-        final={season.final}
+        season={season}
         week={week}
+        linkedInAvailable={linkedInAvailable}
         language={language}
         onOpen={() => setListing(true)}
         onUnlist={async () => {
@@ -399,7 +413,6 @@ export function BoardSections({
           </div>
         )}
         <p className="board-tie-rule">{copy.tieRule}</p>
-        <p className="board-tie-rule">{copy.statueRule}</p>
         <a className="board-hall-link" href={HALL_OF_FAME_PATH}>
           {copy.hallOfFameLink} <span aria-hidden="true">›</span>
         </a>
@@ -430,14 +443,17 @@ export function BoardSections({
       {listing && own && !season.final && (
         <div className="board-dialog" role="dialog" aria-modal="true" aria-labelledby="derby-listing-title">
           <ListingView
-            key={own.listed ? 'listed' : 'unlisted'}
             entry={own}
             batter={listingBatter(own, sessionProfile)}
             name={own.name ?? sessionProfile?.name ?? null}
+            linkedInAvailable={linkedInAvailable}
             language={language}
             onSave={async (choice: ListingChoice) => {
               await updateOwnRecord(choice)
-              setListing(false)
+              onReload()
+            }}
+            onLinkedInOff={async () => {
+              await turnOffLinkedIn(null)
               onReload()
             }}
             onDelete={async () => {
@@ -487,7 +503,7 @@ export function Bunting() {
   )
 }
 
-/** A statue's name plate: its place, the plaque's words, the name, the record, and a LinkedIn chip if approved. */
+/** A statue's name plate: its place, the plaque's words, the name, the record, and a LinkedIn chip if verified. */
 export function BoardPlate({
   rank,
   row,
@@ -529,7 +545,7 @@ export function BoardPlate({
         {rank}
       </span>
       <p className="board-plate-label">{finalWeek ? copy.plaqueFinal(finalWeek, rank) : copy.plaqueLive(rank)}</p>
-      <p className="board-plate-name" data-placeholder={row.nameState !== 'approved' || undefined}>
+      <p className="board-plate-name" data-placeholder={row.nameState !== 'shown' || undefined}>
         {name}
       </p>
       <p className="board-plate-record">{recordText(row.homeRuns, row.totalDistanceDm, language)}</p>
@@ -543,7 +559,7 @@ export function BoardPlate({
   )
 }
 
-/** A statue's approved LinkedIn link: a chip that says where it leads. */
+/** A statue's verified LinkedIn link: a chip that says where it leads. */
 export function StatueLinkedIn({
   profileUrl,
   name,
@@ -607,7 +623,7 @@ export function RecordMenu({
         <span aria-hidden="true">⋯</span>
       </summary>
       <div className="board-menu-items">
-        {row.nameState === 'approved' && (
+        {row.nameState === 'shown' && (
           <button type="button" onClick={() => report('name', 'other')}>
             {copy.reportName}
           </button>
@@ -673,7 +689,7 @@ export function BoardListRow({
       <span className="board-row-rank">{row.rank}</span>
       <Portrait profile={own && !own.takedown ? own.profile : row.profile} className="board-portrait" />
       <span className="board-row-name">
-        <span data-placeholder={(!own && row.nameState !== 'approved') || undefined}>{name}</span>
+        <span data-placeholder={(!own && row.nameState !== 'shown') || undefined}>{name}</span>
         {own && <span className="board-mine">{copy.mine}</span>}
       </span>
       <span className="board-row-home-runs">{copy.homeRuns(row.homeRuns)}</span>
@@ -691,13 +707,15 @@ export function BoardListRow({
 
 /**
  * The visitor's own record on this board, kept in this browser only, with what they can do with it: this week's
- * record goes on or off the board or changes; a past season's, or one disqualified, can still turn its LinkedIn link
- * off. A change the board did not take says so. Deleting every record sits in the page's footer.
+ * record is posted or taken off the board, or changed; and wherever the record has a LinkedIn link (a past season's or
+ * a removed record's too) they can sign in with LinkedIn to show it, or remove it. A change the board did not take
+ * says so. Deleting every record sits in the page's footer.
  */
 export function OwnRecordCard({
   own,
-  final,
+  season,
   week,
+  linkedInAvailable,
   language,
   onOpen,
   onUnlist,
@@ -705,8 +723,9 @@ export function OwnRecordCard({
   children,
 }: {
   own: BoardOwnEntry | null
-  final: boolean
+  season: BoardSeason
   week: string
+  linkedInAvailable: boolean
   language: AppLanguage
   onOpen: () => void
   onUnlist: () => Promise<void>
@@ -718,6 +737,7 @@ export function OwnRecordCard({
   const boardCopy = copy.leaderboard
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
+  const { final } = season
   if (!own && final) return null
   if (!own)
     return (
@@ -734,13 +754,13 @@ export function OwnRecordCard({
         {children}
       </section>
     )
-  const save = async (change: () => Promise<void>) => {
+  const unlist = async () => {
     setBusy(true)
     setFailed(false)
-    await change().catch(() => setFailed(true))
+    await onUnlist().catch(() => setFailed(true))
     setBusy(false)
   }
-  const changeable = !final && own.rank !== null
+  const changeable = !final && own.rank !== null && !own.takedown
   return (
     <section className="board-own" data-kind={own.listed ? 'listed' : 'unlisted'} aria-labelledby="board-own-title">
       <Portrait profile={own.takedown ? null : own.profile} className="board-portrait board-own-portrait" />
@@ -750,14 +770,15 @@ export function OwnRecordCard({
         <p className="board-own-detail">
           {[own.name, recordText(own.homeRuns, own.totalDistanceDm, language)].filter(Boolean).join(' · ')}
         </p>
-        {own.listed && own.nameStatus && own.nameStatus !== 'approved' && (
-          <p className="board-own-status">{copy.board.nameStatus[own.nameStatus]}</p>
-        )}
+        {own.listed && own.nameStatus === 'rejected' && <p className="board-own-status">{copy.board.nameRejected}</p>}
         {own.linkedIn && (
-          <p className="board-own-status">
-            {own.linkedIn.profileHint} · {linkedInStatusText(own.linkedIn.status, language)}
-            {own.linkedIn.status !== 'approved' && <code> {own.linkedIn.code}</code>}
-          </p>
+          <OwnLinkedIn
+            linkedIn={own.linkedIn}
+            available={linkedInAvailable}
+            season={final ? season.id : null}
+            language={language}
+            onRemove={onLinkedInOff}
+          />
         )}
         <p className="board-own-status">{boardCopy.ownBrowserOnly}</p>
         {failed && (
@@ -773,7 +794,7 @@ export function OwnRecordCard({
               <button className="derby-secondary" type="button" onClick={onOpen}>
                 {boardCopy.change}
               </button>
-              <button className="derby-secondary" type="button" disabled={busy} onClick={() => save(onUnlist)}>
+              <button className="derby-secondary" type="button" disabled={busy} onClick={unlist}>
                 {boardCopy.unlist}
               </button>
             </>
@@ -782,13 +803,6 @@ export function OwnRecordCard({
               {copy.board.list}
             </button>
           )}
-        </div>
-      )}
-      {!changeable && own.linkedIn && (
-        <div className="board-own-actions">
-          <button className="derby-secondary" type="button" disabled={busy} onClick={() => save(onLinkedInOff)}>
-            {boardCopy.linkedInOff}
-          </button>
         </div>
       )}
       {children}
