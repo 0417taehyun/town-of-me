@@ -17,14 +17,14 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/pg": "8.23.1",
-    "eslint": "^10.13.0",
-    "globals": "^17.13.0",
-    "prettier": "3.9.10",
+    "eslint": "^10.15.0",
+    "globals": "^17.14.0",
+    "prettier": "3.10.1",
     "typescript": "~6.0.3",
-    "typescript-eslint": "^8.72.0"
+    "typescript-eslint": "^8.74.0"
   },
   "dependencies": {
-    "jose": "6.2.13",
+    "jose": "6.2.18",
     "pg": "8.23.1"
   }
 }
